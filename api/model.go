@@ -38,6 +38,15 @@ func (r RequestModal[T]) ContextKey() string {
 	return fmt.Sprintf("%T", t)
 }
 
+func (r RequestModal[T]) MetadataContextKey() string {
+	return fmt.Sprintf("meta.%s", r.ContextKey())
+}
+
+func (r RequestModal[T]) SetResponseMetadata(ctx context.Context, meta *Metadata) (err error) {
+	ctx.(*gin.Context).Set(r.MetadataContextKey(), meta)
+	return 
+}
+
 func (p RequestModal[T]) ContextLoad(ctx context.Context) (out RequestParam, err error) {
 	val := ctx.Value(p.ContextKey())
 	if val == nil {

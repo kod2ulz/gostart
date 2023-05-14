@@ -17,6 +17,12 @@ import (
 
 var _ = Describe("RequestModel", func() {
 
+	type BookResponse struct {
+		Name   string `json:"name"`
+		Author string `json:"author"`
+		Pages  int    `json:"pages"`
+	}
+
 	type CreateBookRequest struct {
 		Name   string `json:"name"   validate:"required"`
 		Author string `json:"author" validate:"required"`
@@ -73,50 +79,55 @@ var _ = Describe("RequestModel", func() {
 
 	Describe("Loading from HTTP Request", func() {
 
-		var res ErrorModel
 		var router *gin.Engine
 		var recorder *httptest.ResponseRecorder
-		var createBookHandler = func(ctx context.Context) (param CreateBookRequest, err error) {
-			param = CreateBookRequest{}
-			err = param.LoadFromContext(ctx, &param)
+		var createBookHandler = func(ctx context.Context) (out BookResponse, err api.Error) {
+			param := CreateBookRequest{}
+			if er := param.LoadFromContext(ctx, &param); err != nil {
+				err = api.RequestLoadError[CreateBookRequest](er)
+			} else {
+				out = BookResponse{Name: param.Name, Author: param.Author, Pages: param.Pages}
+			}
 			return
 		}
 
 		var setupRouter = func() *gin.Engine {
-			router := gin.Default()
-			router.POST("/books", api.GetWithParamHandler[CreateBookRequest](createBookHandler))
+			gin.SetMode(gin.ReleaseMode)
+			router := gin.New()
+			router.POST("/books", api.HandlerWithResponse[CreateBookRequest](createBookHandler))
 			return router
 		}
 
 		BeforeEach(func() {
 			router = setupRouter()
 			recorder = httptest.NewRecorder()
-			res = ErrorModel{}
 		})
 
 		Context("with post data", func() {
 
 			It("can load request model from gin router request", func() {
+				var res *ResultModel[CreateBookRequest, BookResponse]
 				payload := jsonDataOf("name", "Book 1", "author", "TestBot1", "pages", 400)
 				router.ServeHTTP(recorder, makeRequest(http.MethodPost, "/books", payload))
 				Expect(recorder.Code).To(Equal(http.StatusOK))
 				Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())
-				Expect(res).ToNot(BeEmpty())
+				Expect(res).ToNot(BeNil())
 				Expect(res.HasError()).To(BeFalse())
-				Expect(res.Error()).To(BeEmpty())
-				var param CreateBookRequest
-				Expect(utils.StructCopy(res, &param)).To(BeNil())
-				Expect(param).To(Equal(CreateBookRequest{Name: "Book 1", Author: "TestBot1", Pages: 400}))
+				var param BookResponse
+				Expect(utils.StructCopy(res.Data(), &param)).To(BeNil())
+				Expect(param).To(Equal(BookResponse{Name: "Book 1", Author: "TestBot1", Pages: 400}))
 			})
 
 			It("can validate request and fail on invalid parameters", func() {
+				var res *ResultModel[CreateBookRequest, any]
 				payload := jsonDataOf("author", "TestBot2", "pages", 50)
 				router.ServeHTTP(recorder, makeRequest(http.MethodPost, "/books", payload))
 				Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 				Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())
-				Expect(res).ToNot(BeEmpty())
-				Expect(res.HasError()).To(BeTrue())
-				Expect(res.Error()).ToNot(BeEmpty())
+				Expect(res).ToNot(BeNil())
+				Expect(res.Error().Message).ToNot(BeEmpty())
+				Expect(res.Error().Code).To(Equal(api.ErrorCodeValidatorError))
+				Expect(len(res.Error().Fields)).To(Equal(2))
 			})
 		})
 	})

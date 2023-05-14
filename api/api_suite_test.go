@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/object"
 	"github.com/kod2ulz/gostart/utils"
 	. "github.com/onsi/ginkgo/v2"
@@ -50,9 +51,9 @@ func makeRequest(method, path string, data []byte) (req *http.Request) {
 
 var mapOf = object.MapOf[string, interface{}]
 
-type ErrorModel map[string]interface{}
+type ResultModel[P api.RequestParam, R any] map[string]interface{}
 
-func (e ErrorModel) HasError() (yes bool) {
+func (e ResultModel[P, R]) HasError() (yes bool) {
 	if len(e) == 0 {
 		return
 	}
@@ -60,13 +61,19 @@ func (e ErrorModel) HasError() (yes bool) {
 	return
 }
 
-func (e ErrorModel) Error() (er string) {
+func (e ResultModel[P, R]) Error() (er api.ErrorModel[P]) {
 	if e.HasError() {
-		return e["error"].(string)
+		utils.StructCopy(e["error"], &er)
+		return 
 	}
 	return
 }
 
-func (e ErrorModel) Parse(out interface{}) (err error) {
+func (e ResultModel[P, R]) Data() (out R) {
+	utils.StructCopy(e["data"], &out)
+	return
+}
+
+func (e ResultModel[P, R]) Parse(out interface{}) (err error) {
 	return utils.StructCopy(e, out)
 }

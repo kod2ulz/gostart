@@ -96,6 +96,17 @@ func (l List[T]) Filter(filterFn func(i int, val T) bool) (out []T) {
 	return
 }
 
+func (l List[T]) ForEach(fn func(i int, val T) T) (out []T) {
+	if l.Empty() {
+		return l
+	}
+	out = make([]T, len(l))
+	for i := range l {
+		out[i] = fn(i, l[i])
+	}
+	return
+}
+
 func ListReduce[T any, K any](l List[T], mapFn func(i int, val T) (K, bool)) (out []K) {
 	if l.Empty() {
 		return []K{}

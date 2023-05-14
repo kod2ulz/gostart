@@ -2,143 +2,100 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 )
 
-var (
-	ErrorNotFound = errors.New("Not Found")
-)
+type RoutineWithResponseFunc[T any] func(context.Context) (T, Error)
 
-type GetServiceFunc[T any] func(context.Context) (T, error)
+type RoutineWithListResponseFunc[T any] func(context.Context) ([]T, Error)
 
-type GetListServiceFunc[T any] func(context.Context) ([]T, error)
-
-type GetListResponseServiceFunc[T any] func(context.Context) (ListResponse[T], error)
-
-func GetHandler[T any](serviceFunc GetServiceFunc[T]) gin.HandlerFunc {
-	return serviceHandler(serviceFunc)
+func BasicHandler[T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
+	return serviceHandler(serviceFunc, func(ctx *gin.Context, out T) {
+		ctx.JSON(http.StatusOK, DataResponse(out))
+	})
 }
 
-func HandleWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
-	return handlerWithParam[P](serviceFunc)
+func HandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
+	return genericHandlerWithParam[P](serviceFunc)
 }
 
-func GetWithParamHandler[P RequestParam, T any](serviceFunc GetServiceFunc[T]) gin.HandlerFunc {
-	return serviceWithParamHandler[P](serviceFunc)
+func HandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
+	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, out T) {
+		ctx.JSON(http.StatusOK, DataResponse(out))
+	})
 }
 
-func GetListHandler[T any](serviceFunc GetListServiceFunc[T]) gin.HandlerFunc {
-	return serviceHandler(serviceFunc)
+func HandlerWithListResponse[T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
+	return serviceHandler(serviceFunc, func(ctx *gin.Context, out []T) {
+		ctx.JSON(http.StatusOK, ListResponse(out, Metadata{}))
+	})
 }
 
-func GetWithParamListHandler[P RequestParam, T any](serviceFunc GetListServiceFunc[T]) gin.HandlerFunc {
-	return serviceWithParamHandler[P](serviceFunc)
+func ParamHandlerWithListResponse[P RequestParam, T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
+	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, res []T) {
+		if val, ok := ctx.Get(param.MetadataContextKey()); ok {
+			if meta, ok := val.(*Metadata); ok {
+				ctx.JSON(http.StatusOK, ListResponse(res, *meta))
+				return
+			} 
+		}
+		ctx.JSON(http.StatusOK, ListResponse(res, Metadata{}))
+	})
 }
 
-func serviceHandler[T any](serviceFunc func(context.Context) (T, error)) gin.HandlerFunc {
+func serviceHandler[T any](serviceFunc func(context.Context) (T, Error), resultHandler func(*gin.Context, T)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if out, err := serviceFunc(ctx); err != nil {
 			ctx.JSON(http.StatusInternalServerError, ctx.Error(err))
 		} else {
-			ctx.JSON(http.StatusOK, out)
+			resultHandler(ctx, out)
 		}
 	}
 }
 
-func serviceWithParamHandler[P RequestParam, T any](serviceFunc func(context.Context) (T, error)) gin.HandlerFunc {
+func serviceHandlerWithParam[P RequestParam, T any](serviceFunc func(context.Context) (T, Error), successHandler func(*gin.Context, P, T)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var err error
+		var err Error
 		var param P
-		if param, err = _getParamFromRequest[P](ctx); err != nil {
+		if param, err = loadParamFromRequest[P](ctx); err != nil {
+			ctx.JSON(err.http(), ErrorResponse[P](err))
 			return
 		}
 		ctx.Set(param.ContextKey(), param)
 		if out, err := serviceFunc(ctx); err != nil {
-			if errors.Is(err, ErrorNotFound) || utils.Error.SqlNoRows(err) {
-				ctx.JSON(http.StatusNotFound, ctx.Error(errors.Wrapf(err, "%T", out)))
-			} else if errors.Is(err, sql.ErrNoRows) {
-				ctx.JSON(http.StatusOK, []T{})
-			} else {
-				ctx.JSON(http.StatusInternalServerError, ctx.Error(err))
-			}
+			ctx.JSON(err.http(), err)
 		} else {
-			ctx.JSON(http.StatusOK, out)
+			successHandler(ctx, param, out)
 		}
 	}
 }
 
-func _getParamFromRequest[P RequestParam](ctx *gin.Context) (param P, err error) {
+func loadParamFromRequest[P RequestParam](ctx *gin.Context) (param P, err Error) {
+	var e error
 	var p RequestParam
-	if p, err = (*new(P)).RequestLoad(ctx); err != nil {
-		ctx.JSON(http.StatusBadRequest, ctx.Error(errors.Wrapf(err, "failed to load %T from request", param)))
-		return
+	if p, e = (*new(P)).RequestLoad(ctx); e != nil {
+		return param, RequestLoadError[P](errors.Wrapf(e, "failed to load %T from request", param))
 	}
 	ctx.Set(p.ContextKey(), p)
-	if err = p.Validate(ctx); err != nil {
-		if isBodyValidationError(ctx, err) {
-			ctx.JSON(http.StatusBadRequest, formatErrors(
-				ctx.Error(errors.Errorf("validation failed for %T", param)),
-				[]*gin.Error(ctx.Errors)...))
-		} else {
-			ctx.JSON(http.StatusBadRequest, ctx.Error(errors.Wrapf(err, "validation failed for %T", param)))
-		}
-		return
-	} else {
-		param = p.(P)
+	if e = p.Validate(ctx); e != nil {
+		return param, ValidatorError[P](errors.Wrapf(e, "validation failed for %T", param))
 	}
+	param = p.(P)
 	return
 }
 
-func handlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
+func genericHandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var err error
+		var err Error
 		var param P
-		if param, err = _getParamFromRequest[P](ctx); err != nil {
+		if param, err = loadParamFromRequest[P](ctx); err != nil {
+			ctx.JSON(err.http(), ErrorResponse[P](err))
 			return
 		}
 		ctx.Set(param.ContextKey(), param)
 		serviceFunc(ctx)
 	}
-}
-
-func isBodyValidationError(ctx *gin.Context, err error) bool {
-	if err == nil || !strings.Contains(err.Error(), "Key") {
-		return false
-	}
-	for _, msg := range strings.Split(err.Error(), "Key:") {
-		ctx.Error(errors.New(strings.Trim(msg, "\n ")))
-	}
-	return true
-}
-
-func formatErrors(err *gin.Error, errs ...*gin.Error) (out map[string]interface{}) {
-	if err == nil || len(errs) == 0 {
-		if err != nil {
-			return map[string]interface{}{"error": err.Error()}
-		} else {
-			return map[string]interface{}{}
-		}
-	}
-	out = map[string]interface{}{"error": err.Error()}
-	errMsgs := make(map[string]string, 0)
-	for i := range errs {
-		if errs[i] != nil && !errors.Is(err, errs[i]) && errs[i].Error() != "" {
-			if !strings.Contains(errs[i].Error(), " Error:") {
-				errMsgs[""] = errs[i].Error()
-			} else {
-				parts := strings.Split(errs[i].Error(), " Error:")
-				errMsgs[strings.Trim(parts[0], " '")] = strings.Trim(parts[1], " ")
-			}
-		}
-	}
-	if len(errMsgs) > 0 {
-		out["meta"] = errMsgs
-	}
-	return
 }

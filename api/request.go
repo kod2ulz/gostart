@@ -19,6 +19,8 @@ type RequestParam interface {
 	Validate(ctx context.Context) error
 	RequestLoad(ctx context.Context) (RequestParam, error)
 	ContextKey() string
+	MetadataContextKey() string
+	SetResponseMetadata(context.Context, *Metadata) error
 	ContextLoad(context.Context) (RequestParam, error)
 }
 
