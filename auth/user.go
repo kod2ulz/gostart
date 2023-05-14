@@ -48,13 +48,6 @@ func (u *user) Token() *jwt.Token {
 	return u.token
 }
 
-func (u *user) CountryID() uuid.UUID {
-	if id, ok := (*u.token).Get(AuthTokenClaimCountryIdKey); ok {
-		return id.(uuid.UUID)
-	}
-	return uuid.Nil
-}
-
 func tokenUser(token jwt.Token) *user {
 	usr := &user{
 		id:    uuid.MustParse(token.Subject()),

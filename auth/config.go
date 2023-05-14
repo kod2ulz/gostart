@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/utils"
 )
 
@@ -14,33 +13,30 @@ type Config struct {
 	ClientID           string
 	ClientSecret       string
 	AuthIssuerURL      string
-	CountryID          uuid.UUID
-	Country            string
 	JwkRefreshInterval utils.Value
+	PublicKeyURL       string
 }
 
 func Conf(prefix ...string) (conf *Config) {
 	env := utils.Env.Helper(prefix...).OrDefault("AUTH")
-	return &Config{
+	conf = &Config{
 		Driver:             env.GetString("DRIVER", cognitoDriver),
 		UserPool:           env.GetString("USER_POOL", ""),
 		ClientID:           env.GetString("CLIENT_ID", ""),
 		JwkRefreshInterval: env.Get("JWK_REFRESH_INTERVAL", "15m"),
 		ClientSecret:       env.GetString("CLIENT_SECRET", ""),
-		Country:            env.GetString("COUNTRY", "Uganda"),
 		AuthIssuerURL:      env.GetString("ISSUER_URL", "https://auth.startup.io"),
+		PublicKeyURL:       env.GetString("PUBLIK_KEY_URL", ""),
 	}
-}
-
-type userPool string
-
-func (u userPool) region() string {
-	if u == "" || !strings.Contains(string(u), "_") {
-		return ""
+	if conf.PublicKeyURL != "" {
+		return
 	}
-	return strings.Split(string(u), "_")[0]
-}
-
-func (u userPool) publicKeyUrl() string {
-	return fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/%s/.well-known/jwks.json", u.region(), u)
+	switch conf.Driver {
+	case cognitoDriver:
+		if conf.UserPool != "" && strings.Contains(conf.UserPool, "_") {
+			region := strings.Split(conf.UserPool, "_")[0]
+			conf.PublicKeyURL = fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/%s/.well-known/jwks.json", region, conf.UserPool)
+		}
+	}
+	return
 }

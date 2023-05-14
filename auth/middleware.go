@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	ContextAuthUserKey         = "auth.User"
-	AuthTokenClaimCountryIdKey = "countryId"
+	ContextAuthUserKey = "auth.User"
 )
 
 type Middleware interface {

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -12,15 +11,12 @@ import (
 )
 
 type ListQueryRequest struct {
+	api.RequestModal[ListQueryRequest]
 	User   User      `json:"-"`
 	ID     uuid.UUID `json:"-"`
 	Limit  int       `json:"limit" validate:"required"`
 	Offset int       `json:"offset"`
 	Query  string    `json:"query"`
-}
-
-func (r ListQueryRequest) Validate(ctx context.Context) error {
-	return utils.Validate.Struct(r)
 }
 
 func (r ListQueryRequest) RequestLoad(ctx context.Context) (param api.RequestParam, err error) {
@@ -40,25 +36,10 @@ func (r ListQueryRequest) RequestLoad(ctx context.Context) (param api.RequestPar
 	}, err
 }
 
-func (r ListQueryRequest) ContextKey() string {
-	return fmt.Sprintf("%T", r)
-}
-
-func (p ListQueryRequest) ContextLoad(ctx context.Context) (out api.RequestParam, err error) {
-	val := ctx.Value(p.ContextKey())
-	if val == nil {
-		return out, errors.Errorf("Failed to load %T from context with key %s", p, p.ContextKey())
-	}
-	return val.(api.RequestParam), nil
-}
-
 type UuidParamRequest struct {
+	api.RequestModal[UuidParamRequest]
 	User User      `json:"-"`
 	ID   uuid.UUID `json:"id,omitempty" validate:"required"`
-}
-
-func (r UuidParamRequest) Validate(ctx context.Context) error {
-	return utils.Validate.Struct(r)
 }
 
 func (r UuidParamRequest) RequestLoad(ctx context.Context) (param api.RequestParam, err error) {
@@ -72,18 +53,6 @@ func (r UuidParamRequest) RequestLoad(ctx context.Context) (param api.RequestPar
 	return UuidParamRequest{ID: id, User: user}, err
 }
 
-func (r UuidParamRequest) ContextKey() string {
-	return fmt.Sprintf("%T", r)
-}
-
-func (p UuidParamRequest) ContextLoad(ctx context.Context) (out api.RequestParam, err error) {
-	val := ctx.Value(p.ContextKey())
-	if val == nil {
-		return out, errors.Errorf("Failed to load %T from context with key %s", p, p.ContextKey())
-	}
-	return val.(api.RequestParam), nil
-}
-
 type UserListParamRequest struct {
 	ID          uuid.UUID      `json:"id" validate:"required"`
 	AddUsers    utils.UuidList `json:"addUsers"`
@@ -91,6 +60,7 @@ type UserListParamRequest struct {
 	Users       utils.UuidList `json:"users"`
 
 	User User `json:"-"`
+	api.RequestModal[UserListParamRequest]
 }
 
 func (r UserListParamRequest) Validate(ctx context.Context) error {
@@ -113,21 +83,4 @@ func (r UserListParamRequest) RequestLoad(ctx context.Context) (param api.Reques
 	}
 	out.User, out.ID = user, id
 	return out, err
-}
-
-func (r UserListParamRequest) ContextKey() string {
-	return fmt.Sprintf("%T", r)
-}
-
-func (p UserListParamRequest) ContextLoad(ctx context.Context) (out api.RequestParam, err error) {
-	val := ctx.Value(p.ContextKey())
-	if val == nil {
-		return out, errors.Errorf("Failed to load %T from context with key %s", p, p.ContextKey())
-	}
-	return val.(api.RequestParam), nil
-}
-
-func (p UserListParamRequest) WithListQueryRequest(ctx context.Context, limit int) context.Context {
-	param := ListQueryRequest{Limit: limit}
-	return context.WithValue(ctx, param.ContextKey(), param)
 }
