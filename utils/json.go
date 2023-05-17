@@ -3,8 +3,8 @@ package utils
 import (
 	"encoding/json"
 
+	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/kod2ulz/gostart/object"
 	"github.com/sirupsen/logrus"
 )
 
@@ -45,7 +45,7 @@ func (u jsonUtils) Decode(log *logrus.Entry, data []byte) (obj interface{}) {
 	return
 }
 
-func (u jsonUtils) ToMap(obj interface{}) (out object.Map[string, interface{}]) {
+func (u jsonUtils) ToMap(obj interface{}) (out collections.Map[string, interface{}]) {
 	data, err := json.Marshal(obj)
 	if err == nil {
 		json.Unmarshal(data, &obj)

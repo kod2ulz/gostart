@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kod2ulz/gostart/api"
-	"github.com/kod2ulz/gostart/object"
+	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -49,7 +49,7 @@ func makeRequest(method, path string, data []byte) (req *http.Request) {
 	return
 }
 
-var mapOf = object.MapOf[string, interface{}]
+var mapOf = collections.MapOf[string, interface{}]
 
 type ResultModel[P api.RequestParam, R any] map[string]interface{}
 

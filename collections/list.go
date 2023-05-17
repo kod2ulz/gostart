@@ -1,4 +1,4 @@
-package object
+package collections
 
 import (
 	"sort"
@@ -157,8 +157,6 @@ func ListToMap[K comparable, T any, U any](list List[T], kvFn func(T) (K, U)) (o
 	return
 }
 
-
-
 func InList[T comparable](needle T, haystach ...T) bool {
 	if len(haystach) == 0 {
 		return false
@@ -169,4 +167,11 @@ func InList[T comparable](needle T, haystach ...T) bool {
 		}
 	}
 	return false
+}
+
+func ListOf[T any](list ...T) List[T] {
+	if len(list) == 0{
+		return List[T]{}
+	}
+	return List[T](list)
 }

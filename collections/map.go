@@ -1,5 +1,4 @@
-package object
-
+package collections
 
 type Map[K comparable, T any] map[K]T
 

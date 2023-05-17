@@ -1,6 +1,9 @@
 package object
 
-import "strings"
+import (
+	"strings"
+	. "github.com/kod2ulz/gostart/collections"
+)
 
 type String string
 
