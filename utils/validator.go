@@ -11,6 +11,10 @@ var Validate *validator.Validate
 
 func init() {
 	Validate = validator.New()
+	Validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
+		pass, ok := fl.Field().Interface().(string)
+		return ok && Validator.PasswordValid(pass)
+	})
 }
 
 type optionalVar interface {
