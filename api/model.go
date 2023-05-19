@@ -28,7 +28,7 @@ func (r RequestModal[T]) RequestLoad(ctx context.Context) (param RequestParam, e
 
 func (r RequestModal[T]) LoadFromJsonBody(ctx context.Context, out interface{}) (err error) {
 	if err = ctx.(*gin.Context).ShouldBindJSON(out); err != nil {
-		return errors.Wrapf(err, "failed to unmarshall json %T from request", r)
+		return errors.Wrapf(err, "failed to unmarshall json %T from request", out)
 	}
 	return
 }
