@@ -14,17 +14,18 @@ func ErrorResponse[T any](err Error) Response[T] {
 
 func DataResponse[T any](data T) Response[T] {
 	return Response[T]{
-		Timestamp: time.Now().Unix(), Data: data,
+		Timestamp: time.Now().Unix(), Data: data, Success: true,
 		Type: strings.TrimPrefix(fmt.Sprintf("%T", new(T)), "*")}
 }
 
 func ListResponse[T any](data []T, meta Metadata) Response[[]T] {
 	return Response[[]T]{
-		Timestamp: time.Now().Unix(), Data: data, Meta: &meta,
-		Type: "[]"+strings.TrimPrefix(fmt.Sprintf("%T", new(T)), "*")}
+		Timestamp: time.Now().Unix(), Data: data, Meta: &meta, Success: true,
+		Type: "[]" + strings.TrimPrefix(fmt.Sprintf("%T", new(T)), "*")}
 }
 
 type Response[T any] struct {
+	Success    bool                   `json:"success"`
 	Type       string                 `json:"type,omitempty"`
 	Error      Error                  `json:"error,omitempty"`
 	Data       interface{}            `json:"data,omitempty"`
