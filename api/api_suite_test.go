@@ -64,7 +64,7 @@ func (e ResultModel[P, R]) HasError() (yes bool) {
 func (e ResultModel[P, R]) Error() (er api.ErrorModel[P]) {
 	if e.HasError() {
 		utils.StructCopy(e["error"], &er)
-		return 
+		return
 	}
 	return
 }

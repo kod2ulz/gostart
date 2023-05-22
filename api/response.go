@@ -21,7 +21,11 @@ func DataResponse[T any](data T) Response[T] {
 func ListResponse[T any](data []T, meta Metadata) Response[[]T] {
 	return Response[[]T]{
 		Timestamp: time.Now().Unix(), Data: data, Meta: &meta, Success: true,
-		Type: "[]" + strings.TrimPrefix(fmt.Sprintf("%T", new(T)), "*")}
+		Type: strings.TrimPrefix(fmt.Sprintf("%T", new(T)), "*") + "[]"}
+}
+
+func EmptyResponse[T any]() (out Response[T]) {
+	return ErrorResponse[T](GeneralError[T](nil))
 }
 
 type Response[T any] struct {

@@ -15,10 +15,6 @@ const (
 	requestIdHeader2 = "X-Request-Id"
 )
 
-type User interface {
-	ID() uuid.UUID
-}
-
 func JSONLogMiddleware(log *logr.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
@@ -44,6 +40,7 @@ func JSONLogMiddleware(log *logr.Logger) gin.HandlerFunc {
 			"status":     c.Writer.Status(),
 			"referrer":   c.Request.Referer(),
 			"request_id": c.Writer.Header().Get(requestIdHeader1),
+			"size":       c.Writer.Size(),
 			// "api_version": util.ApiVersion,
 		}
 

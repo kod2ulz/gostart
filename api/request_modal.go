@@ -21,9 +21,11 @@ func (r RequestModal[T]) Validate(ctx context.Context) error {
 
 func (r RequestModal[T]) RequestLoad(ctx context.Context) (param RequestParam, err error) {
 	t := new(T)
-	err = r.LoadFromJsonBody(ctx, t)
-	ctx.(*gin.Context).Set((*t).ContextKey(), t)
-	return *t, err
+	if err = r.LoadFromJsonBody(ctx, t); err == nil {
+		ctx.(*gin.Context).Set((*t).ContextKey(), t)
+		return *t, err
+	}
+	return nil, err
 }
 
 func (r RequestModal[T]) LoadFromJsonBody(ctx context.Context, out interface{}) (err error) {
@@ -50,7 +52,7 @@ func (r RequestModal[T]) SetResponseMetadata(ctx context.Context, meta *Metadata
 func (p RequestModal[T]) ContextLoad(ctx context.Context) (out RequestParam, err error) {
 	val := ctx.Value(p.ContextKey())
 	if val == nil {
-		return out, errors.Errorf("Failed to load %T from context with key %s", p, p.ContextKey())
+		return out, errors.Errorf("value of %T with key %s returned %v in context", p, val, p.ContextKey())
 	}
 	return val.(RequestParam), nil
 }
@@ -58,9 +60,11 @@ func (p RequestModal[T]) ContextLoad(ctx context.Context) (out RequestParam, err
 func (p RequestModal[T]) LoadFromContext(ctx context.Context, out RequestParam) (err error) {
 	var param RequestParam
 	if param, err = out.ContextLoad(ctx); err != nil {
-		return errors.Wrapf(err, "Failed to load %T from context", p)
+		return errors.Wrapf(err, "Failed to load %T from context", out)
 	} else if param == nil {
-		param = ctx.Value(p.ContextKey()).(RequestModal[T]) //todo: finalise
+		if param = ctx.Value(p.ContextKey()).(RequestParam) ; param == nil {
+			return errors.Errorf("Got %v when loading %T from context", out, out)
+		}
 	}
 	utils.StructCopy(param, out)
 	return
@@ -79,6 +83,15 @@ func (p RequestModal[T]) Query(ctx context.Context, name string, _default ...str
 	return
 }
 
-func (p RequestModal[T]) Log(o any) {
-	fmt.Printf("%T.log(): %+v\n", p, o)
+func (p RequestModal[T]) Path(ctx context.Context, name string, _default ...string) (out utils.Value) {
+	if v := ctx.(*gin.Context).Param(name); v != "" {
+		return utils.Value(v)
+	} else if len(_default) > 0 {
+		return utils.Value(_default[0])
+	}
+	return
+}
+
+func (p RequestModal[T]) Debug(o any) {
+	fmt.Printf("%T.debug(): %+v\n", p, o)
 }

@@ -13,9 +13,9 @@ import (
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789"
 const (
-    letterIdxBits = 6                    // 6 bits to represent a letter index
-    letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-    letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 )
 
 func init() {
@@ -78,31 +78,31 @@ func (u strUtils) ToUUID(str string) uuid.UUID {
 	return uuid.Nil
 }
 
-func (u strUtils) TrimPrefixes(str string, prefixes...string) (out string) {
+func (u strUtils) TrimPrefixes(str string, prefixes ...string) (out string) {
 	if len(prefixes) == 0 {
 		return str
 	}
-	out = str 
+	out = str
 	for i := range prefixes {
 		out = strings.TrimPrefix(out, prefixes[i])
 	}
-	return 
+	return
 }
 
 func (u strUtils) Random(n int) (out string) {
 	b := make([]byte, n)
-    // A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
-    for i, cache, remain := n-1, u.src.Int63(), letterIdxMax; i >= 0; {
-        if remain == 0 {
-            cache, remain = u.src.Int63(), letterIdxMax
-        }
-        if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
-            b[i] = letterBytes[idx]
-            i--
-        }
-        cache >>= letterIdxBits
-        remain--
-    }
+	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+	for i, cache, remain := n-1, u.src.Int63(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = u.src.Int63(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
+			b[i] = letterBytes[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
 
-    return *(*string)(unsafe.Pointer(&b))
+	return *(*string)(unsafe.Pointer(&b))
 }

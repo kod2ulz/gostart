@@ -15,6 +15,8 @@ var (
 	ErrorCodeRequestLoadError string = "RequestLoadError"
 	ErrorCodeValidatorError   string = "ValidationError"
 	ErrorCodeSQLError         string = "SQLError"
+	ErrorCodeUnauthorized     string = "InvalidCredentials"
+	ErrorCodeInvalidOperation string = "InvalidOperation"
 )
 
 type Error interface {
@@ -106,6 +108,11 @@ func _initError[T any](httpCode int, statusCode string, err error) (out ErrorMod
 
 func ServerError(err error) (out Error) {
 	return GeneralError[any](err)
+}
+
+func ServiceErrorUnauthorised(err error) (out Error) {
+	return GeneralError[User](err).
+		WithErrorCodeAndHttpStatusCode(ErrorCodeUnauthorized, http.StatusUnauthorized)
 }
 
 func GeneralError[T any](err error) (out Error) {
