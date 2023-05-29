@@ -22,17 +22,17 @@ func HandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFu
 	return genericHandlerWithParam[P](serviceFunc)
 }
 
-func HandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
+func ParamHandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, out T) {
 		ctx.JSON(http.StatusOK, DataResponse(out))
 	})
 }
 
-func HandlerWithListResponse[T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
-	return serviceHandler(serviceFunc, func(ctx *gin.Context, out []T) {
-		ctx.JSON(http.StatusOK, ListResponse(out, Metadata{}))
-	})
-}
+// func HandlerWithListResponse[T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
+// 	return serviceHandler(serviceFunc, func(ctx *gin.Context, out []T) {
+// 		ctx.JSON(http.StatusOK, ListResponse(out, Metadata{}))
+// 	})
+// }
 
 func ParamHandlerWithListResponse[P RequestParam, T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, res []T) {
@@ -40,7 +40,7 @@ func ParamHandlerWithListResponse[P RequestParam, T any](serviceFunc RoutineWith
 			if meta, ok := val.(*Metadata); ok {
 				ctx.JSON(http.StatusOK, ListResponse(res, *meta))
 				return
-			} 
+			}
 		}
 		ctx.JSON(http.StatusOK, ListResponse(res, Metadata{}))
 	})

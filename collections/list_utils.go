@@ -24,6 +24,10 @@ func ListMap[T any, K any](l List[T], mapFn func(i int, val T) K) (out []K) {
 	return
 }
 
+func ListMapToNoPtrFunc[T any](_ int, t *T) T { return *t }
+
+func ListMapToPtrFunc[T any](_ int, t T) *T { return &t }
+
 type ListMapFunc[K any, T any] func(T) (K, T)
 
 func (l *List[T]) MapString(fn ListMapFunc[string, T]) (out Map[string, T]) {
@@ -63,7 +67,7 @@ func InList[T comparable](needle T, haystach ...T) bool {
 }
 
 func ListOf[T any](list ...T) List[T] {
-	if len(list) == 0{
+	if len(list) == 0 {
 		return List[T]{}
 	}
 	return List[T](list)

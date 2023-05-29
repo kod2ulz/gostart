@@ -5,22 +5,27 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	json "github.com/json-iterator/go"
 	"github.com/kod2ulz/gostart/collections"
 	g "github.com/onsi/gomega"
-	json "github.com/json-iterator/go"
 )
 
 type testUtils struct{}
 
 var Test testUtils
 
-func (testUtils) Request(method, path string, data []byte, headers...map[string]string) (req *http.Request) {
+func (testUtils) Request(method, path string, data []byte, headers ...map[string]string) (req *http.Request) {
 	var err error
 	var outBytes *bytes.Buffer
 	if len(data) > 0 {
 		outBytes = bytes.NewBuffer(data)
-	} 
-	req, err = http.NewRequest(method, path, outBytes)
+	}
+	switch method {
+	case http.MethodGet:
+		req, err = http.NewRequest(method, path, nil)
+	default:
+		req, err = http.NewRequest(method, path, outBytes)
+	}
 	g.Expect(err).To(g.BeNil())
 	g.Expect(req).ToNot(g.BeNil())
 	req.Header.Set("Content-Type", "application/json")

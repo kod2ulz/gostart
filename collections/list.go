@@ -106,3 +106,19 @@ func (l List[T]) ForEach(fn func(i int, val T) T) (out []T) {
 	}
 	return
 }
+
+func (l List[T]) Slice(from, to int) (out []T) {
+	if l.Empty() {
+		return l
+	} else if from > to {
+		return []T{}
+	}
+	if from < 0 {
+		from = 0
+	} 
+	if to > l.Size() {
+		to = l.Size()
+	}
+	
+	return l[from:to]
+}

@@ -46,7 +46,7 @@ func (r Response[T]) HasError() bool {
 	return r.Error != nil
 }
 
-func (r Response[T]) ParseData(out *T) error {
+func (r Response[T]) ParseDataTo(out *T) error {
 	if out == nil {
 		return errors.New("out is nil")
 	} else if r.Data == nil {
@@ -71,4 +71,29 @@ type Metadata struct {
 	Limit   int64 `json:"limit,omitempty"`
 	Offset  int64 `json:"offset,omitempty"`
 	Page    int64 `json:"page,omitempty"`
+}
+
+func (m *Metadata) WithTotal(total int64) *Metadata {
+	m.Total = total
+	return m
+}
+
+func (m *Metadata) WithLimit(limit int64) *Metadata {
+	m.Limit = limit
+	return m
+}
+
+func (m *Metadata) WithOffset(offset int64) *Metadata {
+	m.Offset = offset
+	return m
+}
+
+func (m *Metadata) WithPage(page int64) *Metadata {
+	m.Page = page
+	return m
+}
+
+func (m *Metadata) WithCurrent(current int64) *Metadata {
+	m.Current = current
+	return m
 }

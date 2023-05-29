@@ -2,17 +2,18 @@ package api
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/constraints"
 )
 
 type ListRequest struct {
-	User   User `validate:"required"`
-	Limit  int32    `validate:"required,gte=1"`
-	Offset int32    `validate:"omitempty,gte=0"`
+	User   User  `validate:"required"`
+	Limit  int32 `validate:"required,gte=1"`
+	Offset int32 `validate:"omitempty,gte=0"`
 	RequestModal[ListRequest]
 }
 
@@ -20,6 +21,12 @@ func (r ListRequest) Metadata() *Metadata {
 	return &Metadata{
 		Current: int64(r.Offset), Limit: int64(r.Limit), Offset: int64(r.Offset),
 	}
+}
+
+func (r ListRequest) DefaultMetadata(ctx context.Context) (out *Metadata) {
+	out = r.Metadata()
+	r.SetResponseMetadata(ctx, out)
+	return
 }
 
 func (r ListRequest) RequestLoad(ctx context.Context) (param RequestParam, err error) {
@@ -33,31 +40,47 @@ func (r ListRequest) RequestLoad(ctx context.Context) (param RequestParam, err e
 	return out, err
 }
 
-type ListRequestWithID[ID string | uuid.UUID] struct {
+type ListRequestIdType interface {
+	string | uuid.UUID | constraints.Integer
+}
+
+type ListRequestWithID[ID ListRequestIdType] struct {
 	ID ID `validate:"required"`
-	*ListRequest
-	*RequestModal[ListRequestWithID[ID]]
+	ListRequest
+	RequestModal[ListRequestWithID[ID]]
+}
+
+func (r *ListRequestWithID[ID]) setId(id interface{}) {
+	r.ID = id.(ID)
 }
 
 func (r ListRequestWithID[ID]) RequestLoad(ctx context.Context) (param RequestParam, err error) {
-	var out ListRequestWithID[ID] = ListRequestWithID[ID]{
-		ListRequest: &ListRequest{},
-	}
-	var e error
-	var p RequestParam
-	if p, e = out.ListRequest.RequestLoad(ctx); e != nil {
+	var _id ID
+	var pathId string
+	var out ListRequestWithID[ID] = ListRequestWithID[ID]{ListRequest: ListRequest{}}
+	if p, e := out.ListRequest.RequestLoad(ctx); e != nil {
 		return param, RequestLoadError[ListRequestWithID[ID]](errors.Wrapf(e, "failed to load %T from request", r))
-	}
-	if e = p.Validate(out.ListRequest.InContext(ctx, *out.ListRequest)); e != nil {
-		return param, ValidatorError[ListRequestWithID[ID]](errors.Wrapf(e, "validation failed for %T", r))
-	}
-	out.ListRequest = p.(*ListRequest)
-	if id := ctx.(*gin.Context).Param("id"); id == "" {
+	} else if pathId = ctx.(*gin.Context).Param("id"); pathId == "" {
 		return param, errors.Errorf("could not load path parameter value with key:id")
 	} else {
-		utils.StructCopy(id, &out.ID)
+		out.ListRequest = p.(ListRequest)
 	}
-	ctx.(*gin.Context).Set(out.ContextKey(), &out)
-
+	switch any(_id).(type) {
+	case string:
+		out.setId(pathId)
+	case uuid.UUID:
+		var uid uuid.UUID
+		if uid, err = uuid.Parse(pathId); err != nil {
+			return param, errors.Wrapf(err, "could not parse path parameter value with key:id to %T", _id)
+		}
+		out.setId(uid)
+	case int64, uint64:
+		i, _ := strconv.ParseInt(pathId, 10, 64)
+		out.setId(i)
+	default:
+		i, _ := strconv.Atoi(pathId)
+		out.setId(i)
+	}
+	ctx.(*gin.Context).Set(out.ContextKey(), out)
 	return out, err
 }

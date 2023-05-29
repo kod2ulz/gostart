@@ -61,9 +61,9 @@ type Number interface {
 	constraints.Integer | constraints.Float
 }
 
-type NumericList[T Number] struct{ ComparableList[T] }
+type StringList = ComparableList[string] 
 
-type StringList struct{ ComparableList[string] }
+type NumericList[T Number] struct{ ComparableList[T] }
 
 type Int64List struct{ NumericList[int64] }
 

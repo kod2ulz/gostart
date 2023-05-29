@@ -70,9 +70,9 @@ func (s *GenericSessionService[ID, U]) Auther() gin.HandlerFunc {
 
 func (s *GenericSessionService[ID, U]) API(router *gin.RouterGroup) {
 	router.
-		POST("/login", api.HandlerWithResponse[LoginRequest](s.Login)).
-		POST("/verify", api.HandlerWithResponse[VerifyTokenRequest](s.Verify)).
-		POST("/refresh", api.HandlerWithResponse[RefreshRequest](s.Refresh))
+		POST("/login", api.ParamHandlerWithResponse[LoginRequest](s.Login)).
+		POST("/verify", api.ParamHandlerWithResponse[VerifyTokenRequest](s.Verify)).
+		POST("/refresh", api.ParamHandlerWithResponse[RefreshRequest](s.Refresh))
 }
 
 func (s *GenericSessionService[ID, U]) Signup(ctx context.Context) (out U, err api.Error) {
