@@ -51,6 +51,14 @@ func (v Value) Duration() time.Duration {
 	return d
 }
 
+func (v Value) Time(layout string) time.Time {
+	t, e := time.Parse(layout, v.String())
+	if e != nil {
+		log.Errorf("Error parsing time '%v'. %v", v, e)
+	}
+	return t
+}
+
 func (v Value) Valid() bool {
 	return strings.Trim(string(v), " ") != ""
 }

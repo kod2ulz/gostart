@@ -17,7 +17,7 @@ type Config struct {
 	PublicKeyURL       string
 }
 
-func Conf(prefix ...string) (conf *Config) {
+func InitConfig(prefix ...string) (conf *Config) {
 	env := utils.Env.Helper(prefix...).OrDefault("AUTH")
 	conf = &Config{
 		Driver:             env.GetString("DRIVER", cognitoDriver),
@@ -40,3 +40,4 @@ func Conf(prefix ...string) (conf *Config) {
 	}
 	return
 }
+

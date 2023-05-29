@@ -1,10 +1,10 @@
 package utils
 
 import (
-	"encoding/json"
 	"io"
 
 	"github.com/pkg/errors"
+	json "github.com/json-iterator/go"
 )
 
 var Net netutils
