@@ -2,28 +2,33 @@ package utils
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/collections"
 	g "github.com/onsi/gomega"
+	json "github.com/json-iterator/go"
 )
 
 type testUtils struct{}
 
 var Test testUtils
 
-func (testUtils) Request(method, path string, data []byte) (req *http.Request) {
+func (testUtils) Request(method, path string, data []byte, headers...map[string]string) (req *http.Request) {
 	var err error
+	var outBytes *bytes.Buffer
 	if len(data) > 0 {
-		req, err = http.NewRequest(method, path, bytes.NewBuffer(data))
-	} else {
-		req, err = http.NewRequest(method, path, nil)
-	}
+		outBytes = bytes.NewBuffer(data)
+	} 
+	req, err = http.NewRequest(method, path, outBytes)
 	g.Expect(err).To(g.BeNil())
 	g.Expect(req).ToNot(g.BeNil())
 	req.Header.Set("Content-Type", "application/json")
+	for _, h := range headers {
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+	}
 	return
 }
 

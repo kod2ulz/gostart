@@ -1,11 +1,11 @@
 package utils
 
 import (
-	"encoding/json"
 
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/sirupsen/logrus"
+	json "github.com/json-iterator/go"
 )
 
 type jsonUtils struct{}
