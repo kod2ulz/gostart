@@ -46,27 +46,42 @@ func (r RequestModal[T]) MetadataContextKey() string {
 
 func (r RequestModal[T]) SetResponseMetadata(ctx context.Context, meta *Metadata) (err error) {
 	ctx.(*gin.Context).Set(r.MetadataContextKey(), meta)
-	return 
+	return
 }
 
 func (p RequestModal[T]) ContextLoad(ctx context.Context) (out RequestParam, err error) {
 	val := ctx.Value(p.ContextKey())
 	if val == nil {
-		return out, errors.Errorf("value of %T with key %s returned %v in context", p, val, p.ContextKey())
+		return out, errors.Errorf("value of %T with key %s was %v in context", p, p.ContextKey(), val)
 	}
 	return val.(RequestParam), nil
 }
 
 func (p RequestModal[T]) LoadFromContext(ctx context.Context, out RequestParam) (err error) {
 	var param RequestParam
-	if param, err = out.ContextLoad(ctx); err != nil {
+	if out == nil {
+		return errors.Errorf("out is nil")
+	} else if param, err = (*new(T)).ContextLoad(ctx); err != nil {
 		return errors.Wrapf(err, "Failed to load %T from context", out)
 	} else if param == nil {
-		if param = ctx.Value(p.ContextKey()).(RequestParam) ; param == nil {
+		if param = ctx.Value(p.ContextKey()).(RequestParam); param == nil {
 			return errors.Errorf("Got %v when loading %T from context", out, out)
 		}
 	}
 	utils.StructCopy(param, out)
+	return
+}
+
+func (p RequestModal[T]) FromContext(ctx context.Context, out *T) (err error) {
+	if out == nil {
+		return errors.Errorf("out is nil")
+	} else if val := ctx.Value(p.ContextKey()); val == nil {
+		return errors.Errorf("value of %T with key %s was %v in context", *out, p.ContextKey(), val)
+	} else if param, ok := val.(T); ok {
+		*out = param
+	} else {
+		return errors.Errorf("failed to cast %T to %T ", val, *out)
+	}
 	return
 }
 

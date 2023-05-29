@@ -34,8 +34,8 @@ func checkResponse[T any](recorder *httptest.ResponseRecorder, res *api.Response
 	Expect((time.Now().Unix() - res.Timestamp) < 10).To(BeTrue())
 }
 
-func createLoginRequest(signup auth.SignupRequest) auth.LoginRequest[uuid.UUID, auth.UserData] {
-	return auth.LoginRequest[uuid.UUID, auth.UserData]{
+func createLoginRequest(signup auth.SignupRequest) auth.LoginRequest {
+	return auth.LoginRequest{
 		Username: signup.Username, Password: signup.Password,
 	}
 }

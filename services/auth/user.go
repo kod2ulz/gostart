@@ -18,6 +18,11 @@ type UserData struct {
 	DisabledAt *time.Time `json:"disabledAt,omitempty"`
 }
 
+// ID implements auth.User
+func (u UserData) ID() uuid.UUID {
+	return u.UID
+}
+
 // GetID implements SessionUser
 func (u UserData) GetID() uuid.UUID {
 	return u.UID
@@ -38,7 +43,7 @@ func (u UserData) IsDisabled() bool {
 	return u.DisabledAt != nil && !u.DisabledAt.IsZero()
 }
 
-var _ SessionUser[uuid.UUID] = &UserData{}
+var _ SessionUser[uuid.UUID] = (*UserData)(nil)
 
 type _userStore struct {
 	data          collections.Map[uuid.UUID, UserData]
@@ -98,6 +103,6 @@ func (s *_userStore) Clear() {
 var _ SessionStore[uuid.UUID, UserData] = &_userStore{}
 
 type User struct {
-	UserData
+	*UserData
 	Claims *Claims
 }

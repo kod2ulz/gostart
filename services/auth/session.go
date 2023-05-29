@@ -56,7 +56,7 @@ func SessionService[ID comparable, U SessionUser[ID]](log *logr.Logger, store Se
 	return
 }
 
-var _ api.SessionService[User, TokenResponse] = &GenericSessionService[uuid.UUID, User]{}
+var _ api.SessionService[User, TokenResponse] = (*GenericSessionService[uuid.UUID, User])(nil)
 
 type GenericSessionService[ID comparable, U SessionUser[ID]] struct {
 	db        SessionStore[ID, U]
@@ -70,7 +70,7 @@ func (s *GenericSessionService[ID, U]) Auther() gin.HandlerFunc {
 
 func (s *GenericSessionService[ID, U]) API(router *gin.RouterGroup) {
 	router.
-		POST("/login", api.HandlerWithResponse[LoginRequest[ID, U]](s.Login)).
+		POST("/login", api.HandlerWithResponse[LoginRequest](s.Login)).
 		POST("/verify", api.HandlerWithResponse[VerifyTokenRequest](s.Verify)).
 		POST("/refresh", api.HandlerWithResponse[RefreshRequest](s.Refresh))
 }
@@ -94,9 +94,9 @@ func (s *GenericSessionService[ID, U]) Signup(ctx context.Context) (out U, err a
 func (s *GenericSessionService[ID, U]) Login(ctx context.Context) (out TokenResponse, err api.Error) {
 	var e error
 	var user SessionUser[ID]
-	var params LoginRequest[ID, U]
+	var params LoginRequest
 	if e = params.LoadFromContext(ctx, &params); e != nil {
-		return out, api.RequestLoadError[LoginRequest[ID, U]](errors.Wrap(e, "failed to load login params"))
+		return out, api.RequestLoadError[LoginRequest](errors.Wrap(e, "failed to load login params"))
 	} else if user, e = s.db.GetUserWithUsername(ctx, params.Username); e != nil {
 		return out, api.ServiceErrorUnauthorised(ErrLoginInvalid)
 	} else if !params.verify(user, s.tokenConf.hashFunc) {

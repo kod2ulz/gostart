@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/kod2ulz/gostart/utils"
+	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 )
 
 func ErrorResponse[T any](err Error) Response[T] {
@@ -40,6 +44,21 @@ type Response[T any] struct {
 
 func (r Response[T]) HasError() bool {
 	return r.Error != nil
+}
+
+func (r Response[T]) ParseData(out *T) error {
+	if out == nil {
+		return errors.New("out is nil")
+	} else if r.Data == nil {
+		return errors.New("Response.Data is nil")
+	} else if data, ok := r.Data.(T); ok {
+		*out = data
+	} else if data, ok := r.Data.(map[string]interface{}); ok {
+		if err := mapstructure.Decode(data, out); err == nil {
+			return nil
+		}
+	}
+	return errors.Wrapf(utils.StructCopy(r.Data, out), "failed to parse %T to %T", r.Data, *out)
 }
 
 func (r Response[T]) Failed() bool {

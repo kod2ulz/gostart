@@ -47,7 +47,7 @@ func (c Claims) ID() uuid.UUID {
 
 func (c *Claims) AuthUser() *User {
 	return &User{
-		UserData: UserData{
+		UserData: &UserData{
 			UID:   c.ID(),
 			Email: c.Username,
 		},

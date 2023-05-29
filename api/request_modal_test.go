@@ -37,7 +37,7 @@ var _ = Describe("RequestModal", func() {
 				Expect(param).To(Equal(book))
 			})
 
-			It("cannot alter value of original object", func() {
+			It("cannot change value of original object", func() {
 				var param = CreateBookRequest{}
 				Expect(param.LoadFromContext(ctx, &param)).To(BeNil())
 				param.Pages = 200
@@ -70,20 +70,22 @@ var _ = Describe("RequestModal", func() {
 		var router *gin.Engine
 		var recorder *httptest.ResponseRecorder
 		books := bookService()
-		router = utils.Test.GinRouter(func(e *gin.Engine) {
-			books.setRoutes(e.Group("/books"))
-		})
 
-		BeforeEach(func() { recorder = httptest.NewRecorder() })
-		AfterEach(func() { books.clear() })
+		When("posting data with unauthenticated user", func() {
 
-		Context("with post data", func() {
+			BeforeEach(func() {
+				router = utils.Test.GinRouter(func(e *gin.Engine) {
+					books.setRoutes(e.Group("/books"))
+				})
+				recorder = httptest.NewRecorder()
+			})
+			AfterEach(func() { books.clear() })
 
 			It("can load request model from gin router request", func() {
 				var res *ResultModel[CreateBookRequest, Book]
 				id := uuid.New()
-				payload := jsonDataOf("id", id, "name", "Book 1", "author", "TestBot1", "pages", 400)
-				router.ServeHTTP(recorder, makeRequest(http.MethodPost, "/books", payload))
+				payload := utils.Test.JsonDataOf("id", id, "name", "Book 1", "author", "TestBot1", "pages", 400)
+				router.ServeHTTP(recorder, utils.Test.Request(http.MethodPost, "/books", payload))
 				Expect(recorder.Code).To(Equal(http.StatusOK))
 				Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())
 				Expect(res).ToNot(BeNil())
@@ -95,8 +97,8 @@ var _ = Describe("RequestModal", func() {
 
 			It("can validate request and fail on invalid parameters", func() {
 				var res *ResultModel[CreateBookRequest, any]
-				payload := jsonDataOf("author", "TestBot2", "pages", 50)
-				router.ServeHTTP(recorder, makeRequest(http.MethodPost, "/books", payload))
+				payload := utils.Test.JsonDataOf("author", "TestBot2", "pages", 50)
+				router.ServeHTTP(recorder, utils.Test.Request(http.MethodPost, "/books", payload))
 				Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 				Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())
 				Expect(res).ToNot(BeNil())
@@ -105,5 +107,8 @@ var _ = Describe("RequestModal", func() {
 				Expect(len(res.Error().Fields)).To(Equal(2))
 			})
 		})
+
+		
 	})
+
 })
