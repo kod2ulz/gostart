@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"unicode"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
@@ -9,6 +11,10 @@ var Validate *validator.Validate
 
 func init() {
 	Validate = validator.New()
+	Validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
+		pass, ok := fl.Field().Interface().(string)
+		return ok && Validator.PasswordValid(pass)
+	})
 }
 
 type optionalVar interface {
@@ -82,3 +88,35 @@ func (validatorUtil) UuidAnyValid(vars ...uuid.NullUUID) bool {
 	}
 	return false
 }
+
+func (validatorUtil) PasswordValid(password string) bool {
+	var (
+		upp, low, num, sym bool
+		total                uint8
+	)
+	for _, char := range password {
+		switch {
+		case unicode.IsUpper(char):
+			upp = true
+			total++
+		case unicode.IsLower(char):
+			low = true
+			total++
+		case unicode.IsNumber(char):
+			num = true
+			total++
+		case unicode.IsPunct(char) || unicode.IsSymbol(char):
+			sym = true
+			total++
+		default:
+			return false
+		}
+	}
+
+	if !upp || !low || !num || !sym || total < 8 {
+		return false
+	}
+
+	return true
+}
+

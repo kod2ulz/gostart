@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -15,14 +16,7 @@ import (
 	"github.com/kod2ulz/gostart/utils"
 )
 
-var _ = Describe("RequestModel", func() {
-
-	type CreateBookRequest struct {
-		Name   string `json:"name"   validate:"required"`
-		Author string `json:"author" validate:"required"`
-		Pages  int    `json:"pages"  validate:"required,gt=200"`
-		api.RequestModal[CreateBookRequest]
-	}
+var _ = Describe("RequestModal", func() {
 
 	Describe("Context Behaviour", func() {
 
@@ -43,7 +37,7 @@ var _ = Describe("RequestModel", func() {
 				Expect(param).To(Equal(book))
 			})
 
-			It("cannot alter value of original object", func() {
+			It("cannot change value of original object", func() {
 				var param = CreateBookRequest{}
 				Expect(param.LoadFromContext(ctx, &param)).To(BeNil())
 				param.Pages = 200
@@ -73,51 +67,48 @@ var _ = Describe("RequestModel", func() {
 
 	Describe("Loading from HTTP Request", func() {
 
-		var res ErrorModel
 		var router *gin.Engine
 		var recorder *httptest.ResponseRecorder
-		var createBookHandler = func(ctx context.Context) (param CreateBookRequest, err error) {
-			param = CreateBookRequest{}
-			err = param.LoadFromContext(ctx, &param)
-			return
-		}
+		books := bookService()
 
-		var setupRouter = func() *gin.Engine {
-			router := gin.Default()
-			router.POST("/books", api.GetWithParamHandler[CreateBookRequest](createBookHandler))
-			return router
-		}
+		When("posting data with unauthenticated user", func() {
 
-		BeforeEach(func() {
-			router = setupRouter()
-			recorder = httptest.NewRecorder()
-			res = ErrorModel{}
-		})
-
-		Context("with post data", func() {
+			BeforeEach(func() {
+				router = utils.Test.GinRouter(func(e *gin.Engine) {
+					books.setRoutes(e.Group("/books"))
+				})
+				recorder = httptest.NewRecorder()
+			})
+			AfterEach(func() { books.clear() })
 
 			It("can load request model from gin router request", func() {
-				payload := jsonDataOf("name", "Book 1", "author", "TestBot1", "pages", 400)
-				router.ServeHTTP(recorder, makeRequest(http.MethodPost, "/books", payload))
+				var res *ResultModel[CreateBookRequest, Book]
+				id := uuid.New()
+				payload := utils.Test.JsonDataOf("id", id, "name", "Book 1", "author", "TestBot1", "pages", 400)
+				router.ServeHTTP(recorder, utils.Test.Request(http.MethodPost, "/books", payload))
 				Expect(recorder.Code).To(Equal(http.StatusOK))
 				Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())
-				Expect(res).ToNot(BeEmpty())
+				Expect(res).ToNot(BeNil())
 				Expect(res.HasError()).To(BeFalse())
-				Expect(res.Error()).To(BeEmpty())
-				var param CreateBookRequest
-				Expect(utils.StructCopy(res, &param)).To(BeNil())
-				Expect(param).To(Equal(CreateBookRequest{Name: "Book 1", Author: "TestBot1", Pages: 400}))
+				var param Book
+				Expect(utils.StructCopy(res.Data(), &param)).To(BeNil())
+				Expect(param).To(Equal(Book{ID: id, Name: "Book 1", Author: "TestBot1", Pages: 400}))
 			})
 
 			It("can validate request and fail on invalid parameters", func() {
-				payload := jsonDataOf("author", "TestBot2", "pages", 50)
-				router.ServeHTTP(recorder, makeRequest(http.MethodPost, "/books", payload))
+				var res *ResultModel[CreateBookRequest, any]
+				payload := utils.Test.JsonDataOf("author", "TestBot2", "pages", 50)
+				router.ServeHTTP(recorder, utils.Test.Request(http.MethodPost, "/books", payload))
 				Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 				Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())
-				Expect(res).ToNot(BeEmpty())
-				Expect(res.HasError()).To(BeTrue())
-				Expect(res.Error()).ToNot(BeEmpty())
+				Expect(res).ToNot(BeNil())
+				Expect(res.Error().Message).ToNot(BeEmpty())
+				Expect(res.Error().Code).To(Equal(api.ErrorCodeValidatorError))
+				Expect(len(res.Error().Fields)).To(Equal(2))
 			})
 		})
+
+		
 	})
+
 })

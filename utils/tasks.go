@@ -62,3 +62,7 @@ func SafeChannelWrite[T any](ctx context.Context, log *logrus.Entry, data T, out
 	}(data)
 	return
 }
+
+func PointerTo[T any](t T) *T {
+	return &t
+}

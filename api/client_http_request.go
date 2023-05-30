@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kod2ulz/gostart/object"
+	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -76,7 +76,7 @@ func (r *httpClientRequest) doRequest(method, url string, headers Headers, param
 	if r.err != nil {
 		return utils.Error.Log(r.log, r.err, "error fetching response from API")
 	} else if r.res.StatusCode >= 400 {
-		var data object.Map[string, interface{}]
+		var data collections.Map[string, interface{}]
 		if r.err = utils.Net.ReadJson(r.res.Body, &data); r.err != nil {
 			return utils.Error.Log(r.log, errors.Wrapf(r.err, "failed to read json body of response with %d", r.res.StatusCode), "")
 		} else if errMsg := data.AnyOfKey("err", "error", "msg", "message"); errMsg != nil {

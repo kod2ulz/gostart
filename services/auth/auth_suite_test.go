@@ -1,49 +1,37 @@
-package api_test
+package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/logr"
 	"github.com/kod2ulz/gostart/services/auth"
-	"github.com/kod2ulz/gostart/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-func TestApi(t *testing.T) {
+var log *logr.Logger
+
+func TestAuth(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Api Suite")
+	RunSpecs(t, "Services:auth Suite")
 }
 
-type ResultModel[P api.RequestParam, R any] map[string]interface{}
-
-func (e ResultModel[P, R]) HasError() (yes bool) {
-	if len(e) == 0 {
-		return
-	}
-	_, yes = e["error"]
-	return
-}
-
-func (e ResultModel[P, R]) Error() (er api.ErrorModel[P]) {
-	if e.HasError() {
-		utils.StructCopy(e["error"], &er)
-		return
-	}
-	return
-}
-
-func (e ResultModel[P, R]) Data() (out R) {
-	utils.StructCopy(e["data"], &out)
-	return
-}
-
-func (e ResultModel[P, R]) Parse(out interface{}) (err error) {
-	return utils.StructCopy(e, out)
+func checkResponse[T any](recorder *httptest.ResponseRecorder, res *api.Response[T]) {
+	Expect(recorder.Code).To(Equal(http.StatusOK))
+	Expect(json.NewDecoder(recorder.Body).Decode(res)).To(BeNil())
+	Expect(res.Success).To(BeTrue())
+	Expect(res.Error).To(BeNil())
+	Expect(res.Meta).To(BeNil())
+	Expect((time.Now().Unix() - res.Timestamp) < 10).To(BeTrue())
 }
 
 func createLoginRequest(signup auth.SignupRequest) auth.LoginRequest {
