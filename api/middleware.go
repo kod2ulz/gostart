@@ -15,10 +15,10 @@ func WithUser[TokenRequest RequestParam, UserResponse, TokenResponse any](svc Se
 		if req, loadError = loadParamFromRequest[TokenRequest](c); loadError != nil {
 			c.AbortWithStatusJSON(loadError.http(), ErrorResponse[TokenRequest](loadError))
 		} else if validationError := req.Validate(c); loadError != nil {
-			e := ServiceErrorUnauthorised(validationError).(*ErrorModel[User])
-			c.AbortWithStatusJSON(e.Http, ErrorResponse[User](e))
+			e := ServiceErrorUnauthorised(validationError).(*ErrorModel[UserResponse])
+			c.AbortWithStatusJSON(e.Http, ErrorResponse[UserResponse](e))
 		} else if user, err := svc.Verify(c); err != nil {
-			c.AbortWithStatusJSON(err.(*ErrorModel[User]).Http, ErrorResponse[User](err))
+			c.AbortWithStatusJSON(err.(*ErrorModel[UserResponse]).Http, ErrorResponse[UserResponse](err))
 		} else {
 			c.Set(ContextAuthUserKey, user)
 			c.Next()
