@@ -12,8 +12,8 @@ import (
 
 type ListRequest struct {
 	User   User  `json:"-" validate:"required"`
-	Limit  int32 `json:"-" validate:"required,gte=1"`
-	Offset int32 `json:"-" validate:"omitempty,gte=0"`
+	Limit  int32 `validate:"required,gte=1"`
+	Offset int32 `validate:"omitempty,gte=0"`
 	RequestModal[ListRequest]
 }
 
