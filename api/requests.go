@@ -13,21 +13,24 @@ import (
 )
 
 type FieldSortType string
-type FieldRangeType string
+type FieldCompareType string
 
 const (
 	SortAsc  FieldSortType = "asc"
 	SortDesc FieldSortType = "desc"
 )
 const (
-	RangeGreaterThan FieldRangeType = "gt"
-	RangeLessThan    FieldRangeType = "lt"
+	CompareGreaterThan        FieldCompareType = "gt"
+	CompareGreaterThanOrEqual FieldCompareType = "gte"
+	CompareLessThan           FieldCompareType = "lt"
+	CompareLessThanOrEqual    FieldCompareType = "lte"
+	CompareNot                FieldCompareType = "not"
 )
 
 type FieldQueryParamProvider interface {
 	GetQueryFieldValues() map[string]utils.Value
 	GetQueryFieldSort() map[string]FieldSortType
-	GetQueryFieldRanges() map[string]map[FieldRangeType]utils.Value
+	GetQueryFieldComparisons() map[string]map[FieldCompareType]utils.Value
 	GetLimit() int32
 	GetOffset() int32
 	HasQueryFieldParams() bool
@@ -39,9 +42,9 @@ type ListRequest struct {
 	Offset int32 `validate:"omitempty,gte=0"`
 	RequestModal[ListRequest]
 
-	fields map[string]utils.Value
-	sort   map[string]FieldSortType
-	ranges map[string]map[FieldRangeType]utils.Value
+	fields      map[string]utils.Value
+	sort        map[string]FieldSortType
+	comparisons map[string]map[FieldCompareType]utils.Value
 }
 
 func (r ListRequest) Metadata() *Metadata {
@@ -95,19 +98,20 @@ func (r *ListRequest) LoadQuerySort(ctx context.Context, names ...string) *ListR
 	return r
 }
 
-func (r *ListRequest) LoadQueryRanges(ctx context.Context, names ...string) *ListRequest {
+func (r *ListRequest) LoadQueryComparisons(ctx context.Context, names ...string) *ListRequest {
 	if len(names) == 0 {
 		return r
-	} else if r.ranges == nil {
-		r.ranges = make(map[string]map[FieldRangeType]utils.Value)
+	} else if r.comparisons == nil {
+		r.comparisons = make(map[string]map[FieldCompareType]utils.Value)
 	}
 	for i := range names {
-		for _, rt := range []FieldRangeType{RangeGreaterThan, RangeLessThan} {
-			if val := r.Query(ctx, fmt.Sprintf("%s_%s", names[i], rt)); val.Valid() {
-				if _, ok := r.ranges[names[i]]; !ok {
-					r.ranges[names[i]] = make(map[FieldRangeType]utils.Value)
+		for _, cp := range []FieldCompareType{
+			CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareGreaterThanOrEqual, CompareNot} {
+			if val := r.Query(ctx, fmt.Sprintf("%s_%s", names[i], string(cp))); val.Valid() {
+				if _, ok := r.comparisons[names[i]]; !ok {
+					r.comparisons[names[i]] = make(map[FieldCompareType]utils.Value)
 				}
-				r.ranges[names[i]][rt] = val
+				r.comparisons[names[i]][cp] = val
 			}
 		}
 	}
@@ -128,11 +132,11 @@ func (r ListRequest) GetQueryFieldSort() (out map[string]FieldSortType) {
 	return r.sort
 }
 
-func (r ListRequest) GetQueryFieldRanges() (out map[string]map[FieldRangeType]utils.Value) {
-	if len(r.sort) == 0 {
-		return map[string]map[FieldRangeType]utils.Value{}
+func (r ListRequest) GetQueryFieldComparisons() (out map[string]map[FieldCompareType]utils.Value) {
+	if len(r.comparisons) == 0 {
+		return map[string]map[FieldCompareType]utils.Value{}
 	}
-	return r.ranges
+	return r.comparisons
 }
 
 func (r ListRequest) GetQueryField(name string) (out utils.Value) {
@@ -160,7 +164,7 @@ func (r ListRequest) GetOffset() int32 {
 }
 
 func (r ListRequest) HasQueryFieldParams() bool {
-	return len(r.fields)+len(r.sort)+len(r.ranges) > 0
+	return len(r.fields)+len(r.sort)+len(r.comparisons) > 0
 }
 
 type ListRequestIdType interface {
