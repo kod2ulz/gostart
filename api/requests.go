@@ -21,6 +21,8 @@ const (
 type FieldQueryParamProvider interface {
 	GetQueryFieldValues() map[string]utils.Value
 	GetQueryFieldSort() map[string]FieldSortType
+	GetLimit() int32
+	GetOffset() int32
 	HasQueryFieldParams() bool
 }
 
@@ -113,6 +115,14 @@ func (r ListRequest) GetAnyQueryField(names ...string) (out utils.Value) {
 		}
 	}
 	return
+}
+
+func (r ListRequest) GetLimit() int32 {
+	return r.Limit
+}
+
+func (r ListRequest) GetOffset() int32 {
+	return r.Offset
 }
 
 func (r ListRequest) HasQueryFieldParams() bool {
