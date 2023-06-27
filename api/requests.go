@@ -109,6 +109,10 @@ func (r ListRequest) AnyField(names ...string) (out utils.Value) {
 	return
 }
 
+func (r ListRequest) HasFieldParams() (bool) {
+	return len(r.fields) + len(r.sort) > 0
+}
+
 type ListRequestIdType interface {
 	string | uuid.UUID | constraints.Integer
 }
