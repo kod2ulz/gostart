@@ -11,6 +11,13 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
+type FieldSortType string
+
+const (
+	SortAsc  FieldSortType = "asc"
+	SortDesc FieldSortType = "desc"
+)
+
 type ListRequest struct {
 	User   User  `json:"-" validate:"required"`
 	Limit  int32 `validate:"required,gte=1"`
@@ -18,6 +25,7 @@ type ListRequest struct {
 	RequestModal[ListRequest]
 
 	fields map[string]utils.Value
+	sort   map[string]FieldSortType
 }
 
 func (r ListRequest) Metadata() *Metadata {
@@ -57,11 +65,32 @@ func (r *ListRequest) LoadQueryFields(ctx context.Context, names ...string) *Lis
 	return r
 }
 
+func (r *ListRequest) LoadSortFields(ctx context.Context, names ...string) *ListRequest {
+	if len(names) == 0 {
+		return r
+	} else if r.sort == nil {
+		r.sort = make(map[string]FieldSortType)
+	}
+	for i := range names {
+		if val := r.Query(ctx, "sort_"+names[i]); val.Valid() {
+			r.sort[names[i]] = FieldSortType(val.String())
+		}
+	}
+	return r
+}
+
 func (r ListRequest) Fields() (out map[string]utils.Value) {
 	if len(r.fields) == 0 {
 		return map[string]utils.Value{}
 	}
 	return r.fields
+}
+
+func (r ListRequest) FieldSort() (out map[string]FieldSortType) {
+	if len(r.sort) == 0 {
+		return map[string]FieldSortType{}
+	}
+	return r.sort
 }
 
 func (r ListRequest) Field(name string) (out utils.Value) {
