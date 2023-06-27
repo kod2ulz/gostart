@@ -25,6 +25,7 @@ const (
 	CompareLessThan           FieldCompareType = "lt"
 	CompareLessThanOrEqual    FieldCompareType = "lte"
 	CompareNot                FieldCompareType = "not"
+	CompareNotEqual           FieldCompareType = "neq"
 )
 
 type FieldQueryParamProvider interface {
@@ -106,7 +107,7 @@ func (r *ListRequest) LoadQueryComparisons(ctx context.Context, names ...string)
 	}
 	for i := range names {
 		for _, cp := range []FieldCompareType{
-			CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareGreaterThanOrEqual, CompareNot} {
+			CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareGreaterThanOrEqual, CompareNot, CompareNotEqual} {
 			if val := r.Query(ctx, fmt.Sprintf("%s_%s", names[i], string(cp))); val.Valid() {
 				if _, ok := r.comparisons[names[i]]; !ok {
 					r.comparisons[names[i]] = make(map[FieldCompareType]utils.Value)
