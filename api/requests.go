@@ -18,6 +18,12 @@ const (
 	SortDesc FieldSortType = "desc"
 )
 
+type FieldQueryParamProvider interface {
+	GetQueryFieldValues() map[string]utils.Value
+	GetQueryFieldSort() map[string]FieldSortType
+	HasQueryFieldParams() bool
+}
+
 type ListRequest struct {
 	User   User  `json:"-" validate:"required"`
 	Limit  int32 `validate:"required,gte=1"`
@@ -65,7 +71,7 @@ func (r *ListRequest) LoadQueryFields(ctx context.Context, names ...string) *Lis
 	return r
 }
 
-func (r *ListRequest) LoadSortFields(ctx context.Context, names ...string) *ListRequest {
+func (r *ListRequest) LoadQuerySort(ctx context.Context, names ...string) *ListRequest {
 	if len(names) == 0 {
 		return r
 	} else if r.sort == nil {
@@ -79,25 +85,25 @@ func (r *ListRequest) LoadSortFields(ctx context.Context, names ...string) *List
 	return r
 }
 
-func (r ListRequest) Fields() (out map[string]utils.Value) {
+func (r ListRequest) GetQueryFieldValues() (out map[string]utils.Value) {
 	if len(r.fields) == 0 {
 		return map[string]utils.Value{}
 	}
 	return r.fields
 }
 
-func (r ListRequest) FieldSort() (out map[string]FieldSortType) {
+func (r ListRequest) GetQueryFieldSort() (out map[string]FieldSortType) {
 	if len(r.sort) == 0 {
 		return map[string]FieldSortType{}
 	}
 	return r.sort
 }
 
-func (r ListRequest) Field(name string) (out utils.Value) {
-	return r.Fields()[name]
+func (r ListRequest) GetQueryField(name string) (out utils.Value) {
+	return r.GetQueryFieldValues()[name]
 }
 
-func (r ListRequest) AnyField(names ...string) (out utils.Value) {
+func (r ListRequest) GetAnyQueryField(names ...string) (out utils.Value) {
 	if len(r.fields) == 0 {
 		return
 	}
@@ -109,8 +115,8 @@ func (r ListRequest) AnyField(names ...string) (out utils.Value) {
 	return
 }
 
-func (r ListRequest) HasFieldParams() (bool) {
-	return len(r.fields) + len(r.sort) > 0
+func (r ListRequest) HasQueryFieldParams() bool {
+	return len(r.fields)+len(r.sort) > 0
 }
 
 type ListRequestIdType interface {
