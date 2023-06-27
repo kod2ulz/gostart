@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 )
@@ -15,6 +16,8 @@ type ListRequest struct {
 	Limit  int32 `validate:"required,gte=1"`
 	Offset int32 `validate:"omitempty,gte=0"`
 	RequestModal[ListRequest]
+
+	fields map[string]utils.Value
 }
 
 func (r ListRequest) Metadata() *Metadata {
@@ -38,6 +41,43 @@ func (r ListRequest) RequestLoad(ctx context.Context) (param RequestParam, err e
 	out.Offset = int32(out.Query(ctx, "offset", "0").Int())
 	ctx.(*gin.Context).Set(out.ContextKey(), &out)
 	return out, err
+}
+
+func (r *ListRequest) LoadQueryFields(ctx context.Context, names ...string) *ListRequest {
+	if len(names) == 0 {
+		return r
+	} else if r.fields == nil {
+		r.fields = make(map[string]utils.Value)
+	}
+	for i := range names {
+		if val := r.Query(ctx, names[i]); val.Valid() {
+			r.fields[names[i]] = val
+		}
+	}
+	return r
+}
+
+func (r ListRequest) Fields() (out map[string]utils.Value) {
+	if len(r.fields) == 0 {
+		return map[string]utils.Value{}
+	}
+	return r.fields
+}
+
+func (r ListRequest) Field(name string) (out utils.Value) {
+	return r.Fields()[name]
+}
+
+func (r ListRequest) AnyField(names ...string) (out utils.Value) {
+	if len(r.fields) == 0 {
+		return
+	}
+	for i := range names {
+		if val, ok := r.fields[names[i]]; ok {
+			return utils.Value(val)
+		}
+	}
+	return
 }
 
 type ListRequestIdType interface {
