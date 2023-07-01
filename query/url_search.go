@@ -57,7 +57,7 @@ func (s *urlSearch) LoadFieldSort(ctx context.Context, fields ...string) *urlSea
 		s.sort = make(map[string]SortType)
 	}
 	for i := range fields {
-		if val := s.query(ctx, "sort_"+fields[i]); val.Valid() {
+		if val := s.query(ctx, "sort_"+fields[i]); val.Valid() && sortTypeValid(val.String()) {
 			s.sort[fields[i]] = SortType(val.String())
 		}
 	}
@@ -107,10 +107,10 @@ func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) 
 				s.comparisons[fields[i]][cp] = val
 			}
 		}
-		for  _, field := range object.String(fields[i]).Variations("~%s", "~%s~", "%s~") {
+		for  _, field := range object.String(fields[i]).Variations("+%s", "+%s+", "%s+") {
 			if val := s.query(ctx, field); val.Valid() {
 				out := strings.Replace(field, field, val.String(), 1)
-				s.comparisons[fields[i]][CompareLike] = utils.Value(strings.Replace(out, "~", "%", 1))
+				s.comparisons[fields[i]][CompareLike] = utils.Value(strings.Replace(out, "+", "%", 1))
 				break
 			}
 		}

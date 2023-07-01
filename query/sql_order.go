@@ -7,6 +7,15 @@ const (
 	SortDesc SortType = "desc"
 )
 
+func sortTypeValid(str string) bool {
+	for _, st := range []SortType{SortAsc, SortDesc} {
+		if str == string(st) {
+			return true
+		}
+	}
+	return false
+}
+
 type SortConsumer interface {
 	addFieldSort(sort SortType, fields ...string)
 }
