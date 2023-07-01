@@ -129,7 +129,10 @@ func (sb *sqlBuilder[T]) Select(ctx context.Context, relation string, fields ...
 	if !sb.count {
 		return int64(len(out)), out, nil
 	}
-	countQuery := fmt.Sprintf("select count(%s) from %s %s", strings.Join(sb.countFields, ", "), relation, where.String())
+	countQuery := fmt.Sprintf("select count(%s) from %s", strings.Join(sb.countFields, ", "), relation)
+	if where.Len() > 0 {
+		countQuery += " where " + where.String()
+	}
 	err = sb.dbtx.QueryRow(ctx, countQuery, args...).Scan(&count)
 	return
 }
