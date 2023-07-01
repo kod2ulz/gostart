@@ -107,10 +107,16 @@ func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) 
 				s.comparisons[fields[i]][cp] = val
 			}
 		}
-		for  _, field := range object.String(fields[i]).Variations("+%s", "+%s+", "%s+") {
+		for _, field := range object.String(fields[i]).Variations("_%s", "_%s_", "%s_") {
 			if val := s.query(ctx, field); val.Valid() {
 				out := strings.Replace(field, field, val.String(), 1)
-				s.comparisons[fields[i]][CompareLike] = utils.Value(strings.Replace(out, "+", "%", 1))
+				if strings.HasPrefix(out, "_") {
+					out = "%" + strings.TrimLeft(out, "_")
+				}
+				if strings.HasSuffix(out, "_") {
+					out = strings.TrimRight(out, "_") + "%"
+				}
+				s.comparisons[fields[i]][CompareLike] = utils.Value(out)
 				break
 			}
 		}
