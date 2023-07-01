@@ -138,7 +138,7 @@ func (sb *sqlBuilder[T]) selectQueryString(relation string, fields []string, whe
 	var query strings.Builder
 	query.WriteString(fmt.Sprintf("select %s from %s", strings.Join(fields, ", "), relation))
 	if where.Len() > 0 {
-		query.WriteString(" " + where.String())
+		query.WriteString(" where " + where.String())
 	}
 	if len(sb.orderBy) > 0 {
 		query.WriteString(" order by " + strings.Join(sb.orderBy, ", "))
