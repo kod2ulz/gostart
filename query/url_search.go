@@ -45,7 +45,7 @@ type urlSearch struct {
 
 func (s *urlSearch) Load(ctx context.Context, fields ...string) *urlSearch {
 	return s.LoadBoundaries(ctx).
-		LoadFieldLookups(ctx, fields...).
+		LoadFieldSort(ctx, fields...).
 		LoadFieldLookups(ctx, fields...).
 		LoadFieldComparisons(ctx, fields...)
 }
