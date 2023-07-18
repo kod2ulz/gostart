@@ -19,7 +19,7 @@ func Conf() *conf {
 		Host:        host,
 		Name:        env.Get("NAME", host).String(),
 		Version:     env.Get("VERSION", "ver-0.0.0").String(),
-		HttpPort:    env.Get("HTTP_PORT", "49080").String(),
+		HttpPort:    env.Get("HTTP_PORT", "49080").Int(),
 		HttpAddress: env.Get("HTTP_ADDRESS", "0.0.0.0").String(),
 		Uptime:      UptimeCheckConf(env.Prefix(), "UPTIME_CHECK"),
 		Http:        HttpConf(env.Prefix(), "HTTP_SERVER"),
@@ -31,14 +31,14 @@ type conf struct {
 	Host        string
 	Name        string
 	Version     string
-	HttpPort    string
+	HttpPort    int
 	HttpAddress string
 	Uptime      *uptimeCheckConf
 	Http        *httpConf
 }
 
 func (c conf) Address() string {
-	return fmt.Sprintf("%s:%s", c.HttpAddress, c.HttpPort)
+	return fmt.Sprintf("%s:%d", c.HttpAddress, c.HttpPort)
 }
 
 type httpConf struct {
