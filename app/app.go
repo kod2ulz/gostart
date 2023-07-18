@@ -13,8 +13,11 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/logr"
+	"github.com/kod2ulz/gostart/utils"
+	"github.com/pkg/errors"
 
 	"github.com/gin-gonic/gin"
+	consulapi "github.com/hashicorp/consul/api"
 	"github.com/joho/godotenv"
 )
 
@@ -23,6 +26,7 @@ type ap struct {
 	log    *logr.Logger
 	start  time.Time
 	conf   *conf
+	consul *consulapi.Client
 
 	osc    chan os.Signal
 	ctx    context.Context
@@ -83,8 +87,64 @@ func (a *ap) Config() *conf {
 	return a.conf
 }
 
+func (a *ap) Consul() *consulapi.Client {
+	return a.consul
+}
+
+func (a *ap) Service(name string) (out *consulapi.AgentService, err error) {
+	var ok bool
+	if a.consul == nil {
+		return out, errors.New("consul service not initialised")
+	} else if services, err := a.consul.Agent().Services(); err != nil {
+		return out, errors.Wrap(err, "error fetching registered consul services")
+	} else if out, ok = services[name]; !ok {
+		return out, errors.Errorf("service %s unknown to consul agent", name)
+	}
+	return
+}
+
+func (a *ap) ServiceUrl(name string) (out string) {
+	service, err := a.Service(name)
+	if err == nil {
+		return fmt.Sprintf("http://%s:%v", service.Address, service.Port)
+	}
+	a.log.WithError(err).WithField("consul.service", name).Error("failed to get service url")
+	return
+}
+
+func (a *ap) Register(name ...string) (err error) {
+	if a.consul != nil {
+		return utils.Error.LogOK(a.log.Infof, "service already registered with consul")
+	} else if address := utils.Env.GetOrDefault("CONSUL_HTTP_ADDR", ""); !address.Valid() {
+		return
+	}
+	service, config := a.conf.Name, consulapi.DefaultConfig()
+	if len(name) > 0 && name[0] != "" {
+		service = name[0]
+	}
+	if a.consul, err = consulapi.NewClient(config); err != nil {
+		return
+	} else if err = a.consul.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
+		ID: service,
+		// ID:      fmt.Sprintf("%s-%s", a.conf.Name, a.conf.Host),
+		Name:    service,
+		Port:    a.conf.HttpPort,
+		Address: a.conf.Host,
+		Tags:    []string{a.conf.Version, a.conf.Name, a.conf.Host},
+		Check: &consulapi.AgentServiceCheck{
+			HTTP:     fmt.Sprintf("http://%s:%v/ok", a.conf.Host, a.conf.HttpPort),
+			Interval: a.conf.Uptime.Interval.String(),
+			Timeout:  a.conf.Uptime.Timeout.String(),
+		},
+	}); err != nil {
+		return
+	}
+	return utils.Error.LogOK(a.log.Infof, "service successfully registered with consul")
+}
+
 func (a *ap) Run() {
 	fmt.Println()
+	utils.Error.Fail(a.log.Entry, a.Register(), "failed to register service with consul")
 	signal.Notify(a.osc, os.Interrupt, syscall.SIGTERM)
 	startupMsg := "started"
 	if a.router != nil {
@@ -128,6 +188,6 @@ func (a *ap) initAPI() {
 		MaxAge: a.conf.Http.MaxAge,
 	}))
 	a.router.GET("/", ok)
-	a.router.GET("/check", ok)
+	a.router.GET("/ok", ok)
 	a.router.GET("/stats", status)
 }
