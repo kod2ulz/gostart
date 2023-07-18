@@ -72,7 +72,7 @@ func UptimeCheckConf(prefix ...string) (conf *uptimeCheckConf) {
 	env := utils.Env.Helper(prefix...).OrDefault("UPTIME_CHECK")
 
 	return &uptimeCheckConf{
-		Interval: env.Get("INTERVAL", "10S").Duration(),
-		Timeout:  env.Get("TIMEOUT", "30S").Duration(),
+		Interval: env.Get("INTERVAL", "10s").Duration(),
+		Timeout:  env.Get("TIMEOUT", "30s").Duration(),
 	}
 }
