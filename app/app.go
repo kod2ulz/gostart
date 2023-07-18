@@ -104,6 +104,17 @@ func (a *ap) shutdown() {
 }
 
 func (a *ap) initAPI() {
+	var (
+		ok = func(c *gin.Context) {
+			c.JSON(http.StatusOK, "OK")
+		}
+		status = func(c *gin.Context) {
+			c.JSON(http.StatusOK, map[string]interface{}{
+				"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
+				"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),
+			})
+		}
+	)
 	a.router = gin.New()
 	a.router.Use(api.JSONLogMiddleware(a.log), gin.Recovery(), cors.New(cors.Config{
 		AllowOrigins:     a.conf.Http.AllowOrigins,
@@ -116,14 +127,7 @@ func (a *ap) initAPI() {
 		// },
 		MaxAge: a.conf.Http.MaxAge,
 	}))
-	gin.SetMode(gin.ReleaseMode)
-	a.router.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, "OK")
-	})
-	a.router.GET("/stats", func(c *gin.Context) {
-		c.JSON(http.StatusOK, map[string]interface{}{
-			"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
-			"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),
-		})
-	})
+	a.router.GET("/", ok)
+	a.router.GET("/check", ok)
+	a.router.GET("/stats", status)
 }

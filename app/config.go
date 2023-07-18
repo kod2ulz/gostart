@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/kod2ulz/gostart/utils"
@@ -14,18 +13,16 @@ func Conf() *conf {
 	if _config != nil {
 		return _config
 	}
-	env := utils.Env.GetOrDefault
-	host, e := os.Hostname()
-	if e != nil {
-		host = os.Getenv("HOST")
-	}
+	var host = utils.Env.GetHost()
+	var env = utils.Env.Helper("APP")
 	_config = &conf{
 		Host:        host,
-		Name:        env("APP_NAME", host).String(),
-		HttpPort:    env("APP_HTTP_PORT", "49080").String(),
-		HttpAddress: env("APP_HTTP_ADDRESS", "0.0.0.0").String(),
-		Timeout:     time.Duration(env("APP_TIMEOUT", "5").Int()) * time.Second,
-		Http:        HttpConf(),
+		Name:        env.Get("NAME", host).String(),
+		Version:     env.Get("VERSION", "ver-0.0.0").String(),
+		HttpPort:    env.Get("HTTP_PORT", "49080").String(),
+		HttpAddress: env.Get("HTTP_ADDRESS", "0.0.0.0").String(),
+		Uptime:      UptimeCheckConf(env.Prefix(), "UPTIME_CHECK"),
+		Http:        HttpConf(env.Prefix(), "HTTP_SERVER"),
 	}
 	return _config
 }
@@ -33,9 +30,10 @@ func Conf() *conf {
 type conf struct {
 	Host        string
 	Name        string
+	Version     string
 	HttpPort    string
 	HttpAddress string
-	Timeout     time.Duration
+	Uptime      *uptimeCheckConf
 	Http        *httpConf
 }
 
@@ -53,7 +51,7 @@ type httpConf struct {
 }
 
 func HttpConf(prefix ...string) (conf *httpConf) {
-	env := utils.Env.Helper(prefix...).OrDefault("APP_HTTP_SERVER")
+	env := utils.Env.Helper(prefix...).OrDefault("HTTP_SERVER")
 
 	return &httpConf{
 		AllowOrigins:     env.Get("ALLOW_ORIGINS", "*").StringList(","),
@@ -62,5 +60,19 @@ func HttpConf(prefix ...string) (conf *httpConf) {
 		ExposeHeaders:    env.Get("EXPOSE_HEADERS", "Content-Length,Host,Content-Type,Connection").StringList(","),
 		MaxAge:           env.Get("MAX_AGE", "12h").Duration(),
 		AllowCredentials: env.Get("ALLOW_CREDENTIALS", "true").Bool(),
+	}
+}
+
+type uptimeCheckConf struct {
+	Interval time.Duration
+	Timeout  time.Duration
+}
+
+func UptimeCheckConf(prefix ...string) (conf *uptimeCheckConf) {
+	env := utils.Env.Helper(prefix...).OrDefault("UPTIME_CHECK")
+
+	return &uptimeCheckConf{
+		Interval: env.Get("INTERVAL", "10S").Duration(),
+		Timeout:  env.Get("TIMEOUT", "30S").Duration(),
 	}
 }
