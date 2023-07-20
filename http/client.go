@@ -111,7 +111,7 @@ func (c *client[T]) Delete(ctx context.Context, path string) api.Response[T] {
 func (c *client[T]) Request(ctx context.Context, method, path string) api.Response[T] {
 	var err api.Error
 	c.start = time.Now()
-	_url, parseErr := url.Parse(strings.Trim(c.baseUrl+path, " /"))
+	_url, parseErr := url.Parse(c.url(path))
 	if parseErr != nil {
 		return api.ErrorResponse[T](api.RequestLoadError[T](parseErr).WithMessage("failed to parse url"))
 	}
@@ -138,6 +138,13 @@ func (c *client[T]) Request(ctx context.Context, method, path string) api.Respon
 		return api.DataResponse[T](*out)
 	}
 	return api.EmptyResponse[T]()
+}
+
+func (c *client[T]) url(path string) string {
+	return strings.Join(collections.ListReduce([]string{c.baseUrl, path}, func(_ int, s string) (string, bool) {
+		elem := strings.Trim(s, " /")
+		return elem, elem != ""
+	}), "/")
 }
 
 func (c *client[T]) setOverrides(ctx context.Context) {
