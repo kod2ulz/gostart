@@ -5,18 +5,21 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/object"
 )
 
 var (
-	ErrorCodeServerError      string = "ServerError"
-	ErrorCodeNotFoundError    string = "NotFoundError"
-	ErrorCodeIntegrationError string = "IntegrationError"
-	ErrorCodeRequestLoadError string = "RequestLoadError"
-	ErrorCodeValidatorError   string = "ValidationError"
-	ErrorCodeSQLError         string = "SQLError"
-	ErrorCodeUnauthorized     string = "InvalidCredentials"
-	ErrorCodeInvalidOperation string = "InvalidOperation"
+	ErrorCodeServerError             string = "ServerError"
+	ErrorCodeNotFoundError           string = "NotFoundError"
+	ErrorCodeIntegrationError        string = "IntegrationError"
+	ErrorCodeRequestLoadError        string = "RequestLoadError"
+	ErrorCodeServiceError            string = "ServiceError"
+	ErrorCodeResponseProcessingError string = "ResponseProcessingError"
+	ErrorCodeValidatorError          string = "ValidationError"
+	ErrorCodeSQLError                string = "SQLError"
+	ErrorCodeUnauthorized            string = "InvalidCredentials"
+	ErrorCodeInvalidOperation        string = "InvalidOperation"
 )
 
 type Error interface {
@@ -88,17 +91,20 @@ func (e *ErrorModel[T]) Response() (out interface{}) {
 
 func _initError[T any](httpCode int, statusCode string, err error) (out ErrorModel[T]) {
 	var message string
+	var errorMessages collections.List[string]
 	if err != nil {
 		message = err.Error()
 	}
 	if message != "" && strings.Contains(message, " .") {
-		message = object.String(message).Split(" .").Last()
+		errorMessages = object.String(message).Split(" .")
+		message = errorMessages.Last()
 	}
 	out = ErrorModel[T]{
 		Type:    strings.TrimPrefix(fmt.Sprintf("%T", new(T)), "*"),
 		Message: message,
 		Code:    statusCode,
 		Http:    httpCode,
+		Errors:  errorMessages,
 	}
 	if out.Type == "interface{}" {
 		out.Type = "Undefined"
