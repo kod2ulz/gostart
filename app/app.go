@@ -21,6 +21,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var _instance *ap
+
 type ap struct {
 	router *gin.Engine
 	log    *logr.Logger
@@ -34,6 +36,9 @@ type ap struct {
 }
 
 func Init(strict ...bool) (a *ap) {
+	if _instance != nil {
+		return _instance
+	}
 	var _strict bool
 	if len(strict) > 0 {
 		_strict = strict[0]
@@ -56,6 +61,7 @@ func Init(strict ...bool) (a *ap) {
 	}
 	a.ctx, a.cancel = context.WithCancel(context.Background())
 	a.initAPI()
+	_instance = a
 	return
 }
 
@@ -87,15 +93,21 @@ func (a *ap) Config() *conf {
 	return a.conf
 }
 
-func (a *ap) Consul() *consulapi.Client {
-	return a.consul
+func Consul() (client *consulapi.Client) {
+	a := instance()
+	if client = a.consul; client == nil {
+		a.Log().Fatal("consul client not initialsed")
+	}	
+	return 
 }
 
-func (a *ap) Service(name string) (out *consulapi.AgentService, err error) {
+func Log() (*logr.Logger) {
+	return instance().log
+}
+
+func Service(name string) (out *consulapi.AgentService, err error) {
 	var ok bool
-	if a.consul == nil {
-		return out, errors.New("consul service not initialised")
-	} else if services, err := a.consul.Agent().Services(); err != nil {
+	if services, err := Consul().Agent().Services(); err != nil {
 		return out, errors.Wrap(err, "error fetching registered consul services")
 	} else if out, ok = services[name]; !ok {
 		return out, errors.Errorf("service %s unknown to consul agent", name)
@@ -103,12 +115,12 @@ func (a *ap) Service(name string) (out *consulapi.AgentService, err error) {
 	return
 }
 
-func (a *ap) ServiceUrl(name string) (out string) {
-	service, err := a.Service(name)
+func ServiceUrl(name string) (out string) {
+	service, err := Service(name)
 	if err == nil {
 		return fmt.Sprintf("http://%s:%v", service.Address, service.Port)
 	}
-	a.log.WithError(err).WithField("consul.service", name).Error("failed to get service url")
+	Log().WithError(err).WithField("consul.service", name).Error("failed to get service url")
 	return
 }
 
@@ -190,4 +202,11 @@ func (a *ap) initAPI() {
 	a.router.GET("/", ok)
 	a.router.GET("/ok", ok)
 	a.router.GET("/stats", status)
+}
+
+func instance() *ap {
+	if _instance == nil {
+		panic("app instance not initialised")
+	}
+	return _instance
 }
