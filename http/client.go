@@ -3,11 +3,14 @@ package http
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
+	json "github.com/json-iterator/go"
 	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/utils"
@@ -108,7 +111,7 @@ func (c *client[T]) Delete(ctx context.Context, path string) api.Response[T] {
 	return c.Request(ctx, http.MethodDelete, path)
 }
 
-func (c *client[T]) Request(ctx context.Context, method, path string) api.Response[T] {
+func (c *client[T]) Request(ctx context.Context, method, path string) (out api.Response[T]) {
 	var err api.Error
 	c.start = time.Now()
 	_url, parseErr := url.Parse(c.url(path))
@@ -121,23 +124,20 @@ func (c *client[T]) Request(ctx context.Context, method, path string) api.Respon
 	if reqErr != nil {
 		return api.ErrorResponse[T](api.RequestLoadError[T](parseErr).WithMessage("failed to create http request"))
 	}
-	defer c.logOutcome(req.URL.String(), method, err)
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	var httpClient http.Client = *http.DefaultClient
 	res, resErr := httpClient.Do(req.WithContext(reqCtx))
 	if resErr != nil {
 		err = api.ServerError(errors.Wrap(resErr, "request failed"))
+		c.logOutcome(req.URL.String(), method, err)
 		return api.ErrorResponse[T](err)
 	}
 	defer res.Body.Close()
-	var out *T
-	if out, err = c.processResponse(res); err != nil {
-		return api.ErrorResponse[T](err)
-	} else if out != nil {
-		return api.DataResponse[T](*out)
+	if out = c.getResponse(res); out.HasError() {
+		c.logOutcome(req.URL.String(), method, out.Error)
 	}
-	return api.EmptyResponse[T]()
+	return 
 }
 
 func (c *client[T]) url(path string) string {
@@ -163,6 +163,9 @@ func (r *client[T]) logOutcome(url, method string, err api.Error) {
 		"url":     url,
 		"method":  method,
 		"latency": time.Since(r.start).Milliseconds(),
+	}
+	if !r.headers.Empty() && r.headers.HasKey(api.RequestID) {
+		fields["request_id"] = r.headers[api.RequestID]
 	}
 	if !r.params.Empty() {
 		fields["params"] = r.params
@@ -198,5 +201,46 @@ func (c *client[T]) processResponse(res *http.Response) (out *T, err api.Error) 
 		return out, api.GeneralError[T](errors.Wrap(unmarshallErr, "failed to unmarshall response")).
 			WithErrorCode(api.ErrorCodeResponseProcessingError)
 	}
+	return
+}
+
+func (c *client[T]) getResponse(res *http.Response) (out api.Response[T]) {
+	if res.ContentLength == 0 {
+		return
+	}
+	data, readErr := io.ReadAll(res.Body)
+	if readErr != nil {
+		return api.ErrorResponse[T](api.GeneralError[T](errors.Wrap(readErr, "failed to read json body into []byte")).
+			WithErrorCode(api.ErrorCodeResponseProcessingError))
+	}
+	out = api.Response[T]{}
+	var t *T = new(T)
+	var errBody collections.Map[string, interface{}]
+	resErr := api.GeneralError[T](errors.New(res.Status + ". request failed")).
+		WithHttpStatusCode(res.StatusCode).WithErrorCode(api.ErrorCodeServiceError).
+		WithError(errors.Errorf("call to %s returned %d: %s", res.Request.RequestURI, res.StatusCode, res.Status))
+	if unmarshallErr := json.Unmarshal(data, &out); unmarshallErr == nil && !reflect.DeepEqual(out, api.Response[T]{}) {
+		if out.HasError() {
+			out.Error = resErr.WithCause(out.Error)
+		} else {
+			out.Success = res.StatusCode < 400
+		}
+		out.Timestamp = time.Now().Unix()
+		return
+	} else if unmarshallErr := json.Unmarshal(data, &t); unmarshallErr == nil && t != nil {
+		out = api.DataResponse[T](*t)
+		// anything else
+	} else if unmarshallErr = json.Unmarshal(data, &errBody); unmarshallErr != nil {
+		if res.StatusCode < 400 {
+			t = new(T)
+			return api.DataResponse[T](*t)
+		} else if errorMessage := errBody.AnyOfKey("err", "error", "errors", "msg", "message"); errorMessage != nil && errorMessage != "" {
+			return api.ErrorResponse[T](resErr.WithCause(api.GeneralError[any](errors.New(fmt.Sprint(errorMessage)))))
+		}
+	} else if errBody.Empty() {
+		t = new(T)
+		return api.DataResponse[T](*t)
+	}
+
 	return
 }
