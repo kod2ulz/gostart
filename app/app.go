@@ -98,7 +98,7 @@ func (a *ap) Config() *conf {
 func Consul() (client *consulapi.Client) {
 	a := instance()
 	if client = a.consul; client == nil {
-		a.Log().Fatal("consul client not initialsed")
+		a.Log().Panic("consul client not initialsed")
 	}	
 	return 
 }
