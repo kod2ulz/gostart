@@ -21,7 +21,10 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var _instance *ap
+var (
+	// global single instance of the _instance
+	_instance *ap
+)
 
 type ap struct {
 	router *gin.Engine
@@ -35,7 +38,7 @@ type ap struct {
 	cancel context.CancelFunc
 }
 
-func Init(strict ...bool) (a *ap) {
+func Init(strict ...bool) (*ap) {
 	if _instance != nil {
 		return _instance
 	}
@@ -53,16 +56,15 @@ func Init(strict ...bool) (a *ap) {
 		logr.Log().WithError(err).Fatal("Application log initialisation failed")
 	}
 	logr.Log().Println("starting app initialisation")
-	a = &ap{
+	_instance = &ap{
 		log:   logr.Log(),
 		start: time.Now(),
 		conf:  Conf(),
 		osc:   make(chan os.Signal, 1),
 	}
-	a.ctx, a.cancel = context.WithCancel(context.Background())
-	a.initAPI()
-	_instance = a
-	return
+	_instance.ctx, _instance.cancel = context.WithCancel(context.Background())
+	_instance.initAPI()
+	return _instance
 }
 
 func (a *ap) Logger() *logr.Logger {
@@ -125,17 +127,18 @@ func ServiceUrl(name string) (out string) {
 }
 
 func (a *ap) Register(name ...string) (err error) {
+	var consulUrlEnv = "CONSUL_HTTP_ADDR"
 	if a.consul != nil {
 		return utils.Error.LogOK(a.log.Infof, "service already registered with consul")
-	} else if address := utils.Env.GetOrDefault("CONSUL_HTTP_ADDR", ""); !address.Valid() {
-		return
+	} else if address := utils.Env.GetOrDefault(consulUrlEnv, ""); !address.Valid() {
+		return utils.Error.LogOK(a.log.Warnf, "env var %s not set. skipping consul initialization", consulUrlEnv)
 	}
 	service, config := a.conf.Name, consulapi.DefaultConfig()
 	if len(name) > 0 && name[0] != "" {
 		service = name[0]
 	}
 	if a.consul, err = consulapi.NewClient(config); err != nil {
-		return
+		return utils.Error.Log(a.log.Entry, err, "consul client initialisation failed")
 	} else if err = a.consul.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
 		ID: service,
 		// ID:      fmt.Sprintf("%s-%s", a.conf.Name, a.conf.Host),
@@ -149,7 +152,7 @@ func (a *ap) Register(name ...string) (err error) {
 			Timeout:  a.conf.Uptime.Timeout.String(),
 		},
 	}); err != nil {
-		return
+		return utils.Error.Log(a.log.Entry, err, "service registration failed")
 	}
 	return utils.Error.LogOK(a.log.Infof, "service successfully registered with consul")
 }
