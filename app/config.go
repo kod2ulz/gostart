@@ -21,6 +21,7 @@ func Conf() *conf {
 		Version:     env.Get("VERSION", "ver-0.0.0").String(),
 		HttpPort:    env.Get("HTTP_PORT", "49080").Int(),
 		HttpAddress: env.Get("HTTP_ADDRESS", "0.0.0.0").String(),
+		Location:    env.Get("TIME_LOCATION", "Africa/Kampala").Location(),
 		Uptime:      UptimeCheckConf(env.Prefix(), "UPTIME_CHECK"),
 		Http:        HttpConf(env.Prefix(), "HTTP_SERVER"),
 	}
@@ -33,6 +34,7 @@ type conf struct {
 	Version     string
 	HttpPort    int
 	HttpAddress string
+	Location    *time.Location
 	Uptime      *uptimeCheckConf
 	Http        *httpConf
 }

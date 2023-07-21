@@ -145,7 +145,7 @@ func (a *ap) Register(name ...string) (err error) {
 		Name:    service,
 		Port:    a.conf.HttpPort,
 		Address: a.conf.Host,
-		Tags:    []string{a.conf.Version, a.conf.Name, a.conf.Host},
+		Tags:    []string{a.conf.Version, a.conf.Name, a.conf.Host, a.start.In(a.conf.Location).Format(time.RFC1123Z)},
 		Check: &consulapi.AgentServiceCheck{
 			HTTP:     fmt.Sprintf("http://%s:%v/ok", a.conf.Host, a.conf.HttpPort),
 			Interval: a.conf.Uptime.Interval.String(),
