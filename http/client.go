@@ -13,7 +13,6 @@ import (
 	json "github.com/json-iterator/go"
 	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/collections"
-	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -115,14 +114,17 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 	var err api.Error
 	c.start = time.Now()
 	_url, parseErr := url.Parse(c.url(path))
+	defer c.logOutcome(_url.String(), method, err)
 	if parseErr != nil {
-		return api.ErrorResponse[T](api.RequestLoadError[T](parseErr).WithMessage("failed to parse url"))
+		err = api.RequestLoadError[T](parseErr).WithMessage("failed to parse url")
+		return api.ErrorResponse[T](err)
 	}
 	c.setOverrides(ctx)
 	setUrlQueryParams(_url, c.params)
 	req, reqErr := newHttpRequest(_url, method, c.body)
 	if reqErr != nil {
-		return api.ErrorResponse[T](api.RequestLoadError[T](parseErr).WithMessage("failed to create http request"))
+		err = api.RequestLoadError[T](parseErr).WithMessage("failed to create http request")
+		return api.ErrorResponse[T](err)
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -130,12 +132,11 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 	res, resErr := httpClient.Do(req.WithContext(reqCtx))
 	if resErr != nil {
 		err = api.ServerError(errors.Wrap(resErr, "request failed"))
-		c.logOutcome(req.URL.String(), method, err)
 		return api.ErrorResponse[T](err)
 	}
 	defer res.Body.Close()
 	if out = c.getResponse(res); out.HasError() {
-		c.logOutcome(req.URL.String(), method, out.Error)
+		c.logOutcome(_url.String(), method, out.Error)
 	}
 	return 
 }
@@ -158,50 +159,24 @@ func (c *client[T]) setOverrides(ctx context.Context) {
 	c.Headers(h)
 }
 
-func (r *client[T]) logOutcome(url, method string, err api.Error) {
+func (c *client[T]) logOutcome(url, method string, err api.Error) {
 	fields := logrus.Fields{
 		"url":     url,
 		"method":  method,
-		"latency": time.Since(r.start).Milliseconds(),
+		"latency": time.Since(c.start).Milliseconds(),
 	}
-	if !r.headers.Empty() && r.headers.HasKey(api.RequestID) {
-		fields["request_id"] = r.headers[api.RequestID]
+	if !c.headers.Empty() && c.headers.HasKey(api.RequestID) {
+		fields["request_id"] = c.headers[api.RequestID]
 	}
-	if !r.params.Empty() {
-		fields["params"] = r.params
+	if !c.params.Empty() {
+		fields["params"] = c.params
 	}
 	if err == nil {
-		r.log.WithFields(fields).Info()
+		c.log.WithFields(fields).Info()
 	} else if er, ok := err.(*api.ErrorModel[T]); ok {
 		fields["httpCode"] = er.Http
-		r.log.WithFields(fields).WithError(err).Error(er.Code)
+		c.log.WithFields(fields).WithError(err).Error(er.Code)
 	}
-}
-
-func (c *client[T]) processResponse(res *http.Response) (out *T, err api.Error) {
-	if res.StatusCode >= 400 {
-		err = api.GeneralError[T](errors.New(res.Status + ". request failed")).
-			WithHttpStatusCode(res.StatusCode).WithErrorCode(api.ErrorCodeServiceError)
-		var errBody collections.Map[string, interface{}]
-		if res.ContentLength == 0 {
-			return
-		} else if unmarshallErr := utils.Net.ReadJson(res.Body, &errBody); unmarshallErr != nil {
-			return out, api.GeneralError[T](errors.Wrap(unmarshallErr, "failed to unmarshall json")).WithCause(err)
-		} else if errorMessage := errBody.AnyOfKey("err", "error", "errors", "msg", "message"); errorMessage != nil && errorMessage != "" {
-			return out, err.WithError(errors.New(fmt.Sprint(errorMessage)))
-		}
-	} else if res.ContentLength == 0 {
-		return
-	} else if c.out != nil {
-		out = c.out
-	} else {
-		out = new(T)
-	}
-	if unmarshallErr := utils.Net.ReadJson(res.Body, out); unmarshallErr != nil {
-		return out, api.GeneralError[T](errors.Wrap(unmarshallErr, "failed to unmarshall response")).
-			WithErrorCode(api.ErrorCodeResponseProcessingError)
-	}
-	return
 }
 
 func (c *client[T]) getResponse(res *http.Response) (out api.Response[T]) {
