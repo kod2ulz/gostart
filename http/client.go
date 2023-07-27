@@ -138,8 +138,13 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 		return api.ErrorResponse[T](err)
 	}
 	defer response.Body.Close()
+	var outExpected bool = c.out != nil
 	if out = c.getResponse(response); out.HasError() {
 		c.logOutcome(request, response, err)
+	} else if outExpected && c.out == nil {
+		if parseErr := out.ParseDataTo(c.out); parseErr != nil{
+			c.log.WithError(parseErr).Errorf("failed to parse %T to %T", out.Data, out)
+		}
 	}
 	return 
 }
