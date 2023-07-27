@@ -112,31 +112,34 @@ func (c *client[T]) Delete(ctx context.Context, path string) api.Response[T] {
 
 func (c *client[T]) Request(ctx context.Context, method, path string) (out api.Response[T]) {
 	var err api.Error
+	var requestErr, responseErr error
+	var request *http.Request
+	var response *http.Response
 	c.start = time.Now()
 	_url, parseErr := url.Parse(c.url(path))
-	defer c.logOutcome(_url.String(), method, err)
+	defer c.logOutcome(request, response, err)
 	if parseErr != nil {
 		err = api.RequestLoadError[T](parseErr).WithMessage("failed to parse url")
 		return api.ErrorResponse[T](err)
 	}
 	c.setOverrides(ctx)
 	setUrlQueryParams(_url, c.params)
-	req, reqErr := newHttpRequest(_url, method, c.body)
-	if reqErr != nil {
+	request, requestErr = newHttpRequest(_url, method, c.body)
+	if requestErr != nil {
 		err = api.RequestLoadError[T](parseErr).WithMessage("failed to create http request")
 		return api.ErrorResponse[T](err)
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	var httpClient http.Client = *http.DefaultClient
-	res, resErr := httpClient.Do(req.WithContext(reqCtx))
-	if resErr != nil {
-		err = api.ServerError(errors.Wrap(resErr, "request failed"))
+	response, responseErr = httpClient.Do(request.WithContext(reqCtx))
+	if responseErr != nil {
+		err = api.ServerError(errors.Wrap(responseErr, "request failed"))
 		return api.ErrorResponse[T](err)
 	}
-	defer res.Body.Close()
-	if out = c.getResponse(res); out.HasError() {
-		c.logOutcome(_url.String(), method, out.Error)
+	defer response.Body.Close()
+	if out = c.getResponse(response); out.HasError() {
+		c.logOutcome(request, response, err)
 	}
 	return 
 }
@@ -159,17 +162,31 @@ func (c *client[T]) setOverrides(ctx context.Context) {
 	c.Headers(h)
 }
 
-func (c *client[T]) logOutcome(url, method string, err api.Error) {
+func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Error) {
 	fields := logrus.Fields{
-		"url":     url,
-		"method":  method,
+		"success": false,
 		"latency": time.Since(c.start).Milliseconds(),
 	}
+
+	if req != nil {
+		fields["method"] = req.Method
+		fields["url"] = req.URL.String()
+	}
+
 	if !c.headers.Empty() && c.headers.HasKey(api.RequestID) {
 		fields["request_id"] = c.headers[api.RequestID]
 	}
 	if !c.params.Empty() {
 		fields["params"] = c.params
+	}
+
+	if res != nil {
+		fields["success"] = res.StatusCode < 400 
+		fields["response"] = logrus.Fields {
+			"id": res.Header.Get(api.RequestID),
+			"code": res.StatusCode,
+			"size": res.ContentLength,
+		}
 	}
 	if err == nil {
 		c.log.WithFields(fields).Info()
