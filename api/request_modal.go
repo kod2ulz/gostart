@@ -16,6 +16,9 @@ var _ RequestParam = RequestModal[_t]{}
 type RequestModal[T RequestParam] struct{}
 
 func (r RequestModal[T]) Validate(ctx context.Context) error {
+	if utils.Validate == nil {
+		r.Debug(fmt.Sprintf("%T is nil", utils.Validate))
+	}
 	return utils.Validate.Struct(ctx.Value(r.ContextKey()))
 }
 
