@@ -7,6 +7,7 @@ import (
 
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/object"
+	"github.com/kod2ulz/gostart/utils"
 )
 
 var (
@@ -116,6 +117,11 @@ func ServerError(err error) (out Error) {
 	return GeneralError[any](err)
 }
 
+func ServiceError(err error) (out Error) {
+	return GeneralError[User](err).
+		WithErrorCodeAndHttpStatusCode(ErrorCodeServiceError, http.StatusUnauthorized)
+}
+
 func ServiceErrorUnauthorised(err error) (out Error) {
 	return GeneralError[User](err).
 		WithErrorCodeAndHttpStatusCode(ErrorCodeUnauthorized, http.StatusUnauthorized)
@@ -172,4 +178,14 @@ func ValidatorError[T any](err error) (out Error) {
 
 func SQLError[T any](err error) (out Error) {
 	return GeneralError[T](err).WithErrorCode(ErrorCodeSQLError)
+}
+
+func SqlQueryError[P RequestParam, T any](param P, out T, err error) (T, Error) {
+	if err != nil {
+		if utils.Error.SqlNoRows(err) {
+			return out, NotFoundError[T](param)
+		}
+		return out, SQLError[T](err)
+	}
+	return out, nil
 }
