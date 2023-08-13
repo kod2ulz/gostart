@@ -87,7 +87,7 @@ func loadParamFromRequest[P RequestParam](ctx *gin.Context) (param P, err Error)
 	}
 	fmt.Printf("writing loaded data to context\n")
 	ctx.Set(p.ContextKey(), p)
-	fmt.Printf("running %T.Validate() \n", )
+	fmt.Printf("running %T.Validate() \n", p)
 	if e = p.Validate(ctx); e != nil {
 		return param, ValidatorError[P](errors.Wrapf(e, "validation failed for %T", param))
 	}
