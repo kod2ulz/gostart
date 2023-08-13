@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +36,9 @@ func ParamHandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResp
 // }
 
 func ParamHandlerWithListResponse[P RequestParam, T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
+	fmt.Printf("inside param handler\n")
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, res []T) {
+		fmt.Printf("inside service handler finc callback\n")
 		if val, ok := ctx.Get(param.MetadataContextKey()); ok {
 			if meta, ok := val.(*Metadata); ok {
 				ctx.JSON(http.StatusOK, ListResponse(res, *meta))
@@ -57,9 +60,11 @@ func serviceHandler[T any](serviceFunc func(context.Context) (T, Error), resultH
 }
 
 func serviceHandlerWithParam[P RequestParam, T any](serviceFunc func(context.Context) (T, Error), successHandler func(*gin.Context, P, T)) gin.HandlerFunc {
+	fmt.Printf("inside service handler with param handler\n")
 	return func(ctx *gin.Context) {
 		var err Error
 		var param P
+		fmt.Printf("loading param from request <<-\n")
 		if param, err = loadParamFromRequest[P](ctx); err != nil {
 			ctx.JSON(err.http(), ErrorResponse[P](err))
 			return
@@ -76,10 +81,13 @@ func serviceHandlerWithParam[P RequestParam, T any](serviceFunc func(context.Con
 func loadParamFromRequest[P RequestParam](ctx *gin.Context) (param P, err Error) {
 	var e error
 	var p RequestParam
+	fmt.Printf("loading from request \n")
 	if p, e = (*new(P)).RequestLoad(ctx); e != nil {
 		return param, RequestLoadError[P](errors.Wrapf(e, "failed to load %T from request", param))
 	}
+	fmt.Printf("writing loaded data to context\n")
 	ctx.Set(p.ContextKey(), p)
+	fmt.Printf("running %T.Validate() \n", )
 	if e = p.Validate(ctx); e != nil {
 		return param, ValidatorError[P](errors.Wrapf(e, "validation failed for %T", param))
 	}
