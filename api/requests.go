@@ -42,7 +42,9 @@ func (r ListRequest) RequestLoad(ctx context.Context) (param RequestParam, err e
 		return int32(out.Query(ctx, param, fmt.Sprint(_default)).Int())
 	}
 	if out.User, err = GetUser(ctx); err != nil {
-		return
+		return 
+	} else if out.User == nil {
+		return param, errors.Errorf("%T.User is nil")
 	}
 	out.Limit = query("limit", 20)
 	out.Offset = query( "offset", 0)
