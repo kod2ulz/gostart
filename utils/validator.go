@@ -9,9 +9,10 @@ import (
 	"github.com/kod2ulz/gostart/object"
 )
 
-var Validate *validator.Validate = validator.New()
+var Validate *validator.Validate
 
 func init() {
+	Validate = validator.New()
 	Validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
 		pass, ok := fl.Field().Interface().(string)
 		return ok && Validator.PasswordValid(pass)
