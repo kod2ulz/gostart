@@ -38,21 +38,25 @@ func (r ListRequest) DefaultMetadata(ctx context.Context) (out *Metadata) {
 
 func (r ListRequest) RequestLoad(ctx context.Context) (param RequestParam, err error) {
 	var out ListRequest = ListRequest{}
-	var query = func (param string, _default interface{}) int32 {
+	var query = func(param string, _default interface{}) int32 {
 		return int32(out.Query(ctx, param, fmt.Sprint(_default)).Int())
 	}
 	if out.User, err = GetUser(ctx); err != nil {
-		return 
+		return
 	} else if out.User == nil {
-		return param, errors.Errorf("%T.User is nil")
+		return param, errors.Errorf("%T.User is nil", r)
 	}
 	out.Limit = query("limit", 20)
-	out.Offset = query( "offset", 0)
+	out.Offset = query("offset", 0)
 	if page := query("page", 1); page > 1 && out.Offset == 0 {
 		out.Offset = out.Limit * (page - 1)
 	}
 	ctx.(*gin.Context).Set(out.ContextKey(), &out)
 	return out, err
+}
+
+func (r ListRequest) SearchURL(ctx context.Context, fields query.UrlFields) query.URLSearchParam {
+	return fields.SearchParams(ctx, r.Query)
 }
 
 func (r ListRequest) QuerySearch(ctx context.Context, fields ...string) query.URLSearchParam {
