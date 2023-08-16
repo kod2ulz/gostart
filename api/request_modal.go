@@ -44,8 +44,26 @@ func (r RequestModal[T]) MetadataContextKey() string {
 	return fmt.Sprintf("meta.%s", r.ContextKey())
 }
 
+func (r RequestModal[T]) ReferencesContextKey() string {
+	return fmt.Sprintf("ref.%s", r.ContextKey())
+}
+
 func (r RequestModal[T]) SetResponseMetadata(ctx context.Context, meta *Metadata) (err error) {
 	ctx.(*gin.Context).Set(r.MetadataContextKey(), meta)
+	return
+}
+
+func (r RequestModal[T]) SetResponseReference(ctx context.Context, key string, value any) (err error) {
+	var ref map[string]any
+	if value == nil {
+		return
+	} else if val := ctx.Value(r.ReferencesContextKey()); val != nil {
+		ref = val.(map[string]any)
+	} else {
+		ref = make(map[string]any)
+	}
+	ref[key] = value
+	ctx.(*gin.Context).Set(r.ReferencesContextKey(), ref)
 	return
 }
 

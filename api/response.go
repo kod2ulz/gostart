@@ -33,13 +33,13 @@ func EmptyResponse[T any]() (out Response[T]) {
 }
 
 type Response[T any] struct {
-	Success    bool                   `json:"success"`
-	Type       string                 `json:"type,omitempty"`
-	Error      Error                  `json:"error,omitempty"`
-	Data       interface{}            `json:"data,omitempty"`
-	References map[string]interface{} `json:"references,omitempty"`
-	Meta       *Metadata              `json:"meta,omitempty"`
-	Timestamp  int64                  `json:"time,omitempty"`
+	Success    bool           `json:"success"`
+	Type       string         `json:"type,omitempty"`
+	Error      Error          `json:"error,omitempty"`
+	Data       interface{}    `json:"data,omitempty"`
+	References map[string]any `json:"references,omitempty"`
+	Meta       *Metadata      `json:"meta,omitempty"`
+	Timestamp  int64          `json:"time,omitempty"`
 }
 
 func (r Response[T]) HasError() bool {
@@ -63,6 +63,13 @@ func (r Response[T]) ParseDataTo(out *T) error {
 
 func (r Response[T]) Failed() bool {
 	return r.HasError()
+}
+
+func (r Response[T]) WithReferences(refs map[string]any) Response[T] {
+	if len(refs) > 0 {
+		r.References = refs
+	}
+	return r
 }
 
 type Metadata struct {
