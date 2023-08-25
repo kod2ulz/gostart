@@ -10,7 +10,7 @@ type CSV interface {
 	Read(header string) string
 }
 
-func Csvv(titles ...string) (out CSV) {
+func Csv(titles ...string) (out CSV) {
 	out = &csvHeaders{}
 	return out.Set(titles...)
 }
