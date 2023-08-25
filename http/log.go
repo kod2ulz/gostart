@@ -16,15 +16,19 @@ type ResponseHandler[T any] func(resp *http.Response) (T, error)
 func LogSimpleGetRequest[T any](ctx context.Context, log *logr.Logger, url string, onResponse ResponseHandler[T]) (out T, err error) {
 	start := time.Now()
 	var resp *http.Response = &http.Response{}
-	defer func(st time.Time, res *http.Response) {
-		log.WithFields(logrus.Fields{
+	defer func(st time.Time) {
+		fields, msg := logrus.Fields{
 			"url":      url,
 			"method":   http.MethodGet,
-			"size":     res.ContentLength,
-			"response": res.StatusCode,
 			"latency":  time.Since(st).Milliseconds(),
-		}).Info(resp.Status)
-	}(start, resp)
+		}, ""
+		if resp != nil {
+			fields["size"] = resp.ContentLength
+			fields["status"] = resp.StatusCode
+			msg = resp.Status
+		}
+		log.WithFields(fields).Info(msg)
+	}(start)
 	if resp, err = http.Get(url); err != nil {
 		return out, errors.Wrapf(err, "error fetching from %s", url)
 	} else if resp.StatusCode != 200 {
