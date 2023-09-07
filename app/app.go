@@ -33,12 +33,14 @@ type ap struct {
 	conf   *conf
 	consul *consulapi.Client
 
+	serviceId string
+
 	osc    chan os.Signal
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func Init(strict ...bool) (*ap) {
+func Init(strict ...bool) *ap {
 	if _instance != nil {
 		return _instance
 	}
@@ -99,11 +101,11 @@ func Consul() (client *consulapi.Client) {
 	a := instance()
 	if client = a.consul; client == nil {
 		a.Log().Panic("consul client not initialsed")
-	}	
-	return 
+	}
+	return
 }
 
-func Log() (*logr.Logger) {
+func Log() *logr.Logger {
 	return instance().log
 }
 
@@ -127,25 +129,36 @@ func ServiceUrl(name string) (out string) {
 }
 
 func (a *ap) Register(name ...string) (err error) {
-	var consulUrlEnv = "CONSUL_HTTP_ADDR"
+	var serviceName string
+	var env = utils.Env.Helper("CONSUL")
+	var serviceHost = env.Get("SERVICE_HOST", a.conf.Host).String()
+	// var consulUrlEnv = "CONSUL_HTTP_ADDR"
 	if a.consul != nil {
 		return utils.Error.LogOK(a.log.Infof, "service already registered with consul")
-	} else if address := utils.Env.GetOrDefault(consulUrlEnv, ""); !address.Valid() {
-		return utils.Error.LogOK(a.log.Warnf, "env var %s not set. skipping consul initialization", consulUrlEnv)
+	} else if consulAddress := env.Get("HTTP_ADDR", ""); !consulAddress.Valid() {
+		return utils.Error.LogOK(a.log.Warnf, "env var %s_HTTP_ADDR not set. skipping consul initialization", env.Prefix())
 	}
-	service, config := a.conf.Name, consulapi.DefaultConfig()
+	config := consulapi.DefaultConfig()
 	if len(name) > 0 && name[0] != "" {
-		service = name[0]
+		serviceName = name[0]
+	} else {
+		serviceName = env.Get("SERVICE_NAME", a.conf.Name).String()
+	}
+	if id := env.Get("SERVICE_ID"); id.Valid() {
+		a.serviceId = id.String()
+	} else if autoId := env.Get("SERVICE_ID_AUTO"); autoId.Bool() {
+		a.serviceId = fmt.Sprintf("%s-%s-%s", serviceName, serviceHost, a.conf.Version)
+	} else {
+		a.serviceId = serviceName
 	}
 	if a.consul, err = consulapi.NewClient(config); err != nil {
 		return utils.Error.Log(a.log.Entry, err, "consul client initialisation failed")
 	} else if err = a.consul.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
-		ID: service,
-		// ID:      fmt.Sprintf("%s-%s", a.conf.Name, a.conf.Host),
-		Name:    service,
+		ID:      a.serviceId,
+		Name:    serviceName,
 		Port:    a.conf.HttpPort,
-		Address: a.conf.Host,
-		Tags:    []string{a.conf.Version, a.conf.Name, a.conf.Host, a.start.In(a.conf.Location).Format(time.RFC1123Z)},
+		Address: serviceHost,
+		Tags:    []string{a.conf.Version, serviceName, serviceHost, a.start.In(a.conf.Location).Format(time.RFC1123Z)},
 		Check: &consulapi.AgentServiceCheck{
 			HTTP:     fmt.Sprintf("http://%s:%v/ok", a.conf.Host, a.conf.HttpPort),
 			Interval: a.conf.Uptime.Interval.String(),
@@ -171,6 +184,9 @@ func (a *ap) Run() {
 	a.cancel()
 	fmt.Println()
 	a.shutdown()
+	if a.consul != nil && a.serviceId != "" {
+		a.consul.Agent().ServiceDeregister(a.serviceId)
+	}
 	a.log.Printf("shutdown complete")
 }
 
