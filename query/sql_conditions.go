@@ -3,6 +3,8 @@ package query
 import (
 	"fmt"
 	"strings"
+
+	"github.com/kod2ulz/gostart/utils"
 )
 
 type CompareOperator string
@@ -126,7 +128,7 @@ func LessThanOrEqual(field string, value interface{}) Condition {
 func GreaterThanOrEqual(field string, value interface{}) Condition {
 	return Condition(doLeafCompare(CompareGreaterThanOrEqual, field, value))
 }
-func In(field string, values ...interface{}) Condition {
+func In[T any](field string, values ...T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, values))
 }
 
@@ -243,7 +245,7 @@ func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interf
 		return
 	}
 	if wc.operator == CompareIn {
-		args = wc.value.([]interface{})
+		utils.StructCopy(wc.value, &args)
 	} else {
 		args = []interface{}{wc.value}
 	}
