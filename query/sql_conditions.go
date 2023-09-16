@@ -17,9 +17,10 @@ const (
 	CompareNotEqual           CompareOperator = "neq"
 	CompareNil                CompareOperator = "nil"
 	CompareLike               CompareOperator = "lyk"
+	CompareIn                 CompareOperator = "in"
 )
 
-func (op CompareOperator) Eval(field string) string {
+func (op CompareOperator) Eval(field string, argCount int) string {
 	switch op {
 	case CompareEqual:
 		return field + "=" + ARG_PLACEHOLDER
@@ -35,6 +36,12 @@ func (op CompareOperator) Eval(field string) string {
 		return field + "!=" + ARG_PLACEHOLDER
 	case CompareLike:
 		return field + " " + SELECT_LIKE + " " + ARG_PLACEHOLDER
+	case CompareIn:
+		args := make([]string, argCount)
+		for i := 0; i< argCount; i++ {
+			args[i] = ARG_PLACEHOLDER
+		}
+		return field + " in (" + strings.Join(args, ",") + ")"
 	default:
 		return field + " " + string(op) + " " + ARG_PLACEHOLDER
 	}
@@ -118,6 +125,9 @@ func LessThanOrEqual(field string, value interface{}) Condition {
 }
 func GreaterThanOrEqual(field string, value interface{}) Condition {
 	return Condition(doLeafCompare(CompareGreaterThanOrEqual, field, value))
+}
+func In(field string, values ...interface{}) Condition {
+	return Condition(doLeafCompare(CompareIn, field, values))
 }
 
 func And(conditions ...Condition) Condition { return doNode(WhereAnd, conditions...) }
@@ -232,7 +242,11 @@ func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interf
 		}
 		return
 	}
-	args = []interface{}{wc.value}
-	sb.WriteString(wc.operator.Eval(wc.field))
+	if wc.operator == CompareIn {
+		args = wc.value.([]interface{})
+	} else {
+		args = []interface{}{wc.value}
+	}
+	sb.WriteString(wc.operator.Eval(wc.field, len(args)))
 	return
 }

@@ -35,6 +35,11 @@ var criteria_test_cases = []struct {
 		args:       []interface{}{"john", "doe"},
 	},
 	{
+		conditions: []query.Condition{query.Or(query.Equal("fname", "john"), query.In("name", "jane", "ruth"))},
+		expected:   fmt.Sprintf("(%s) %s (%s %s ($%d,$%d))", arg("fname", 1), query.WhereOr, "name", query.CompareIn, 2, 3),
+		args:       []interface{}{"john", "jane", "ruth"},
+	},
+	{
 		conditions: []query.Condition{query.Or(query.GreaterThan("age", 23), query.Like("lname", "doe"))},
 		expected:   fmt.Sprintf("(%s) %s (%s)", arg("age", 1, ">"), query.WhereOr, arg("lname", 2, query.SELECT_LIKE)),
 		args:       []interface{}{23, "doe"},
