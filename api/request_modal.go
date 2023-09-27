@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 )
@@ -127,4 +128,21 @@ func (p RequestModal[T]) Path(ctx context.Context, name string, _default ...stri
 
 func (p RequestModal[T]) Debug(o any) {
 	fmt.Printf("%T.debug(): %+v\n", p, o)
+}
+
+func (p RequestModal[T]) Headers(ctx context.Context, names ...string) (out collections.Map[string, string]) {
+	out = collections.Map[string, string]{}
+	if len(names) == 0 {
+		return
+	}
+	for _, header:= range names {
+		if val := ctx.(*gin.Context).Request.Header.Get(header); val != "" {
+			out[header] = val
+		}
+	}
+	return
+}
+
+func (p RequestModal[T]) Authorization(ctx context.Context) (out string) {
+	return ctx.(*gin.Context).Request.Header.Get("Authorization")
 }
