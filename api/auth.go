@@ -9,6 +9,7 @@ import (
 
 var (
 	ContextAuthUserKey = "auth.User"
+	Authorization      = "Authorization"
 )
 
 func GetUser(ctx context.Context) (User, error) {
