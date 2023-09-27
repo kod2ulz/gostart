@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 )
@@ -130,8 +129,8 @@ func (p RequestModal[T]) Debug(o any) {
 	fmt.Printf("%T.debug(): %+v\n", p, o)
 }
 
-func (p RequestModal[T]) Headers(ctx context.Context, names ...string) (out collections.Map[string, string]) {
-	out = collections.Map[string, string]{}
+func (p RequestModal[T]) Headers(ctx context.Context, names ...string) (out map[string]string) {
+	out = make(map[string]string)
 	if len(names) == 0 {
 		return
 	}
