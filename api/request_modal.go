@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/utils"
@@ -134,9 +135,22 @@ func (p RequestModal[T]) Headers(ctx context.Context, names ...string) (out map[
 	if len(names) == 0 {
 		return
 	}
-	for _, header:= range names {
-		if val := ctx.(*gin.Context).Request.Header.Get(header); val != "" {
-			out[header] = val
+	var getHeaderValue func(string) string = func(s string) string {
+		if val := ctx.Value(s); val != nil {
+			return fmt.Sprint(val)
+		}
+		return ""
+	}
+	if ct, ok := ctx.(*gin.Context); ok {
+		getHeaderValue = func(s string) string {
+			return ct.Request.Header.Get(s)
+		}
+	}
+	for _, header := range names {
+		if header := strings.Trim(header, " "); header == "" {
+			continue
+		} else if val := getHeaderValue(header); val != "" {
+			out[header] = fmt.Sprint(val)
 		}
 	}
 	return
