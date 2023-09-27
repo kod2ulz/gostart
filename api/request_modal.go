@@ -159,3 +159,17 @@ func (p RequestModal[T]) Headers(ctx context.Context, names ...string) (out map[
 func (p RequestModal[T]) Authorization(ctx context.Context) (out string) {
 	return ctx.(*gin.Context).Request.Header.Get("Authorization")
 }
+
+func (p RequestModal[T]) WithHeaderValues(ctx context.Context, headers ...string) context.Context {
+	if len(headers) == 0 {
+		return ctx
+	}
+	headerValues := p.Headers(ctx, headers...)
+	if len(headerValues) == 0 {
+		return ctx
+	}
+	for k, v := range headerValues {
+		ctx = context.WithValue(ctx, k, v)
+	}
+	return ctx
+}
