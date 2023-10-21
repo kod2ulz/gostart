@@ -44,7 +44,7 @@ func (p *Headers) Add(key string, value...string) *Headers {
 	}
 	set, ok := (*p)[key]
 	if !ok {
-		(*p)[key] = make(collections.Set[string])
+		set = make(collections.Set[string])
 	} 
 	for i := range value {
 		set.Add(value[i])
