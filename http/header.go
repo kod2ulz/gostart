@@ -97,6 +97,10 @@ func (p *Headers) Empty() bool {
 	return len(*p) == 0
 }
 
-func (p *Headers) HasKey(key string) bool {
-	return  p != nil && len(*p) > 0 && p.HasKey(key)
+func (p *Headers) HasKey(key string) (y bool) {
+	if p == nil  || len(*p) == 0 {
+		return false
+	}
+	_, y = (*p)[key]
+	return y && len((*p)[key]) > 0
 }
