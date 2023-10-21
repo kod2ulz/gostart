@@ -142,11 +142,11 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 	if out = c.getResponse(response); out.HasError() {
 		c.logOutcome(request, response, err)
 	} else if outExpected && c.out == nil {
-		if parseErr := out.ParseDataTo(c.out); parseErr != nil{
+		if parseErr := out.ParseDataTo(c.out); parseErr != nil {
 			c.log.WithError(parseErr).Errorf("failed to parse %T to %T", out.Data, out)
 		}
 	}
-	return 
+	return
 }
 
 func (c *client[T]) url(path string) string {
@@ -186,9 +186,9 @@ func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Er
 	}
 
 	if res != nil {
-		fields["success"] = res.StatusCode < 400 
-		fields["response"] = logrus.Fields {
-			"id": res.Header.Get(api.RequestID),
+		fields["success"] = res.StatusCode < 400
+		fields["response"] = logrus.Fields{
+			"id":   res.Header.Get(api.RequestID),
 			"code": res.StatusCode,
 			"size": res.ContentLength,
 		}
@@ -222,22 +222,24 @@ func (c *client[T]) getResponse(res *http.Response) (out api.Response[T]) {
 		} else {
 			out.Success = res.StatusCode < 400
 		}
+		out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 		out.Timestamp = time.Now().Unix()
 		return
 	} else if unmarshallErr := json.Unmarshal(data, &t); unmarshallErr == nil && t != nil {
-		out = api.DataResponse[T](*t)
+		out = api.DataResponse[T](*t).
+			WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 		// anything else
 	} else if unmarshallErr = json.Unmarshal(data, &errBody); unmarshallErr != nil {
 		if res.StatusCode < 400 {
 			t = new(T)
-			return api.DataResponse[T](*t)
+			return api.DataResponse[T](*t).WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 		} else if errorMessage := errBody.AnyOfKey("err", "error", "errors", "msg", "message"); errorMessage != nil && errorMessage != "" {
 			return api.ErrorResponse[T](resErr.WithCause(api.GeneralError[any](errors.New(fmt.Sprint(errorMessage)))))
 		}
 	} else if errBody.Empty() {
 		t = new(T)
-		return api.DataResponse[T](*t)
+		return api.DataResponse[T](*t).WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 	}
-
+	out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 	return
 }

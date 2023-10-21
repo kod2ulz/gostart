@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -33,6 +34,9 @@ func EmptyResponse[T any]() (out Response[T]) {
 }
 
 type Response[T any] struct {
+	code       int            `json:"-"`
+	headers    http.Header    `json:"-"`
+	cookies    []*http.Cookie `json:"-"`
 	Success    bool           `json:"success"`
 	Type       string         `json:"type,omitempty"`
 	Error      Error          `json:"error,omitempty"`
@@ -70,6 +74,37 @@ func (r Response[T]) WithReferences(refs map[string]any) Response[T] {
 		r.References = refs
 	}
 	return r
+}
+
+func (r Response[T]) WithHeaders(headers http.Header) Response[T] {
+	if len(headers) > 0 {
+		r.headers = headers
+	}
+	return r
+}
+
+func (r Response[T]) WithCookies(cookies []*http.Cookie) Response[T] {
+	if len(cookies) > 0 {
+		r.cookies = cookies
+	}
+	return r
+}
+
+func (r Response[T]) WithCode(code int) Response[T] {
+	r.code = code
+	return r
+}
+
+func (r Response[T]) Cookies() []*http.Cookie {
+	return r.cookies
+}
+
+func (r Response[T]) Headers() http.Header {
+	return r.headers
+}
+
+func (r Response[T]) Code() int {
+	return r.code
 }
 
 type Metadata struct {
