@@ -17,15 +17,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Client[T any](log *logrus.Entry) *client[T] {
-	return &client[T]{
+func Client[T any](log *logrus.Entry) (out *client[T]) {
+	out = &client[T]{
 		log:     log,
 		timeout: time.Minute,
 		params:  map[string][]string{},
-		headers: map[string]string{
-			"Content-Type": "application/json",
-		},
+		headers: map[string]collections.Set[string]{},
 	}
+	out.headers.Add("Content-Type", "application/json")
+	return
 }
 
 type client[T any] struct {
@@ -37,7 +37,7 @@ type client[T any] struct {
 	session Session
 	timeout time.Duration
 	params  collections.Map[string, []string]
-	headers collections.Map[string, string]
+	headers Headers
 }
 
 func (c *client[T]) Timeout(timeut time.Duration) *client[T] {
@@ -71,8 +71,13 @@ func (c *client[T]) Header(key, value string) *client[T] {
 	return c.Headers(map[string]string{key: value})
 }
 
-func (c *client[T]) Headers(headers Headers) *client[T] {
+func (c *client[T]) Headers(headers map[string]string) *client[T] {
 	c.headers.Merge(headers)
+	return c
+}
+
+func (c *client[T]) MergeHeaders(headers Headers) *client[T] {
+	c.headers.MergeHeaders(headers)
 	return c
 }
 
@@ -129,6 +134,7 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 		err = api.RequestLoadError[T](parseErr).WithMessage("failed to create http request")
 		return api.ErrorResponse[T](err)
 	}
+	c.headers.Set(request)
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	var httpClient http.Client = *http.DefaultClient
@@ -164,7 +170,7 @@ func (c *client[T]) setOverrides(ctx context.Context) {
 	if c.session != nil {
 		h.WithAuthorization(c.session)
 	}
-	c.Headers(h)
+	c.MergeHeaders(h)
 }
 
 func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Error) {
