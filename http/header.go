@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -57,7 +58,7 @@ func (p *Headers) WithRequestID(ctx context.Context) *Headers {
 	if _, ok := (*p)[api.RequestID]; ok {
 		return p
 	} else if val := ctx.Value(api.RequestID); val != nil {
-		return p.Add(api.RequestID, val.(string))
+		return p.Add(api.RequestID, fmt.Sprint(val))
 	}
 	return p.Add(api.RequestID, uuid.New().String())
 }
