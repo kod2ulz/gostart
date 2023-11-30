@@ -172,3 +172,40 @@ func (r *urlSearch) GetOffset() int64 {
 func (r *urlSearch) HasFieldParams() bool {
 	return len(r.fields)+len(r.sort)+len(r.comparisons) > 0
 }
+
+func WithField(param URLSearchParam, field string, val utils.Value) URLSearchParam {
+	search, ok := param.(*urlSearch)
+	if !ok {
+		return param
+	} else if search.fields == nil {
+		search.fields = make(map[string]utils.Value)
+	}
+	search.fields[field] = val
+	return search
+}
+
+func WithSort(param URLSearchParam, field string, sort SortType) URLSearchParam {
+	search, ok := param.(*urlSearch)
+	if !ok {
+		return param
+	} else if search.sort == nil {
+		search.sort = make(map[string]SortType)
+	}
+	search.sort[field] = sort
+	return search
+}
+
+func WithComparison(param URLSearchParam, field string, operator CompareOperator, val utils.Value) URLSearchParam {
+	search, ok := param.(*urlSearch)
+	if !ok {
+		return param
+	}
+	if search.comparisons == nil {
+		search.comparisons = make(map[string]map[CompareOperator]utils.Value)
+	}
+	if search.comparisons[field] == nil {
+		search.comparisons[field] = make(map[CompareOperator]utils.Value)
+	}
+	search.comparisons[field][operator] = val
+	return search
+}
