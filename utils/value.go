@@ -15,6 +15,10 @@ func (v Value) Int() int {
 	return String.ToInt(strings.Trim(string(v), " "))
 }
 
+func (v Value) Int32() int32 {
+	return int32(v.Int())
+}
+
 func (v Value) Int64() int64 {
 	return int64(v.Int())
 }
