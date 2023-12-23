@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/markphelps/optional"
 )
 
 var Null nullUtils
@@ -13,6 +14,13 @@ type nullUtils struct{}
 
 func (nullUtils) String(val string) sql.NullString {
 	return sql.NullString{Valid: true, String: val}
+}
+
+func (nullUtils) OptionalString(str optional.String) (out sql.NullString) {
+	if val, err := str.Get(); err == nil {
+		return sql.NullString{Valid: true, String: val}
+	}
+	return 
 }
 
 func (nullUtils) UUID(val uuid.UUID) uuid.NullUUID {
@@ -33,4 +41,15 @@ func (nullUtils) Float64(val float64) sql.NullFloat64 {
 
 func (nullUtils) Time(val time.Time) sql.NullTime {
 	return sql.NullTime{Valid: true, Time: val}
+}
+
+func (nullUtils) Bool(val bool) sql.NullBool {
+	return sql.NullBool{Valid: true, Bool: val}
+}
+
+func (nullUtils) OptionalBool(str optional.Bool) (out sql.NullBool) {
+	if val, err := str.Get(); err == nil {
+		return sql.NullBool{Valid: true, Bool: val}
+	}
+	return 
 }
