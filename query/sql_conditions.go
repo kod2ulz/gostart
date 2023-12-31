@@ -20,6 +20,7 @@ const (
 	CompareNil                CompareOperator = "nil"
 	CompareLike               CompareOperator = "lyk"
 	CompareIn                 CompareOperator = "in"
+	CompareRaw                CompareOperator = "-"
 )
 
 func (op CompareOperator) Eval(field string, argCount int) string {
@@ -40,7 +41,7 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 		return field + " " + SELECT_LIKE + " " + ARG_PLACEHOLDER
 	case CompareIn:
 		args := make([]string, argCount)
-		for i := 0; i< argCount; i++ {
+		for i := 0; i < argCount; i++ {
 			args[i] = ARG_PLACEHOLDER
 		}
 		return field + " in (" + strings.Join(args, ",") + ")"
@@ -129,6 +130,9 @@ func GreaterThanOrEqual(field string, value interface{}) Condition {
 	return Condition(doLeafCompare(CompareGreaterThanOrEqual, field, value))
 }
 func In[T any](field string, values ...T) Condition {
+	return Condition(doLeafCompare(CompareIn, field, values))
+}
+func Raw(queryStr string) Condition {
 	return Condition(doLeafCompare(CompareIn, field, values))
 }
 
