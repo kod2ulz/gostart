@@ -132,9 +132,9 @@ func GreaterThanOrEqual(field string, value interface{}) Condition {
 func In[T any](field string, values ...T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, values))
 }
-func Raw(queryStr string) Condition {
-	return Condition(doLeafCompare(CompareIn, field, values))
-}
+// func Raw(queryStr string) Condition {
+// 	return Condition(doLeafCompare(CompareIn, field, values))
+// }
 
 func And(conditions ...Condition) Condition { return doNode(WhereAnd, conditions...) }
 func Or(conditions ...Condition) Condition  { return doNode(WhereOr, conditions...) }
