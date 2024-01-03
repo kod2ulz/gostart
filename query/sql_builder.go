@@ -39,6 +39,7 @@ func SQLBuilder[T any](dbtx sqlc.DBTX, rowScanner RowScanFunc[T]) *sqlBuilder[T]
 type sqlBuilder[T any] struct {
 	selectFields []string
 	countFields  []string
+	groupBy      []string
 	orderBy      []string
 	limit        int64
 	offset       int64
@@ -77,6 +78,16 @@ func (sb *sqlBuilder[T]) Order(orders ...SortFunc) *sqlBuilder[T] {
 	for i := range orders {
 		orders[i](sb)
 	}
+	return sb
+}
+
+func (sb *sqlBuilder[T]) Group(groups ...string) *sqlBuilder[T] {
+	if len(groups) == 0 {
+		return sb
+	} else if sb.groupBy == nil {
+		sb.groupBy = make([]string, 0)
+	}
+	sb.groupBy = append(sb.groupBy, groups...)
 	return sb
 }
 
@@ -142,6 +153,9 @@ func (sb *sqlBuilder[T]) selectQueryString(relation string, fields []string, whe
 	query.WriteString(fmt.Sprintf("select %s from %s", strings.Join(fields, ", "), relation))
 	if where.Len() > 0 {
 		query.WriteString(" where " + where.String())
+	}
+	if len(sb.groupBy) > 0 {
+		query.WriteString(" group by " + strings.Join(sb.groupBy, ", "))
 	}
 	if len(sb.orderBy) > 0 {
 		query.WriteString(" order by " + strings.Join(sb.orderBy, ", "))
