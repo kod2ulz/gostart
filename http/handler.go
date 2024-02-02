@@ -14,7 +14,7 @@ type Param interface {
 	ContextKey() string
 }
 
-func GenericHandler[P Param, R any](ctx context.Context, log *logrus.Entry, method string, url ...string) func(context.Context) (out R, err api.Error) {
+func GenericHandler[P Param, R any](log *logrus.Entry, method string, url ...string) func(context.Context) (out R, err api.Error) {
 	var err error
 	var res api.Response[R]
 	var param api.RequestParam
