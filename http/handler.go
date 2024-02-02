@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/kod2ulz/gostart/api"
-	"github.com/kod2ulz/gostart/logr"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type Param interface {
@@ -14,7 +14,7 @@ type Param interface {
 	ContextKey() string
 }
 
-func GenericHandler[P Param, R any](ctx context.Context, log *logr.Logger, method string, url ...string) func(context.Context) (out R, err api.Error) {
+func GenericHandler[P Param, R any](ctx context.Context, log *logrus.Entry, method string, url ...string) func(context.Context) (out R, err api.Error) {
 	var err error
 	var res api.Response[R]
 	var param api.RequestParam
@@ -30,7 +30,7 @@ func GenericHandler[P Param, R any](ctx context.Context, log *logr.Logger, metho
 				return out, api.RequestLoadError[P](errors.Errorf("Got %v when loading %T from context", param, param))
 			}
 		}
-		if res = Client[R](log.Entry).Body(&param).Request(ctx, method, strings.Join(url, "/")); res.HasError() {
+		if res = Client[R](log).Body(&param).Request(ctx, method, strings.Join(url, "/")); res.HasError() {
 			return out, res.Error
 		} else if err = res.ParseDataTo(&out); err != nil {
 			return out, api.GeneralError[R](errors.Wrapf(err, "failed to parse %T to %T", res.Data, out)).
