@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/iancoleman/strcase"
 	"github.com/kod2ulz/gostart/object"
 	"github.com/kod2ulz/gostart/utils"
 )
@@ -67,6 +68,11 @@ func (s *urlSearch) LoadFieldSort(ctx context.Context, fields ...string) *urlSea
 func (s *urlSearch) LoadBoundaries(ctx context.Context) *urlSearch {
 	s.limit = s.query(ctx, "limit", fmt.Sprint(SELECT_LIMIT)).Int64()
 	s.offset = s.query(ctx, "offset", "0").Int64()
+	if s.offset == 0 {
+		if page := s.query(ctx, "page", "0").Int64(); page > 1 {
+			s.offset = (page - 1) * s.limit
+		}
+	}
 	return s
 }
 
@@ -78,6 +84,8 @@ func (s *urlSearch) LoadFieldLookups(ctx context.Context, fields ...string) *url
 	}
 	for i := range fields {
 		if val := s.query(ctx, fields[i]); val.Valid() {
+			s.fields[fields[i]] = val
+		} else if val = s.query(ctx, strcase.ToCamel(fields[i])); val.Valid() {
 			s.fields[fields[i]] = val
 		}
 	}
@@ -97,6 +105,8 @@ func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) 
 	for i := range fields {
 		if val := s.query(ctx, fmt.Sprintf("%s_null", fields[i])); val.Valid() {
 			s.null[fields[i]] = val.Bool()
+		} else if val = s.query(ctx, fmt.Sprintf("%s_null", strcase.ToCamel(fields[i]))); val.Valid() {
+			s.fields[fields[i]] = val
 		}
 		if _, ok := s.comparisons[fields[i]]; !ok {
 			s.comparisons[fields[i]] = make(map[CompareOperator]utils.Value)
@@ -105,10 +115,16 @@ func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) 
 			CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareGreaterThanOrEqual, CompareNot, CompareNotEqual} {
 			if val := s.query(ctx, fmt.Sprintf("%s_%s", fields[i], string(cp))); val.Valid() {
 				s.comparisons[fields[i]][cp] = val
+			} else if val = s.query(ctx, fmt.Sprintf("%s_%s", strcase.ToCamel(fields[i]), string(cp))); val.Valid() {
+				s.fields[fields[i]] = val
 			}
 		}
 		for _, field := range object.String(fields[i]).Variations("~%s", "~%s~", "%s~") {
-			if val := s.query(ctx, field); val.Valid() {
+			var val utils.Value
+			if val = s.query(ctx, field); !val.Valid() {
+				val = s.query(ctx, strcase.ToCamel(field))
+			}
+			if val.Valid() {
 				s.comparisons[fields[i]][CompareLike] = utils.Value(strings.Replace(strings.ReplaceAll(field, "~", "%"), fields[i], val.String(), 1))
 				break
 			}
