@@ -28,7 +28,7 @@ func GenericWorkerErrorHandler[P api.RequestParam](log *logr.Logger, operation s
 func GenericWorkerProcessHandler[P api.RequestParam, R any](log *logr.Logger, operation string, fn ApiFunc[R]) WorkerProcessorFunc[P, R] {
 	return func(msg *P, routingKey string, redelivered bool) (out R, err error) {
 		log.Debugf("received payload:[%T] on route:[%s] :: %T", msg, routingKey, fn)
-		return fn(context.WithValue(context.TODO(), fmt.Sprintf("%T", msg), *msg))
+		return fn(context.WithValue(context.TODO(), (*msg).ContextKey(), *msg))
 	}
 }
 
