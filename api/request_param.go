@@ -13,7 +13,9 @@ type RequestParam interface {
 	RequestLoad(ctx context.Context) (RequestParam, error)
 	ContextKey() string
 	MetadataContextKey() string
+	ReferencesContextKey() string
 	SetResponseMetadata(context.Context, *Metadata) error
+	SetResponseReference(context.Context, string, any) error
 	ContextLoad(context.Context) (RequestParam, error)
 }
 

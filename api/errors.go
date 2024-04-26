@@ -5,18 +5,22 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/object"
+	"github.com/kod2ulz/gostart/utils"
 )
 
 var (
-	ErrorCodeServerError      string = "ServerError"
-	ErrorCodeNotFoundError    string = "NotFoundError"
-	ErrorCodeIntegrationError string = "IntegrationError"
-	ErrorCodeRequestLoadError string = "RequestLoadError"
-	ErrorCodeValidatorError   string = "ValidationError"
-	ErrorCodeSQLError         string = "SQLError"
-	ErrorCodeUnauthorized     string = "InvalidCredentials"
-	ErrorCodeInvalidOperation string = "InvalidOperation"
+	ErrorCodeServerError             string = "ServerError"
+	ErrorCodeNotFoundError           string = "NotFoundError"
+	ErrorCodeIntegrationError        string = "IntegrationError"
+	ErrorCodeRequestLoadError        string = "RequestLoadError"
+	ErrorCodeServiceError            string = "ServiceError"
+	ErrorCodeResponseProcessingError string = "ResponseProcessingError"
+	ErrorCodeValidatorError          string = "ValidationError"
+	ErrorCodeSQLError                string = "SQLError"
+	ErrorCodeUnauthorized            string = "InvalidCredentials"
+	ErrorCodeInvalidOperation        string = "InvalidOperation"
 )
 
 type Error interface {
@@ -25,7 +29,7 @@ type Error interface {
 	WithErrorCode(code string) (out Error)
 	WithHttpStatusCode(code int) (out Error)
 	WithErrorCodeAndHttpStatusCode(errorCode string, statusCode int) (out Error)
-	WithMessage(message string) (out Error)
+	WithMessage(message string, opts...any) (out Error)
 	WithError(err error) (out Error)
 	WithCause(err Error) (out Error)
 	Response() interface{}
@@ -64,8 +68,8 @@ func (e *ErrorModel[T]) WithErrorCodeAndHttpStatusCode(errorCode string, statusC
 	return e.WithErrorCode(errorCode).WithHttpStatusCode(statusCode)
 }
 
-func (e *ErrorModel[T]) WithMessage(message string) (out Error) {
-	e.Message = message
+func (e *ErrorModel[T]) WithMessage(message string, opts...any) (out Error) {
+	e.Message = fmt.Sprintf(message, opts...)
 	return e
 }
 
@@ -88,17 +92,20 @@ func (e *ErrorModel[T]) Response() (out interface{}) {
 
 func _initError[T any](httpCode int, statusCode string, err error) (out ErrorModel[T]) {
 	var message string
+	var errorMessages collections.List[string]
 	if err != nil {
 		message = err.Error()
 	}
 	if message != "" && strings.Contains(message, " .") {
-		message = object.String(message).Split(" .").Last()
+		errorMessages = object.String(message).Split(" .")
+		message = errorMessages.Last()
 	}
 	out = ErrorModel[T]{
 		Type:    strings.TrimPrefix(fmt.Sprintf("%T", new(T)), "*"),
 		Message: message,
 		Code:    statusCode,
 		Http:    httpCode,
+		Errors:  errorMessages,
 	}
 	if out.Type == "interface{}" {
 		out.Type = "Undefined"
@@ -108,6 +115,11 @@ func _initError[T any](httpCode int, statusCode string, err error) (out ErrorMod
 
 func ServerError(err error) (out Error) {
 	return GeneralError[any](err)
+}
+
+func ServiceError(err error) (out Error) {
+	return GeneralError[User](err).
+		WithErrorCodeAndHttpStatusCode(ErrorCodeServiceError, http.StatusUnauthorized)
 }
 
 func ServiceErrorUnauthorised(err error) (out Error) {
@@ -166,4 +178,14 @@ func ValidatorError[T any](err error) (out Error) {
 
 func SQLError[T any](err error) (out Error) {
 	return GeneralError[T](err).WithErrorCode(ErrorCodeSQLError)
+}
+
+func SqlQueryError[P RequestParam, T any](param P, out T, err error) (T, Error) {
+	if err != nil {
+		if utils.Error.SqlNoRows(err) {
+			return out, NotFoundError[T](param)
+		}
+		return out, SQLError[T](err)
+	}
+	return out, nil
 }

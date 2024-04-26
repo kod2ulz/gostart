@@ -24,7 +24,11 @@ func HandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFu
 
 func ParamHandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, out T) {
-		ctx.JSON(http.StatusOK, DataResponse(out))
+		refs := map[string]any{}
+		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
+			refs, _ = val.(map[string]any)
+		}
+		ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
 	})
 }
 
@@ -36,13 +40,14 @@ func ParamHandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResp
 
 func ParamHandlerWithListResponse[P RequestParam, T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, res []T) {
+		meta, refs := &Metadata{}, map[string]any{}
 		if val, ok := ctx.Get(param.MetadataContextKey()); ok {
-			if meta, ok := val.(*Metadata); ok {
-				ctx.JSON(http.StatusOK, ListResponse(res, *meta))
-				return
-			}
+			meta, _ = val.(*Metadata)
 		}
-		ctx.JSON(http.StatusOK, ListResponse(res, Metadata{}))
+		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
+			refs, _ = val.(map[string]any)
+		}
+		ctx.JSON(http.StatusOK, ListResponse(res, *meta).WithReferences(refs))
 	})
 }
 

@@ -2,25 +2,32 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/kod2ulz/gostart/query"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 )
 
 type ListRequest struct {
-	User   User  `validate:"required"`
+	User   User  `json:"-" validate:"required"`
 	Limit  int32 `validate:"required,gte=1"`
 	Offset int32 `validate:"omitempty,gte=0"`
 	RequestModal[ListRequest]
 }
 
-func (r ListRequest) Metadata() *Metadata {
-	return &Metadata{
-		Current: int64(r.Offset), Limit: int64(r.Limit), Offset: int64(r.Offset),
+func (r ListRequest) Metadata() (out *Metadata) {
+	out = &Metadata{
+		// Current: int64(r.Offset),
+		Limit: int64(r.Limit), Offset: int64(r.Offset),
 	}
+	if out.Offset > 0 && out.Limit > 0 {
+		out.Page = (out.Offset / out.Limit) + 1
+	}
+	return
 }
 
 func (r ListRequest) DefaultMetadata(ctx context.Context) (out *Metadata) {
@@ -31,13 +38,41 @@ func (r ListRequest) DefaultMetadata(ctx context.Context) (out *Metadata) {
 
 func (r ListRequest) RequestLoad(ctx context.Context) (param RequestParam, err error) {
 	var out ListRequest = ListRequest{}
+	var query = func(param string, _default interface{}) int32 {
+		return int32(out.Query(ctx, param, fmt.Sprint(_default)).Int())
+	}
 	if out.User, err = GetUser(ctx); err != nil {
 		return
+	} else if out.User == nil {
+		return param, errors.Errorf("%T.User is nil", r)
 	}
-	out.Limit = int32(out.Query(ctx, "limit", "20").Int())
-	out.Offset = int32(out.Query(ctx, "offset", "0").Int())
+	out.Limit = query("limit", 20)
+	out.Offset = query("offset", 0)
+	if page := query("page", 1); page > 1 && out.Offset == 0 {
+		out.Offset = out.Limit * (page - 1)
+	}
 	ctx.(*gin.Context).Set(out.ContextKey(), &out)
 	return out, err
+}
+
+func (r ListRequest) SearchURL(ctx context.Context, fields query.UrlFields) query.URLSearchParam {
+	return fields.SearchParams(ctx, r.Query)
+}
+
+func (r ListRequest) QuerySearch(ctx context.Context, fields ...string) query.URLSearchParam {
+	return query.SearchUrl(r.Query).Load(ctx, fields...)
+}
+
+func (r ListRequest) QuerySearchFields(ctx context.Context, fields ...string) query.URLSearchParam {
+	return query.SearchUrl(r.Query).LoadBoundaries(ctx).LoadFieldLookups(ctx, fields...)
+}
+
+func (r ListRequest) QuerySearchSort(ctx context.Context, fields ...string) query.URLSearchParam {
+	return query.SearchUrl(r.Query).LoadBoundaries(ctx).LoadFieldSort(ctx, fields...)
+}
+
+func (r ListRequest) QuerySearchComparisons(ctx context.Context, fields ...string) query.URLSearchParam {
+	return query.SearchUrl(r.Query).LoadBoundaries(ctx).LoadFieldComparisons(ctx, fields...)
 }
 
 type ListRequestIdType interface {

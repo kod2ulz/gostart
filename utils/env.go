@@ -61,8 +61,13 @@ func (e *_env) setPrx(prx ...string) *_env {
 
 func (e _env) Get(name string, _default ...interface{}) Value {
 	var def string
-	if len(_default) > 0 {
-		def = fmt.Sprint(_default[0])
+	if len(_default) == 0 {
+		return Env.GetOrDefault(e._prx(name), def)
+	}
+	for i := range _default {
+		if def = fmt.Sprint(_default[i]); def != "" {
+			break
+		} 
 	}
 	return Env.GetOrDefault(e._prx(name), def)
 }

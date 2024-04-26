@@ -53,6 +53,8 @@ func JSONLogMiddleware(log *logr.Logger) gin.HandlerFunc {
 			entry.Error(c.Errors.String())
 		} else if c.Writer.Status() >= 400 {
 			entry.WithField("errors", c.Errors).Warn("")
+		} else if fields["path"] == "/ok" {
+			entry.Trace("consul hc")
 		} else {
 			entry.Info("")
 		}

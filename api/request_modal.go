@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/utils"
@@ -44,8 +45,26 @@ func (r RequestModal[T]) MetadataContextKey() string {
 	return fmt.Sprintf("meta.%s", r.ContextKey())
 }
 
+func (r RequestModal[T]) ReferencesContextKey() string {
+	return fmt.Sprintf("ref.%s", r.ContextKey())
+}
+
 func (r RequestModal[T]) SetResponseMetadata(ctx context.Context, meta *Metadata) (err error) {
 	ctx.(*gin.Context).Set(r.MetadataContextKey(), meta)
+	return
+}
+
+func (r RequestModal[T]) SetResponseReference(ctx context.Context, key string, value any) (err error) {
+	var ref map[string]any
+	if value == nil {
+		return
+	} else if val := ctx.Value(r.ReferencesContextKey()); val != nil {
+		ref = val.(map[string]any)
+	} else {
+		ref = make(map[string]any)
+	}
+	ref[key] = value
+	ctx.(*gin.Context).Set(r.ReferencesContextKey(), ref)
 	return
 }
 
@@ -109,4 +128,48 @@ func (p RequestModal[T]) Path(ctx context.Context, name string, _default ...stri
 
 func (p RequestModal[T]) Debug(o any) {
 	fmt.Printf("%T.debug(): %+v\n", p, o)
+}
+
+func (p RequestModal[T]) Headers(ctx context.Context, names ...string) (out map[string]string) {
+	out = make(map[string]string)
+	if len(names) == 0 {
+		return
+	}
+	var getHeaderValue func(string) string = func(s string) string {
+		if val := ctx.Value(s); val != nil {
+			return fmt.Sprint(val)
+		}
+		return ""
+	}
+	if ct, ok := ctx.(*gin.Context); ok {
+		getHeaderValue = func(s string) string {
+			return ct.Request.Header.Get(s)
+		}
+	}
+	for _, header := range names {
+		if header := strings.Trim(header, " "); header == "" {
+			continue
+		} else if val := getHeaderValue(header); val != "" {
+			out[header] = fmt.Sprint(val)
+		}
+	}
+	return
+}
+
+func (p RequestModal[T]) Authorization(ctx context.Context) (out string) {
+	return ctx.(*gin.Context).Request.Header.Get("Authorization")
+}
+
+func (p RequestModal[T]) WithHeaderValues(ctx context.Context, headers ...string) context.Context {
+	if len(headers) == 0 {
+		return ctx
+	}
+	headerValues := p.Headers(ctx, headers...)
+	if len(headerValues) == 0 {
+		return ctx
+	}
+	for k, v := range headerValues {
+		ctx = context.WithValue(ctx, k, v)
+	}
+	return ctx
 }

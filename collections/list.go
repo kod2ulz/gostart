@@ -71,6 +71,10 @@ func (l List[T]) Sort(lessFn func(t1, t2 T) bool) (out []T) {
 	return
 }
 
+func (l List[T]) Iterator() Iterator[T] {
+	return &iterator[T]{data: l}
+}
+
 func (l List[T]) Iterate(fn func(int, T) error) (err error) {
 	if len(l) == 0 {
 		return
@@ -83,7 +87,7 @@ func (l List[T]) Iterate(fn func(int, T) error) (err error) {
 	return
 }
 
-func (l List[T]) Filter(filterFn func(i int, val T) bool) (out []T) {
+func (l List[T]) Filter(filterFn func(i int, val T) bool) (out List[T]) {
 	if l.Empty() {
 		return l
 	}
