@@ -53,3 +53,8 @@ func (c *HttpClient) Request(ctx context.Context) *httpClientRequest {
 		},
 	}
 }
+
+func (c *HttpClient) WithTimeout(timeout time.Duration) *HttpClient {
+	c.requestTimeout = timeout
+	return c
+}

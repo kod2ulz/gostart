@@ -1,4 +1,4 @@
-package object
+package collections
 
 import (
 	"sort"
@@ -71,6 +71,10 @@ func (l List[T]) Sort(lessFn func(t1, t2 T) bool) (out []T) {
 	return
 }
 
+func (l List[T]) Iterator() Iterator[T] {
+	return &iterator[T]{data: l}
+}
+
 func (l List[T]) Iterate(fn func(int, T) error) (err error) {
 	if len(l) == 0 {
 		return
@@ -83,7 +87,7 @@ func (l List[T]) Iterate(fn func(int, T) error) (err error) {
 	return
 }
 
-func (l List[T]) Filter(filterFn func(i int, val T) bool) (out []T) {
+func (l List[T]) Filter(filterFn func(i int, val T) bool) (out List[T]) {
 	if l.Empty() {
 		return l
 	}
@@ -96,66 +100,29 @@ func (l List[T]) Filter(filterFn func(i int, val T) bool) (out []T) {
 	return
 }
 
-func ListReduce[T any, K any](l List[T], mapFn func(i int, val T) (K, bool)) (out []K) {
+func (l List[T]) ForEach(fn func(i int, val T) T) (out []T) {
 	if l.Empty() {
-		return []K{}
+		return l
 	}
-	out = make([]K, 0)
+	out = make([]T, len(l))
 	for i := range l {
-		if k, ok := mapFn(i, l[i]); ok {
-			out = append(out, k)
-		}
+		out[i] = fn(i, l[i])
 	}
 	return
 }
 
-func ListMap[T any, K any](l List[T], mapFn func(i int, val T) K) (out []K) {
+func (l List[T]) Slice(from, to int) (out []T) {
 	if l.Empty() {
-		return []K{}
+		return l
+	} else if from > to {
+		return []T{}
 	}
-	out = make([]K, 0)
-	for i := range l {
-		out = append(out, mapFn(i, l[i]))
+	if from < 0 {
+		from = 0
+	} 
+	if to > l.Size() {
+		to = l.Size()
 	}
-	return
-}
-
-type ListMapFunc[K any, T any] func(T) (K, T)
-
-func (l *List[T]) MapString(fn ListMapFunc[string, T]) (out Map[string, T]) {
-	if l.Empty() {
-		return
-	}
-	out = make(Map[string, T], 0)
-	for _, t := range *l {
-		k, v := fn(t)
-		out[k] = v
-	}
-	return
-}
-
-func ListToMap[K comparable, T any, U any](list List[T], kvFn func(T) (K, U)) (out Map[K, U]) {
-	if list.Empty() {
-		return
-	}
-	out = make(Map[K, U], 0)
-	for _, t := range list {
-		k, v := kvFn(t)
-		out[k] = v
-	}
-	return
-}
-
-
-
-func InList[T comparable](needle T, haystach ...T) bool {
-	if len(haystach) == 0 {
-		return false
-	}
-	for i := range haystach {
-		if needle == haystach[i] {
-			return true
-		}
-	}
-	return false
+	
+	return l[from:to]
 }

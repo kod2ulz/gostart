@@ -1,4 +1,4 @@
-package object
+package collections
 
 type Set[T comparable] Map[T, struct{}]
 

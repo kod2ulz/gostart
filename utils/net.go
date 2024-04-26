@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"encoding/json"
+	"fmt"
 	"io"
 
+	json "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 )
 
@@ -26,4 +27,17 @@ func (netutils) ReadJson(reader io.ReadCloser, out interface{}) (err error) {
 		return errors.Wrapf(err, "failed to unmarshall response to %T", out)
 	}
 	return
+}
+
+
+func (u netutils) Http(host string, port int) string {
+	return u.url("http", host, port)
+}
+
+func (u netutils) Https(host string, port int) string {
+	return u.url("https", host, port)
+}
+
+func (netutils) url(scheme, host string, port int) string {
+	return fmt.Sprintf("%s://%s:%d", scheme, host, port)
 }
