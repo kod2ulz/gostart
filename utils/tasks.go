@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kod2ulz/gostart/logr"
@@ -65,4 +66,61 @@ func SafeChannelWrite[T any](ctx context.Context, log *logrus.Entry, data T, out
 
 func PointerTo[T any](t T) *T {
 	return &t
+}
+
+type BatchProcessorFunc[T any, E error] func(context.Context, T) E
+
+func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor BatchProcessorFunc[T, E], args...T) (err E) {
+
+	if len(args) == 0 {
+    return
+  }
+
+	ctxwc, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errCh := make(chan E, 1)
+	semaphore := make(chan struct{}, batchSize)
+	var wg sync.WaitGroup
+
+	// Divide Data into batches
+	for i := 0; i < len(args); i += batchSize {
+		wg.Add(1)
+		limit := i+batchSize
+		if limit > len(args) {
+			limit = len(args)
+		}
+		go func(start, end int) {
+			defer wg.Done()
+			semaphore <- struct{}{} // Acquire semaphore
+			batchProcessor(ctxwc, errCh, processor, args[start:end])
+			<-semaphore // Release semaphore
+		}(i, limit)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errCh) // Close error channel when all goroutines are done
+	}()
+
+	// Collect errors
+	for err = range errCh {
+		cancel() // Cancel context on first error
+		return err
+	}
+	return
+}
+
+func batchProcessor[T any, E error](ctx context.Context, errCh chan<- E, processor BatchProcessorFunc[T, E], ts []T) {
+	for _, url := range ts {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if err := processor(ctx, url); any(err) != nil {
+				errCh <- err
+				return
+			}
+		}
+	}
 }
