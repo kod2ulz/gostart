@@ -69,7 +69,7 @@ func (l *concurrentList[T]) Append(args ...T) *concurrentList[T] {
 	return l
 }
 
-func (l concurrentList[T]) Sort(lessFn func(t1, t2 T) bool) (out []T) {
+func (l *concurrentList[T]) Sort(lessFn func(t1, t2 T) bool) (out []T) {
 	l.mx.RLock()
 	defer l.mx.RUnlock()
 	return l.data.Sort(lessFn)
@@ -81,7 +81,7 @@ func (l *concurrentList[T]) Iterator() Iterator[T] {
 	return l.data.Iterator()
 }
 
-func (l concurrentList[T]) Iterate(fn func(int, T) error) (err error) {
+func (l *concurrentList[T]) Iterate(fn func(int, T) error) (err error) {
 	l.mx.RLock()
 	defer l.mx.RUnlock()
 	return l.data.Iterate(fn)
@@ -93,13 +93,13 @@ func (l *concurrentList[T]) Filter(filterFn func(i int, val T) bool) (out List[T
 	return l.data.Filter(filterFn)
 }
 
-func (l concurrentList[T]) ForEach(fn func(i int, val T) T) (out []T) {
+func (l *concurrentList[T]) ForEach(fn func(i int, val T) T) (out []T) {
 	l.mx.RLock()
 	defer l.mx.RUnlock()
 	return l.data.ForEach(fn)
 }
 
-func (l concurrentList[T]) Slice(from, to int) (out []T) {
+func (l *concurrentList[T]) Slice(from, to int) (out []T) {
 	l.mx.RLock()
 	defer l.mx.RUnlock()
 	return l.data.Slice(from, to)
