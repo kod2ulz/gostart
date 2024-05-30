@@ -69,7 +69,9 @@ func (c *rmqConn) reconnect() (err error) {
 				return err
 			}
 			c.log.Info("reconnect() exiting")
-		case <-c.err:
+		case e := <-c.err:
+			// these don't recover easily
+			c.log.WithError(e).Error("error while reconnecting")
 			c.connect()
 			time.Sleep(c.conf.Heartbeat * time.Millisecond)
 		}
@@ -79,9 +81,9 @@ func (c *rmqConn) reconnect() (err error) {
 func (c *rmqConn) connect() (err error) {
 	defer func() {
 		c.log.Warn("connection broken")
-		if r := recover(); r != nil {
-			c.log.Errorf("panic: %v", r)
-		}
+		// if r := recover(); r != nil {
+		// 	c.log.Errorf("panic: %v", r)
+		// }
 	}()
 	c.log.Info("establishing connection")
 	c.mx.Lock()
@@ -121,6 +123,8 @@ func (c *rmqConn) connect() (err error) {
 }
 
 func (c *rmqConn) restore() (err error) {
+	// apparently, restoration is impossible
+	c.log.Fatalf("%T connection terminated unexpectedly", c)
 	if len(c.exchanges) == 0 {
 		return
 	}
@@ -224,6 +228,11 @@ func (c *rmqConn) handleChanError(err *amqp.Error) error {
 	default:
 		c.log.WithError(err).Panicf("connection on '%s' failed", c.conf.String())
 	}
+	c.log.WithError(err).
+		WithField("code", err.Code).
+		WithField("reason", err.Reason).
+		WithField("recover", err.Recover).
+		Fatal("error on connection. sink the ship")
 	return c.close()
 }
 
