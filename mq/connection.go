@@ -124,7 +124,7 @@ func (c *rmqConn) connect() (err error) {
 
 func (c *rmqConn) restore() (err error) {
 	// apparently, restoration is impossible
-	c.log.Fatalf("%T connection terminated unexpectedly", c)
+	// c.log.Fatalf("%T connection terminated unexpectedly", c)
 	if len(c.exchanges) == 0 {
 		return
 	}
