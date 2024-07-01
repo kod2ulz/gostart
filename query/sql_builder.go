@@ -113,6 +113,16 @@ func (sb *sqlBuilder[T]) Criteria() (b strings.Builder, args []interface{}) {
 	return
 }
 
+func (sb *sqlBuilder[T]) SelectQueryPreview(relation string, fields ...string) (out string, args []any) {
+	var where strings.Builder
+	if len(fields) > 0 {
+		sb.selectFields = fields
+	}
+	where, args = sb.Criteria()
+	out = sb.selectQueryString(relation, sb.selectFields, where)
+	return
+}
+
 func (sb *sqlBuilder[T]) Select(ctx context.Context, relation string, fields ...string) (count int64, out []T, err error) {
 	var rows pgx.Rows
 	if sb.rowScanner == nil {
