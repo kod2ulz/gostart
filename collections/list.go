@@ -132,8 +132,6 @@ func (l List[T]) Copy() (out []T) {
 		return l
 	} 
 	out = make([]T, l.Size())
-	for i := range l {
-		out[i] = l[i]
-	}
+	copy(out, l)
 	return 
 }
