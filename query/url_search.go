@@ -225,9 +225,9 @@ func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchPar
 		}
 		r.replaceField(f, func(v any) any {
 			if s1, ok := v.(string); ok {
-				return utils.Value(s1).Time(format)
+				return utils.Value(s1).Time(format).UTC()
 			} else if v1, ok := v.(utils.Value); ok {
-				return v1.Time(format)
+				return v1.Time(format).UTC()
 			}
 			return v
 		})
