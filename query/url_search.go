@@ -202,7 +202,7 @@ func (r *urlSearch) HasField(field string) bool {
 		return false
 	}
 	_, ok := r.fields[field]
-	return ok 
+	return ok
 }
 
 func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchParam {
@@ -210,15 +210,30 @@ func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchPar
 		return r
 	}
 	for _, f := range fields {
-		if v, ok := r.fields[f]; !ok {
+		if _, ok := r.fields[f]; !ok {
 			continue
-		} else if s1, ok := v.(string); ok {
-			r.fields[f] = utils.Value(s1).Time(format)
-		} else if v1, ok := v.(utils.Value); ok {
-			r.fields[f] = v1.Time(format)
 		}
+		r.replaceField(f, func(v any) any {
+			if s1, ok := v.(string); ok {
+				return utils.Value(s1).Time(format)
+			} else if v1, ok := v.(utils.Value); ok {
+				return v1.Time(format)
+			}
+			return v
+		})
 	}
 	return r
+}
+
+func (r *urlSearch) replaceField(name string, modifier func(any) any) {
+	if v, ok := r.fields[name]; ok {
+		r.fields[name] = modifier(v)
+	}
+	if m, ok := r.comparisons[name]; ok {
+		for c, v := range m {
+			r.comparisons[name][c] = modifier(v)
+		}
+	}
 }
 
 func (r *urlSearch) WithField(field string, val any) URLSearchParam {
@@ -226,6 +241,17 @@ func (r *urlSearch) WithField(field string, val any) URLSearchParam {
 		r.fields = make(map[string]any)
 	}
 	r.fields[field] = val
+	return r
+}
+
+func (r *urlSearch) WithComparison(field string, operator CompareOperator, val any) URLSearchParam {
+	if r.comparisons == nil {
+		r.comparisons = make(map[string]map[CompareOperator]any)
+	}
+	if r.comparisons[field] == nil {
+		r.comparisons[field] = make(map[CompareOperator]any)
+	}
+	r.comparisons[field][operator] = val
 	return r
 }
 
@@ -247,7 +273,7 @@ func WithSort(param URLSearchParam, field string, sort SortType) URLSearchParam 
 	return search
 }
 
-func WithComparison(param URLSearchParam, field string, operator CompareOperator, val utils.Value) URLSearchParam {
+func WithComparison(param URLSearchParam, field string, operator CompareOperator, val any) URLSearchParam {
 	search, ok := param.(*urlSearch)
 	if !ok {
 		return param
