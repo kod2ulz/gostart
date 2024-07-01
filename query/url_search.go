@@ -10,16 +10,23 @@ import (
 	"github.com/kod2ulz/gostart/utils"
 )
 
+var (
+// _ URLSearchParam  = (nil).(*urlSearch)
+// _ URLSearchLoader = (*urlSearch).(nil)
+)
+
 type UrlFieldReader func(ctx context.Context, name string, _default ...string) (out utils.Value)
 
 type URLSearchParam interface {
-	GetFieldValues() map[string]utils.Value
+	GetFieldValues() map[string]any
 	GetFieldNullables() map[string]bool
 	GetFieldSort() map[string]SortType
-	GetFieldComparisons() map[string]map[CompareOperator]utils.Value
+	GetFieldComparisons() map[string]map[CompareOperator]any
 	GetLimit() int64
 	GetOffset() int64
 	HasFieldParams() bool
+	WithField(field string, val any) URLSearchParam
+	WithTimeFormat(format string, fields ...string) URLSearchParam
 }
 
 type URLSearchLoader interface {
@@ -37,10 +44,10 @@ func SearchUrl(queryReader UrlFieldReader) *urlSearch {
 type urlSearch struct {
 	limit       int64
 	offset      int64
-	fields      map[string]utils.Value
+	fields      map[string]any
 	sort        map[string]SortType
 	null        map[string]bool
-	comparisons map[string]map[CompareOperator]utils.Value
+	comparisons map[string]map[CompareOperator]any
 	query       UrlFieldReader
 }
 
@@ -80,7 +87,7 @@ func (s *urlSearch) LoadFieldLookups(ctx context.Context, fields ...string) *url
 	if len(fields) == 0 {
 		return s
 	} else if s.fields == nil {
-		s.fields = make(map[string]utils.Value)
+		s.fields = make(map[string]any)
 	}
 	for i := range fields {
 		if val := s.query(ctx, fields[i]); val.Valid() {
@@ -97,7 +104,7 @@ func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) 
 		return s
 	}
 	if s.comparisons == nil {
-		s.comparisons = make(map[string]map[CompareOperator]utils.Value)
+		s.comparisons = make(map[string]map[CompareOperator]any)
 	}
 	if s.null == nil {
 		s.null = make(map[string]bool)
@@ -109,7 +116,7 @@ func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) 
 			s.fields[fields[i]] = val
 		}
 		if _, ok := s.comparisons[fields[i]]; !ok {
-			s.comparisons[fields[i]] = make(map[CompareOperator]utils.Value)
+			s.comparisons[fields[i]] = make(map[CompareOperator]any)
 		}
 		for _, cp := range []CompareOperator{
 			CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareGreaterThanOrEqual, CompareNot, CompareNotEqual} {
@@ -140,9 +147,9 @@ func (r *urlSearch) GetFieldNullables() (out map[string]bool) {
 	return r.null
 }
 
-func (r *urlSearch) GetFieldValues() (out map[string]utils.Value) {
+func (r *urlSearch) GetFieldValues() (out map[string]any) {
 	if len(r.fields) == 0 {
-		return map[string]utils.Value{}
+		return map[string]any{}
 	}
 	return r.fields
 }
@@ -154,24 +161,24 @@ func (r *urlSearch) GetFieldSort() (out map[string]SortType) {
 	return r.sort
 }
 
-func (r *urlSearch) GetFieldComparisons() (out map[string]map[CompareOperator]utils.Value) {
+func (r *urlSearch) GetFieldComparisons() (out map[string]map[CompareOperator]any) {
 	if len(r.comparisons) == 0 {
-		return map[string]map[CompareOperator]utils.Value{}
+		return map[string]map[CompareOperator]any{}
 	}
 	return r.comparisons
 }
 
-func (r *urlSearch) GetField(name string) (out utils.Value) {
+func (r *urlSearch) GetField(name string) (out any) {
 	return r.GetFieldValues()[name]
 }
 
-func (r *urlSearch) GetAnyQueryField(names ...string) (out utils.Value) {
+func (r *urlSearch) GetAnyQueryField(names ...string) (out any) {
 	if len(r.fields) == 0 {
 		return
 	}
 	for i := range names {
 		if val, ok := r.fields[names[i]]; ok {
-			return utils.Value(val)
+			return val
 		}
 	}
 	return
@@ -189,15 +196,35 @@ func (r *urlSearch) HasFieldParams() bool {
 	return len(r.fields)+len(r.sort)+len(r.comparisons) > 0
 }
 
-func WithField(param URLSearchParam, field string, val utils.Value) URLSearchParam {
-	search, ok := param.(*urlSearch)
-	if !ok {
-		return param
-	} else if search.fields == nil {
-		search.fields = make(map[string]utils.Value)
+func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchParam {
+	if len(fields) == 0 {
+		return r
 	}
-	search.fields[field] = val
-	return search
+	for _, f := range fields {
+		if v, ok := r.fields[f]; !ok {
+			continue
+		} else if s1, ok := v.(string); ok {
+			r.fields[f] = utils.Value(s1).Time(format)
+		} else if v1, ok := v.(utils.Value); ok {
+			r.fields[f] = v1.Time(format)
+		}
+	}
+	return r
+}
+
+func (r *urlSearch) WithField(field string, val any) URLSearchParam {
+	if r.fields == nil {
+		r.fields = make(map[string]any)
+	}
+	r.fields[field] = val
+	return r
+}
+
+func WithField(param URLSearchParam, field string, val any) URLSearchParam {
+	if search, ok := param.(*urlSearch); ok {
+		return search.WithField(field, val)
+	}
+	return param
 }
 
 func WithSort(param URLSearchParam, field string, sort SortType) URLSearchParam {
@@ -217,10 +244,10 @@ func WithComparison(param URLSearchParam, field string, operator CompareOperator
 		return param
 	}
 	if search.comparisons == nil {
-		search.comparisons = make(map[string]map[CompareOperator]utils.Value)
+		search.comparisons = make(map[string]map[CompareOperator]any)
 	}
 	if search.comparisons[field] == nil {
-		search.comparisons[field] = make(map[CompareOperator]utils.Value)
+		search.comparisons[field] = make(map[CompareOperator]any)
 	}
 	search.comparisons[field][operator] = val
 	return search
