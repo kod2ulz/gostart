@@ -29,6 +29,7 @@ type URLSearchParam interface {
 	HasComparison(field string, comparator CompareOperator) bool
 	WithField(field string, val any) URLSearchParam
 	WithTimeFormat(format string, fields ...string) URLSearchParam
+	WithComparison(field string, comparator CompareOperator, val any) URLSearchParam
 }
 
 type URLSearchLoader interface {
