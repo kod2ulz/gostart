@@ -126,3 +126,14 @@ func (l List[T]) Slice(from, to int) (out []T) {
 	
 	return l[from:to]
 }
+
+func (l List[T]) Copy() (out []T) {
+	if l.Empty() {
+		return l
+	} 
+	out = make([]T, l.Size())
+	for i := range l {
+		out[i] = l[i]
+	}
+	return 
+}
