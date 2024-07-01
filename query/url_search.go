@@ -25,6 +25,7 @@ type URLSearchParam interface {
 	GetLimit() int64
 	GetOffset() int64
 	HasFieldParams() bool
+	HasField(field string) bool
 	WithField(field string, val any) URLSearchParam
 	WithTimeFormat(format string, fields ...string) URLSearchParam
 }
@@ -194,6 +195,14 @@ func (r *urlSearch) GetOffset() int64 {
 
 func (r *urlSearch) HasFieldParams() bool {
 	return len(r.fields)+len(r.sort)+len(r.comparisons) > 0
+}
+
+func (r *urlSearch) HasField(field string) bool {
+	if !r.HasFieldParams() {
+		return false
+	}
+	_, ok := r.fields[field]
+	return ok 
 }
 
 func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchParam {
