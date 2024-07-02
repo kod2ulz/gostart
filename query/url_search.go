@@ -220,9 +220,6 @@ func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchPar
 		return r
 	}
 	for _, f := range fields {
-		if _, ok := r.fields[f]; !ok {
-			continue
-		}
 		r.replaceField(f, func(v any) any {
 			if s1, ok := v.(string); ok {
 				return utils.Value(s1).Time(format).UTC()
