@@ -27,6 +27,7 @@ type URLSearchParam interface {
 	HasFieldParams() bool
 	HasField(field string) bool
 	HasComparison(field string, comparator CompareOperator) bool
+	HasAnyComparison(field string, comparator ...CompareOperator) bool
 	WithField(field string, val any) URLSearchParam
 	WithTimeFormat(format string, fields ...string) URLSearchParam
 	WithComparison(field string, comparator CompareOperator, val any) URLSearchParam
@@ -209,9 +210,23 @@ func (r *urlSearch) HasField(field string) bool {
 
 func (r *urlSearch) HasComparison(field string, comparator CompareOperator) (ok bool) {
 	if _, ok = r.comparisons[field]; !ok {
-		return false
+		return
 	}
 	_, ok = r.comparisons[field][comparator]
+	return
+}
+
+func (r *urlSearch) HasAnyComparison(field string, comparators ...CompareOperator) (ok bool) {
+	if len(comparators) == 0 {
+		return
+	} else if _, ok = r.comparisons[field]; !ok {
+		return
+	}
+	for _, c := range comparators {
+		if _, ok = r.comparisons[field][c]; ok {
+			return
+		}
+	}
 	return
 }
 
