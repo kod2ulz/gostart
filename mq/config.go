@@ -109,9 +109,10 @@ func (c *Conf) ConnectionString() string {
 
 func (c *Conf) String() string {
 	return fmt.Sprintf(
-		"%s://%s:%s",
+		"%s://%s:%s/%s",
 		c.Protocol,
 		c.Host,
 		c.Port,
+		strings.Trim(c.Vhost, "/"),
 	)
 }
