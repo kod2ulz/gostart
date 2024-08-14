@@ -21,14 +21,14 @@ func (m Map[K, T]) Values() (out List[T]) {
 	return
 }
 
-func (m Map[K, T]) AnyOfKey(keys...K) (out T) {
+func (m Map[K, T]) AnyOfKey(keys ...K) (out T) {
 	if m.Empty() {
 		return out
 	}
 	for _, k := range keys {
 		if v, ok := m[k]; ok {
 			return v
-		} 
+		}
 	}
 	return
 }
@@ -49,6 +49,13 @@ func (m *Map[K, T]) Add(key K, value T) *Map[K, T] {
 	return m
 }
 
+func (m *Map[K, T]) Get(key K) *T {
+	if val, ok := (*m)[key]; ok {
+		return &val
+	}
+	return nil
+}
+
 func (m Map[K, T]) Map(fn func(K, T) (K, any, bool)) (out Map[K, any]) {
 	out = make(Map[K, any])
 	for k, v := range m {
@@ -59,7 +66,7 @@ func (m Map[K, T]) Map(fn func(K, T) (K, any, bool)) (out Map[K, any]) {
 			out[ko] = vo
 		}
 	}
-	return 
+	return
 }
 
 func (m Map[K, T]) HasKey(k K) (found bool) {
@@ -70,7 +77,9 @@ func (m Map[K, T]) HasKey(k K) (found bool) {
 	return
 }
 
-
+func (m Map[K, T]) Has(k K) (found bool) {
+	return m.HasKey(k)
+}
 
 func (m Map[K, T]) Merge(in map[K]T) Map[K, T] {
 	if len(in) == 0 {
@@ -84,20 +93,29 @@ func (m Map[K, T]) Merge(in map[K]T) Map[K, T] {
 	return m
 }
 
+func (m *Map[K, T]) Clear() {
+	if len(*m) == 0 {
+		return
+	}
+	for k := range *m {
+		delete(*m, k)
+	}
+}
+
 func MapOf[K comparable, V any](keyVal ...interface{}) (out Map[K, V]) {
 	if len(keyVal) == 0 {
-		return 
+		return
 	}
 	max := len(keyVal)
-	if max < 2{
+	if max < 2 {
 		return
-	} else 	if max == 2{
+	} else if max == 2 {
 		return Map[K, V]{keyVal[0].(K): keyVal[1].(V)}
 	} else if max%2 != 0 {
 		max--
 	}
 	out = make(Map[K, V])
-	for i := 0; i < max-1; i +=2 {
+	for i := 0; i < max-1; i += 2 {
 		out[keyVal[i].(K)] = keyVal[i+1].(V)
 	}
 
@@ -113,5 +131,5 @@ func ConvertMap[K1, K2 comparable, T1, T2 any](in map[K1]T1, cFn func(K1, T1) (K
 		k2, v2 := cFn(k, v)
 		out[k2] = v2
 	}
-	return 
+	return
 }
