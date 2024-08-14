@@ -68,6 +68,13 @@ func PointerTo[T any](t T) *T {
 	return &t
 }
 
+func PointerValue[T any](t *T) (out T) {
+	if t == nil {
+		return
+	}
+	return *t
+}
+
 type BatchProcessorFunc[T any, E error] func(context.Context, T) E
 
 func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor BatchProcessorFunc[T, E], args...T) (err E) {
