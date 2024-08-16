@@ -14,15 +14,26 @@ var (
 )
 
 type Cache[K comparable, T any, E error] interface {
-	// Get attempts to retrieve an object from the cache. will return nil if it's not found
+	// Get attempts to retrieve an object from the cache. 
+	// if the object is not hot (i.e. ttl expired) it will be loaded via the configured fetch method.
+	// nil is returned if the object ultimately cannot be set
 	Get(key K) *T
-	// Fetch Fetches objects matching keys from the backend storage into the cache, if they are not in the cache and not expired
+	// Fetch Fetches objects matching keys from the backend storage into the cache via the configured fetcher function.
+	// if they are not in the cache and not expired
+	// this is ideal for retrieving multiple objects at once
 	Fetch(ctx context.Context, keys ...K) (collections.List[T], E)
 	// Load Loads objects matching the keys into the cache. It will load all if keys are not specfied
+	// this is useful for seeding the cache 
 	Load(ctx context.Context, keys ...K) E
-
+	// Clear purges all objectsmatching the keys specified. if no keys are specified, the whole cache will be cleared
+	Clear(keys ...K) bool
+	// GetTTL returns the effective TTL value of the object. 
+	// these follow namespaces such that if parent.sub is specified
+	// then parent.sub.* will inherit the TTL value of parent.sub
 	GetTTL(key K) time.Duration
-
+	// SetTTL sets the TTL value of the object
+	// these follow namespaces such that if parent.sub is specified
+	// then parent.sub.* will inherit the TTL value of parent.sub
 	SetTTL(key K, ttl time.Duration)
 }
 
@@ -84,6 +95,7 @@ type cacheObject[K comparable, T CacheModel[K, T]] struct {
 
 func (o *cacheObject[K, T]) valid() bool { return o.expiry.After(time.Now()) }
 
+// NewCacheObject creates a thread-safe cache manager matching the cache interface
 func NewMemoryCache[K comparable, T CacheModel[K, T], E error](log *logr.Logger, opts ...cacheInitialiser[K, T, E]) (out *memoryCache[K, T, E]) {
 	out = &memoryCache[K, T, E]{
 		data:       collections.NewConcurrentMap[K, cacheObject[K, T]](),
@@ -157,6 +169,13 @@ func (c *memoryCache[K, T, E]) Get(key K) *T {
 	return nil
 }
 
+func (c *memoryCache[K, T, E]) Clear(keys... K) (ok bool) {
+	if c.data.Size() == 0 {
+		return false
+	} 
+	return c.data.Clear()
+}
+
 func (c *memoryCache[K, T, E]) SetTTL(key K, ttl time.Duration) {
 	switch k := any(key).(type) {
 	case string:
@@ -188,7 +207,7 @@ func (c *memoryCache[K, T, E]) Fetch(ctx context.Context, keys ...K) (out collec
 		}
 	}
 	c.data.AddMany(data...)
-	// todo: async job to remove stale/expired data
+	// todo: async job to eject stale/expired data from cache
 	return
 }
 

@@ -132,10 +132,10 @@ func (m *ConcurrentMap[K, T]) Merge(in map[K]T) Map[K, T] {
 	return m.data.Merge(in)
 }
 
-func (m *ConcurrentMap[K, T]) Clear() {
+func (m *ConcurrentMap[K, T]) Clear(keys ...K) (ok bool) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
-	m.data.Clear()
+	return m.data.Clear(keys...)
 }
 
 type KeyValue[K comparable, T any] struct {

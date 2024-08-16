@@ -100,6 +100,18 @@ func (l List[T]) Filter(filterFn func(i int, val T) bool) (out List[T]) {
 	return
 }
 
+func (l List[T]) Any(filterFn func(val T) bool) (out *T) {
+	if l.Empty() {
+		return nil
+	}
+	for i := range l {
+		if filterFn(l[i]) {
+			return &(l[i])
+		}
+	}
+	return
+}
+
 func (l List[T]) ForEach(fn func(i int, val T) T) (out []T) {
 	if l.Empty() {
 		return l
@@ -119,19 +131,19 @@ func (l List[T]) Slice(from, to int) (out []T) {
 	}
 	if from < 0 {
 		from = 0
-	} 
+	}
 	if to > l.Size() {
 		to = l.Size()
 	}
-	
+
 	return l[from:to]
 }
 
 func (l List[T]) Copy() (out []T) {
 	if l.Empty() {
 		return l
-	} 
+	}
 	out = make([]T, l.Size())
 	copy(out, l)
-	return 
+	return
 }

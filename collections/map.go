@@ -93,13 +93,21 @@ func (m Map[K, T]) Merge(in map[K]T) Map[K, T] {
 	return m
 }
 
-func (m *Map[K, T]) Clear() {
+func (m *Map[K, T]) Clear(keys ...K) (ok bool) {
 	if len(*m) == 0 {
 		return
 	}
-	for k := range *m {
+	if len(keys) == 0 {
+		for k := range *m {
+			delete(*m, k)
+		}
+		return true
+	}
+	ok = List[K](keys).Any(func(key K) bool { return m.HasKey(key) }) != nil
+	for _, k := range keys {
 		delete(*m, k)
 	}
+	return
 }
 
 func MapOf[K comparable, V any](keyVal ...interface{}) (out Map[K, V]) {
