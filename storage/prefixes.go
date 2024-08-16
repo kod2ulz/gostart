@@ -49,18 +49,18 @@ func (ts *Prefixes[T]) Set(key string, value T) (ok bool) {
 	var namespace = strings.Split(key, ts.delimiter)
 	var last = len(namespace) - 1
 	for i, k := range namespace {
-		if node.children[k] != nil {
+		if node.children != nil && node.children[k] != nil {
 			node = node.children[k]
 			continue
 		}
 		switch i {
 		case 0:
-			node.add(key, node.value)
+			node.add(k, node.value)
 		case last:
-			ok = node.add(key, value)
-			break
+			ok = node.add(k, value)
+			return
 		default:
-			node.add(key, node.value)
+			node.add(k, node.value)
 		}
 		node = node.children[k]
 	}
@@ -85,6 +85,7 @@ func (ts *Prefixes[T]) Get(key string) (out T) {
 		} else if i == last {
 			return n.value
 		}
+		node = node.children[k]
 	}
 	return node.value
 }

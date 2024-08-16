@@ -110,7 +110,7 @@ func (m *ConcurrentMap[K, T]) AddMany(kvs ...KeyValue[K, T]) {
 		return
 	}
 	for _, kv := range kvs {
-		m.Add(kv.Key, kv.Value)
+		m.data.Add(kv.Key, kv.Value)
 	}
 }
 

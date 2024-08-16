@@ -16,10 +16,14 @@ var (
 type Cache[K comparable, T any, E error] interface {
 	// Get attempts to retrieve an object from the cache. will return nil if it's not found
 	Get(key K) *T
-	// Fetches objects matching keys from the backend storage into the cache, if they are not in the cache and not expired
+	// Fetch Fetches objects matching keys from the backend storage into the cache, if they are not in the cache and not expired
 	Fetch(ctx context.Context, keys ...K) (collections.List[T], E)
-	// Loads objects matching the keys into the cache. It will load all if keys are not specfied
+	// Load Loads objects matching the keys into the cache. It will load all if keys are not specfied
 	Load(ctx context.Context, keys ...K) E
+
+	GetTTL(key K) time.Duration
+
+	SetTTL(key K, ttl time.Duration)
 }
 
 // type cacheInitialiser[K comparable, T any, E error] func(*memoryCache[K, T, cacheObject[K, T], E])
@@ -59,11 +63,11 @@ func WithTTLDelimiter[K comparable, T CacheModel[K, T], E error](delimeter strin
 	}
 }
 
-func WithDataFunc[K comparable, T CacheModel[K, T], E error](fetchFunc fetchCacheKeysFromStorageFunc[K, T, E]) cacheInitialiser[K, T, E] {
+func WithFetcherFunc[K comparable, T CacheModel[K, T], E error](fetchFunc fetchCacheKeysFromStorageFunc[K, T, E]) cacheInitialiser[K, T, E] {
 	return func(c Cache[K, T, E]) {
 		switch c := c.(type) {
 		case *memoryCache[K, T, E]:
-			c.fetchFn = fetchFunc
+			c.fetcher = fetchFunc
 		default:
 			panic("unsupported cache type")
 		}
@@ -89,7 +93,7 @@ func NewMemoryCache[K comparable, T CacheModel[K, T], E error](log *logr.Logger,
 	for _, opt := range opts {
 		opt(out)
 	}
-	if out.fetchFn == nil {
+	if out.fetcher == nil {
 		var t = new(T)
 		log.Fatalf("cache is unusable without a way to load %T objects into cache. Please initialise with option NewMemoryCache(WithDataFunc(<func>))", t)
 	}
@@ -105,7 +109,7 @@ type memoryCache[K comparable, T CacheModel[K, T], E error] struct {
 	allowStale bool
 	ttls       Prefixes[time.Duration]
 	data       collections.ConcurrentMap[K, cacheObject[K, T]]
-	fetchFn    fetchCacheKeysFromStorageFunc[K, T, E]
+	fetcher    fetchCacheKeysFromStorageFunc[K, T, E]
 
 	ttl       time.Duration
 	delimiter string
@@ -163,15 +167,19 @@ func (c *memoryCache[K, T, E]) SetTTL(key K, ttl time.Duration) {
 }
 
 func (c *memoryCache[K, T, E]) Fetch(ctx context.Context, keys ...K) (out collections.List[T], err E) {
-	var res = make(collections.List[T], 0)
-	if len(keys) > 0 && len(c.absent(keys...)) == 0 {
-		return
-	} else if res, err = c.fetchFn(ctx, keys); any(err) != nil {
+	var now time.Time
+	var absent, res = collections.List[K]{}, collections.List[T]{}
+	var data []collections.KeyValue[K, cacheObject[K, T]]
+	if len(keys) == 0 {
+		res, err = c.fetcher(ctx, keys)
+	} else if absent = c.absent(keys...); len(absent) > 0 {
+		res, err = c.fetcher(ctx, absent)
+	}
+	if any(err) != nil {
 		return
 	}
-	var now = time.Now()
-	var data = make([]collections.KeyValue[K, cacheObject[K, T]], len(res))
 	out = make(collections.List[T], len(res))
+	now, data = time.Now(), make([]collections.KeyValue[K, cacheObject[K, T]], len(res))
 	for i, st := range res {
 		out[i], data[i] = st, collections.KeyValue[K, cacheObject[K, T]]{
 			Key: st.Key(), Value: cacheObject[K, T]{
