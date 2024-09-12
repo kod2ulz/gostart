@@ -13,7 +13,7 @@ func WithUser[TokenRequest RequestParam, UserResponse, TokenResponse any](svc Se
 		var loadError Error
 		var req TokenRequest
 		if req, loadError = loadParamFromRequest[TokenRequest](c); loadError != nil {
-			c.AbortWithStatusJSON(loadError.http(), ErrorResponse[TokenRequest](loadError))
+			c.AbortWithStatusJSON(loadError.HttpCode(), ErrorResponse[TokenRequest](loadError))
 		} else if validationError := req.Validate(c); loadError != nil {
 			e := ServiceErrorUnauthorised(validationError).(*ErrorModel[UserResponse])
 			c.AbortWithStatusJSON(e.Http, ErrorResponse[UserResponse](e))

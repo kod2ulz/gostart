@@ -66,12 +66,12 @@ func serviceHandlerWithParam[P RequestParam, T any](serviceFunc func(context.Con
 		var err Error
 		var param P
 		if param, err = loadParamFromRequest[P](ctx); err != nil {
-			ctx.JSON(err.http(), ErrorResponse[P](err))
+			ctx.JSON(err.HttpCode(), ErrorResponse[P](err))
 			return
 		}
 		ctx.Set(param.ContextKey(), param)
 		if out, err := serviceFunc(ctx); err != nil {
-			ctx.JSON(err.http(), err)
+			ctx.JSON(err.HttpCode(), err)
 		} else {
 			successHandler(ctx, param, out)
 		}
@@ -97,7 +97,7 @@ func genericHandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.Ha
 		var err Error
 		var param P
 		if param, err = loadParamFromRequest[P](ctx); err != nil {
-			ctx.JSON(err.http(), ErrorResponse[P](err))
+			ctx.JSON(err.HttpCode(), ErrorResponse[P](err))
 			return
 		}
 		ctx.Set(param.ContextKey(), param)

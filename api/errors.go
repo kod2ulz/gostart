@@ -25,11 +25,11 @@ var (
 
 type Error interface {
 	error
-	http() int
+	HttpCode() int
 	WithErrorCode(code string) (out Error)
 	WithHttpStatusCode(code int) (out Error)
 	WithErrorCodeAndHttpStatusCode(errorCode string, statusCode int) (out Error)
-	WithMessage(message string, opts...any) (out Error)
+	WithMessage(message string, opts ...any) (out Error)
 	WithError(err error) (out Error)
 	WithCause(err Error) (out Error)
 	Response() interface{}
@@ -46,7 +46,7 @@ type ErrorModel[T any] struct {
 	Cause   Error             `json:"cause,omitempty"`
 }
 
-func (e *ErrorModel[T]) http() int {
+func (e *ErrorModel[T]) HttpCode() int {
 	return e.Http
 }
 
@@ -68,7 +68,7 @@ func (e *ErrorModel[T]) WithErrorCodeAndHttpStatusCode(errorCode string, statusC
 	return e.WithErrorCode(errorCode).WithHttpStatusCode(statusCode)
 }
 
-func (e *ErrorModel[T]) WithMessage(message string, opts...any) (out Error) {
+func (e *ErrorModel[T]) WithMessage(message string, opts ...any) (out Error) {
 	e.Message = fmt.Sprintf(message, opts...)
 	return e
 }
