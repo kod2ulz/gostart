@@ -104,3 +104,50 @@ func genericHandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.Ha
 		serviceFunc(ctx)
 	}
 }
+
+/*   --  support for request unpacked from context --- */
+
+type RequestConsumerWithResponseFunc[R RequestParam, T any] func(context.Context, R) (T, Error)
+
+type RequestConsumerWithListResponseFunc[R RequestParam, T any] func(context.Context, R) ([]T, Error)
+
+
+func requestHandlerWithParam[R RequestParam, T any](serviceFunc func(context.Context, R) (T, Error), onSuccess func(*gin.Context, R, T)) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		var err Error
+		var param R
+		if param, err = loadParamFromRequest[R](ctx); err != nil {
+			ctx.JSON(err.HttpCode(), ErrorResponse[R](err))
+			return
+		}
+		ctx.Set(param.ContextKey(), param)
+		if out, err := serviceFunc(ctx, param); err != nil {
+			ctx.JSON(err.HttpCode(), err)
+		} else {
+			onSuccess(ctx, param, out)
+		}
+	}
+}
+
+func RequestHandlerWithResponse[R RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T]) gin.HandlerFunc {
+	return requestHandlerWithParam(serviceFunc, func(ctx *gin.Context, param R, out T) {
+		refs := map[string]any{}
+		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
+			refs, _ = val.(map[string]any)
+		}
+		ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
+	})
+}
+
+func RequestHandlerWithListResponse[R RequestParam, T any](serviceFunc RequestConsumerWithListResponseFunc[R, T]) gin.HandlerFunc {
+	return requestHandlerWithParam(serviceFunc, func(ctx *gin.Context, param R, res []T) {
+		meta, refs := &Metadata{}, map[string]any{}
+		if val, ok := ctx.Get(param.MetadataContextKey()); ok {
+			meta, _ = val.(*Metadata)
+		}
+		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
+			refs, _ = val.(map[string]any)
+		}
+		ctx.JSON(http.StatusOK, ListResponse(res, *meta).WithReferences(refs))
+	})
+}
