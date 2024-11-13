@@ -7,7 +7,7 @@ import (
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type ExchangePublisherFunc func(data []byte, routingKey string, mime ...string) error

@@ -8,7 +8,7 @@ import (
 
 	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // InitFunc is a function that is used to initialise something.

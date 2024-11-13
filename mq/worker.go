@@ -9,7 +9,7 @@ import (
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type WorkerInitFunc func() error
@@ -50,21 +50,21 @@ func InitWorker[P, R any](ctx context.Context, log *logr.Logger, exchange Exchan
 }
 
 func InitWorkerStrict[P, R any](
-	ctx context.Context, log *logr.Logger, exchange Exchange[amqp.Delivery], queue string, bindingKey string, 
+	ctx context.Context, log *logr.Logger, exchange Exchange[amqp.Delivery], queue string, bindingKey string,
 	errorFunc WorkerErrorFunc[P], processorFunc WorkerProcessorFunc[P, R]) (out *worker[P, R], err error) {
 	wctx, cancel := context.WithCancel(ctx)
 	out = &worker[P, R]{
 		log: log, ctx: wctx, cancel: cancel,
-		queue:    queue,
-		bindkeys: []string{bindingKey},
-		exchange: exchange,
-		errorFunc: errorFunc,
+		queue:         queue,
+		bindkeys:      []string{bindingKey},
+		exchange:      exchange,
+		errorFunc:     errorFunc,
 		processorFunc: processorFunc,
 	}
 	err = out.start()
 	log.WithFields(logrus.Fields{
-		"exchange": exchange.Name(), "routingKeys": out.bindkeys, 
-		"processFn": out.ProcessFn(), "errorFn": out.ErrorFn(), 
+		"exchange": exchange.Name(), "routingKeys": out.bindkeys,
+		"processFn": out.ProcessFn(), "errorFn": out.ErrorFn(),
 	}).Debugf("initialised worker with processor: %T", processorFunc)
 	return
 }
@@ -194,10 +194,10 @@ func (w *worker[P, R]) ErrorFn() string {
 	return fmt.Sprintf("%T", w.errorFunc)
 }
 
-func (w *worker[P, R]) WithErrorFunc(fn WorkerErrorFunc[P])  {
+func (w *worker[P, R]) WithErrorFunc(fn WorkerErrorFunc[P]) {
 	w.errorFunc = fn
 }
 
-func (w *worker[P, R]) WithProcessorFunc(fn WorkerProcessorFunc[P, R])  {
+func (w *worker[P, R]) WithProcessorFunc(fn WorkerProcessorFunc[P, R]) {
 	w.processorFunc = fn
 }
