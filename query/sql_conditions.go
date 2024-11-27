@@ -20,6 +20,7 @@ const (
 	CompareNil                CompareOperator = "nil"
 	CompareLike               CompareOperator = "lyk"
 	CompareIn                 CompareOperator = "in"
+	CompareBetween            CompareOperator = "bt"
 	CompareRaw                CompareOperator = "-"
 )
 
@@ -45,6 +46,12 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 			args[i] = ARG_PLACEHOLDER
 		}
 		return field + " in (" + strings.Join(args, ",") + ")"
+	case CompareBetween:
+		args := make([]string, 2)
+		for i := 0; i < argCount; i++ {
+			args[i] = ARG_PLACEHOLDER
+		}
+		return field + " between " + strings.Join(args, " and ")
 	default:
 		return field + " " + string(op) + " " + ARG_PLACEHOLDER
 	}
@@ -131,6 +138,9 @@ func GreaterThanOrEqual(field string, value interface{}) Condition {
 }
 func In[T any](field string, values ...T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, values))
+}
+func Between[T any](field string, low, high T) Condition {
+	return Condition(doLeafCompare(CompareIn, field, []T{low, high}))
 }
 
 // func Raw(queryStr string) Condition {
