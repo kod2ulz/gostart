@@ -26,17 +26,17 @@ const (
 func (op CompareOperator) Eval(field string, argCount int) string {
 	switch op {
 	case CompareEqual:
-		return field + "=" + ARG_PLACEHOLDER
+		return field + " = " + ARG_PLACEHOLDER
 	case CompareGreaterThan:
-		return field + ">" + ARG_PLACEHOLDER
+		return field + " > " + ARG_PLACEHOLDER
 	case CompareLessThan:
-		return field + "<" + ARG_PLACEHOLDER
+		return field + " < " + ARG_PLACEHOLDER
 	case CompareGreaterThanOrEqual:
-		return field + ">=" + ARG_PLACEHOLDER
+		return field + " >= " + ARG_PLACEHOLDER
 	case CompareLessThanOrEqual:
-		return field + "<=" + ARG_PLACEHOLDER
+		return field + " <= " + ARG_PLACEHOLDER
 	case CompareNot, CompareNotEqual:
-		return field + "!=" + ARG_PLACEHOLDER
+		return field + " != " + ARG_PLACEHOLDER
 	case CompareLike:
 		return field + " " + SELECT_LIKE + " " + ARG_PLACEHOLDER
 	case CompareIn:
@@ -132,6 +132,7 @@ func GreaterThanOrEqual(field string, value interface{}) Condition {
 func In[T any](field string, values ...T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, values))
 }
+
 // func Raw(queryStr string) Condition {
 // 	return Condition(doLeafCompare(CompareIn, field, values))
 // }
