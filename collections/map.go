@@ -93,6 +93,19 @@ func (m Map[K, T]) Merge(in map[K]T) Map[K, T] {
 	return m
 }
 
+func (m Map[K, T]) Filter(fn func(k K, v T) bool) (out Map[K, T]) {
+	if len(m) == 0 {
+		m = Map[K, T]{}
+	}
+	out = make(Map[K, T])
+	for k, v := range m {
+		if fn(k, v) {
+			out[k] = v
+		} 
+	}
+	return
+}
+
 func (m *Map[K, T]) Clear(keys ...K) (ok bool) {
 	if len(*m) == 0 {
 		return
