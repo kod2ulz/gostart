@@ -235,10 +235,25 @@ func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchPar
 		return r
 	}
 	for _, f := range fields {
+		if _, ok := r.comparisons[f]; ok {
+			if _, ok = r.comparisons[f][CompareLike]; ok {
+				delete(r.comparisons[f], CompareLike)
+			}
+		}
 		r.replaceField(f, func(v any) any {
 			if s1, ok := v.(string); ok {
+				if _, ok := r.comparisons[f]; ok {
+					if _, ok = r.comparisons[f][CompareLike]; ok {
+						r.comparisons[f][CompareEqual] = utils.Value(s1).Time(format).UTC()
+					}
+				}
 				return utils.Value(s1).Time(format).UTC()
 			} else if v1, ok := v.(utils.Value); ok {
+				if _, ok := r.comparisons[f]; ok {
+					if _, ok = r.comparisons[f][CompareLike]; ok {
+						r.comparisons[f][CompareEqual] = v1.Time(format).UTC()
+					}
+				}
 				return v1.Time(format).UTC()
 			}
 			return v
