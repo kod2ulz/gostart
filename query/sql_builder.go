@@ -74,6 +74,8 @@ func (sb *SqlBuild[T]) Offset(offset int64) *SqlBuild[T] {
 func (sb *SqlBuild[T]) Order(orders ...SortFunc) *SqlBuild[T] {
 	if len(orders) == 0 {
 		return sb
+	} else if orders[0] == nil {
+		sb.orderBy = make([]string, 0)
 	}
 	for i := range orders {
 		orders[i](sb)
