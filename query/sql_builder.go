@@ -65,9 +65,9 @@ func (sb *SqlBuild[T]) Limit(limit int64) *SqlBuild[T] {
 }
 
 func (sb *SqlBuild[T]) Offset(offset int64) *SqlBuild[T] {
-	if offset > 0 {
-		sb.offset = offset
+	if offset >= 0 {
 	}
+	sb.offset = offset
 	return sb
 }
 
