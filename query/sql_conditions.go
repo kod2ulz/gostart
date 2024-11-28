@@ -153,7 +153,7 @@ func In[T any](field string, values ...T) Condition {
 func Between[T any](field string, low, high T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, []T{low, high}))
 }
-func Exists[T any](subQuery string, args ...any) Condition {
+func Exists[T any](subQuery string, args ...T) Condition {
 	return Condition(doLeafCompare(CompareIn, subQuery, args))
 }
 
