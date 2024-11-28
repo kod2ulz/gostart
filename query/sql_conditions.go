@@ -21,6 +21,7 @@ const (
 	CompareLike               CompareOperator = "lyk"
 	CompareIn                 CompareOperator = "in"
 	CompareBetween            CompareOperator = "bt"
+	CompareExists             CompareOperator = "exz"
 	CompareRaw                CompareOperator = "-"
 )
 
@@ -52,6 +53,12 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 			args[i] = ARG_PLACEHOLDER
 		}
 		return field + " between " + strings.Join(args, " and ")
+	case CompareExists:
+		args := make([]string, argCount)
+		for i := 0; i < argCount; i++ {
+			args[i] = ARG_PLACEHOLDER
+		}
+		return field + " exists (" + field + ")"
 	default:
 		return field + " " + string(op) + " " + ARG_PLACEHOLDER
 	}
@@ -141,6 +148,9 @@ func In[T any](field string, values ...T) Condition {
 }
 func Between[T any](field string, low, high T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, []T{low, high}))
+}
+func Exists[T any](subQuery string, args ...any) Condition {
+	return Condition(doLeafCompare(CompareIn, subQuery, args))
 }
 
 // func Raw(queryStr string) Condition {
