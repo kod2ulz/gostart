@@ -60,9 +60,9 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 		}
 		queryString := field
 		if len(args) == 0 {
-			return " exists (" + queryString + ")"
+			return "exists (" + queryString + ")"
 		}
-		return " exists (" + strings.Replace(queryString, "<?>", strings.Join(args, ","), 1) + ")"
+		return "exists (" + strings.Replace(queryString, "<?>", strings.Join(args, ","), 1) + ")"
 	default:
 		return field + " " + string(op) + " " + ARG_PLACEHOLDER
 	}
@@ -151,7 +151,7 @@ func In[T any](field string, values ...T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, values))
 }
 func Between[T any](field string, low, high T) Condition {
-	return Condition(doLeafCompare(CompareIn, field, []T{low, high}))
+	return Condition(doLeafCompare(CompareBetween, field, []T{low, high}))
 }
 func Exists[T any](subQuery string, args ...T) Condition {
 	return Condition(doLeafCompare(CompareExists, subQuery, args))
