@@ -269,9 +269,10 @@ func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interf
 		}
 		return
 	}
-	if wc.operator == CompareIn {
+	switch wc.operator{
+	case CompareIn, CompareBetween:
 		utils.StructCopy(wc.value, &args)
-	} else {
+	default:
 		args = []interface{}{wc.value}
 	}
 	sb.WriteString(wc.operator.Eval(wc.field, len(args)))
