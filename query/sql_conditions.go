@@ -48,11 +48,7 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 		}
 		return field + " in (" + strings.Join(args, ",") + ")"
 	case CompareBetween:
-		args := make([]string, 2)
-		for i := 0; i < argCount; i++ {
-			args[i] = ARG_PLACEHOLDER
-		}
-		return field + " between " + strings.Join(args, " and ")
+		return field + " between " + fmt.Sprintf("%s and %s", ARG_PLACEHOLDER, ARG_PLACEHOLDER)
 	case CompareExists:
 		args := make([]string, argCount)
 		for i := 0; i < argCount; i++ {
