@@ -31,7 +31,7 @@ func Desc(fields ...string) SortFunc {
 	return func(sc SortConsumer) { sc.addFieldSort(SortDesc, fields...) }
 }
 
-func Reset() SortFunc {
+func NoSort() SortFunc {
 	return func(sc SortConsumer) { sc.addFieldSort(SortReset) }
 }
 

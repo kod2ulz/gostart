@@ -46,6 +46,7 @@ type SqlBuild[T any] struct {
 	count        bool
 	rowScanner   RowScanFunc[T]
 	where        *WhereCriteria
+	noSort       bool
 	dbtx         sqlc.DBTX
 }
 
@@ -74,7 +75,7 @@ func (sb *SqlBuild[T]) Offset(offset int64) *SqlBuild[T] {
 func (sb *SqlBuild[T]) Order(orders ...SortFunc) *SqlBuild[T] {
 	if len(orders) == 0 {
 		return sb
-	} 
+	}
 	for i := range orders {
 		orders[i](sb)
 	}
@@ -164,7 +165,7 @@ func (sb *SqlBuild[T]) selectQueryString(relation string, fields []string, where
 	if where.Len() > 0 {
 		query.WriteString(" where " + where.String())
 	}
-	if len(sb.groupBy) > 0 {
+	if len(sb.groupBy) > 0 && !sb.noSort {
 		query.WriteString(" group by " + strings.Join(sb.groupBy, ", "))
 	}
 	if len(sb.orderBy) > 0 {
@@ -180,11 +181,13 @@ func (sb *SqlBuild[T]) selectQueryString(relation string, fields []string, where
 }
 
 func (sb *SqlBuild[T]) addFieldSort(sort SortType, fields ...string) {
-	if len(fields) == 0 {
+	if len(fields) == 0 || sb.noSort {
 		return
 	}
 	if sort == SortReset {
 		sb.orderBy = make([]string, 0)
+		sb.noSort = true
+		return
 	}
 	for i := range fields {
 		sb.orderBy = append(sb.orderBy, fields[i]+" "+string(sort))
