@@ -58,7 +58,11 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 		for i := 0; i < argCount; i++ {
 			args[i] = ARG_PLACEHOLDER
 		}
-		return field + " exists (" + field + ")"
+		queryString := field
+		if len(args) == 0 {
+			return " exists (" + queryString + ")"
+		}
+		return " exists (" + strings.Replace(queryString, "<?>", strings.Join(args, ","), 1) + ")"
 	default:
 		return field + " " + string(op) + " " + ARG_PLACEHOLDER
 	}
