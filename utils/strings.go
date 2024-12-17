@@ -106,3 +106,26 @@ func (u strUtils) Random(n int) (out string) {
 
 	return *(*string)(unsafe.Pointer(&b))
 }
+
+func (u strUtils) OmitEmpty(elems ...string) (out []string) {
+	if len(elems) == 0 {
+		return
+	}
+	out = make([]string, 0)
+	for i := range elems {
+		if o := strings.Trim(elems[i], " "); o != "" {
+			out = append(out, o)
+		}
+	}
+	return
+}
+
+func (u strUtils) Join(sep string, elems ...string) (out string) {
+	elems = u.OmitEmpty(elems...)
+	if len(elems) == 0 {
+		return
+	} else if sep == "" {
+		return elems[0]
+	}
+	return strings.Join(elems, sep)
+}
