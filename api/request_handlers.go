@@ -127,9 +127,9 @@ func fileRequestHandler[P RequestParam](ctx *gin.Context, param P, out FileRespo
 		ctx.Header("Accept-Length", fmt.Sprint(len(out.Data)))
 	}
 	ctx.Writer.Write(out.Data)
-	ctx.JSON(http.StatusOK, DataResponse(gin.H{
-		"msg": "File downloaded successfully",
-	}).WithReferences(refs))
+	// ctx.JSON(http.StatusOK, DataResponse(gin.H{
+	// 	"msg": "File downloaded successfully",
+	// }).WithReferences(refs))
 }
 
 /*   --  support for request unpacked from context --- */
