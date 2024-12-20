@@ -47,6 +47,7 @@ type SqlBuild[T any] struct {
 	rowScanner   RowScanFunc[T]
 	where        *WhereCriteria
 	noSort       bool
+	noLimit       bool
 	dbtx         sqlc.DBTX
 }
 
@@ -60,14 +61,19 @@ func (sb *SqlBuild[T]) Count(fields ...string) *SqlBuild[T] {
 
 func (sb *SqlBuild[T]) Limit(limit int64) *SqlBuild[T] {
 	if limit > 0 {
+		sb.noLimit = false
 		sb.limit = limit
 	}
 	return sb
 }
 
+func (sb *SqlBuild[T]) NoLimit() *SqlBuild[T] {
+	sb.noLimit = true
+	return sb
+}
+
 func (sb *SqlBuild[T]) Offset(offset int64) *SqlBuild[T] {
-	if offset >= 0 {
-	}
+	sb.noLimit = false
 	sb.offset = offset
 	return sb
 }
@@ -171,10 +177,10 @@ func (sb *SqlBuild[T]) selectQueryString(relation string, fields []string, where
 	if len(sb.orderBy) > 0 {
 		query.WriteString(" order by " + strings.Join(sb.orderBy, ", "))
 	}
-	if sb.limit > 0 {
+	if !sb.noLimit && sb.limit > 0 {
 		query.WriteString(" limit " + fmt.Sprint(sb.limit))
 	}
-	if sb.offset > 0 {
+	if !sb.noLimit && sb.offset > 0 {
 		query.WriteString(" offset " + fmt.Sprint(sb.offset))
 	}
 	return query.String()
@@ -185,8 +191,7 @@ func (sb *SqlBuild[T]) addFieldSort(sort SortType, fields ...string) {
 		return
 	}
 	if sort == SortReset {
-		sb.orderBy = make([]string, 0)
-		sb.noSort = true
+		sb.orderBy, sb.noSort = make([]string, 0), true
 		return
 	}
 	for i := range fields {
