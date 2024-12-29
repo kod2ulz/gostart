@@ -1,6 +1,7 @@
 package collections
 
 import (
+	"slices"
 	"sort"
 )
 
@@ -69,6 +70,13 @@ func (l List[T]) Sort(lessFn func(t1, t2 T) bool) (out []T) {
 		return lessFn(out[i], out[j])
 	})
 	return
+}
+
+func (l List[T]) SortStable(comp func(t1, t2 T) int)  {
+	if l.Empty() {
+		return 
+	}
+	slices.SortStableFunc(l, comp)
 }
 
 func (l List[T]) Iterator() Iterator[T] {
