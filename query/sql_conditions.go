@@ -40,6 +40,8 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 		return field + " <= " + ARG_PLACEHOLDER
 	case CompareNot, CompareNotEqual:
 		return field + " != " + ARG_PLACEHOLDER
+	case CompareNil:
+		return field + " is null"
 	case CompareLike:
 		return field + " " + SELECT_LIKE + " " + ARG_PLACEHOLDER
 	case CompareIn:
