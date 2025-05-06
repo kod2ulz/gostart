@@ -23,8 +23,8 @@ var (
 
 type RowScanFunc[T any] func(pgx.Rows) (T, error)
 
-func SQLBuilder[T any](dbtx sqlc.DBTX, rowScanner RowScanFunc[T]) *sqlBuilder[T] {
-	return &sqlBuilder[T]{
+func SQLBuilder[T any](dbtx sqlc.DBTX, rowScanner RowScanFunc[T]) *SqlBuild[T] {
+	return &SqlBuild[T]{
 		selectFields: SELECT_FIELDS,
 		countFields:  SELECT_COUNT_FIELDS,
 		orderBy:      []string{},
@@ -36,7 +36,7 @@ func SQLBuilder[T any](dbtx sqlc.DBTX, rowScanner RowScanFunc[T]) *sqlBuilder[T]
 	}
 }
 
-type sqlBuilder[T any] struct {
+type SqlBuild[T any] struct {
 	selectFields []string
 	countFields  []string
 	groupBy      []string
@@ -46,10 +46,12 @@ type sqlBuilder[T any] struct {
 	count        bool
 	rowScanner   RowScanFunc[T]
 	where        *WhereCriteria
+	noSort       bool
+	noLimit       bool
 	dbtx         sqlc.DBTX
 }
 
-func (sb *sqlBuilder[T]) Count(fields ...string) *sqlBuilder[T] {
+func (sb *SqlBuild[T]) Count(fields ...string) *SqlBuild[T] {
 	if len(fields) > 0 {
 		sb.countFields = fields
 	}
@@ -57,21 +59,26 @@ func (sb *sqlBuilder[T]) Count(fields ...string) *sqlBuilder[T] {
 	return sb
 }
 
-func (sb *sqlBuilder[T]) Limit(limit int64) *sqlBuilder[T] {
+func (sb *SqlBuild[T]) Limit(limit int64) *SqlBuild[T] {
 	if limit > 0 {
+		sb.noLimit = false
 		sb.limit = limit
 	}
 	return sb
 }
 
-func (sb *sqlBuilder[T]) Offset(offset int64) *sqlBuilder[T] {
-	if offset > 0 {
-		sb.offset = offset
-	}
+func (sb *SqlBuild[T]) NoLimit() *SqlBuild[T] {
+	sb.noLimit = true
 	return sb
 }
 
-func (sb *sqlBuilder[T]) Order(orders ...SortFunc) *sqlBuilder[T] {
+func (sb *SqlBuild[T]) Offset(offset int64) *SqlBuild[T] {
+	sb.noLimit = false
+	sb.offset = offset
+	return sb
+}
+
+func (sb *SqlBuild[T]) Order(orders ...SortFunc) *SqlBuild[T] {
 	if len(orders) == 0 {
 		return sb
 	}
@@ -81,7 +88,7 @@ func (sb *sqlBuilder[T]) Order(orders ...SortFunc) *sqlBuilder[T] {
 	return sb
 }
 
-func (sb *sqlBuilder[T]) Group(groups ...string) *sqlBuilder[T] {
+func (sb *SqlBuild[T]) Group(groups ...string) *SqlBuild[T] {
 	if len(groups) == 0 {
 		return sb
 	} else if sb.groupBy == nil {
@@ -91,11 +98,11 @@ func (sb *sqlBuilder[T]) Group(groups ...string) *sqlBuilder[T] {
 	return sb
 }
 
-func (sb *sqlBuilder[T]) FromUrlParams(p URLSearchParam) *sqlBuilder[T] {
+func (sb *SqlBuild[T]) FromUrlParams(p URLSearchParam) *SqlBuild[T] {
 	return sb.Where(UrlFieldParams(p)).Order(UrlFieldSort(p)).Limit(p.GetLimit()).Offset(p.GetOffset()).Count()
 }
 
-func (sb *sqlBuilder[T]) Where(conditions ...Condition) *sqlBuilder[T] {
+func (sb *SqlBuild[T]) Where(conditions ...Condition) *SqlBuild[T] {
 	if len(conditions) == 0 {
 		return sb
 	}
@@ -106,14 +113,24 @@ func (sb *sqlBuilder[T]) Where(conditions ...Condition) *sqlBuilder[T] {
 	return sb
 }
 
-func (sb *sqlBuilder[T]) Criteria() (b strings.Builder, args []interface{}) {
+func (sb *SqlBuild[T]) Criteria() (b strings.Builder, args []interface{}) {
 	if sb.where != nil {
 		return sb.where.Build(true)
 	}
 	return
 }
 
-func (sb *sqlBuilder[T]) Select(ctx context.Context, relation string, fields ...string) (count int64, out []T, err error) {
+func (sb *SqlBuild[T]) SelectQueryPreview(relation string, fields ...string) (out string, args []any) {
+	var where strings.Builder
+	if len(fields) > 0 {
+		sb.selectFields = fields
+	}
+	where, args = sb.Criteria()
+	out = sb.selectQueryString(relation, sb.selectFields, where)
+	return
+}
+
+func (sb *SqlBuild[T]) Select(ctx context.Context, relation string, fields ...string) (count int64, out []T, err error) {
 	var rows pgx.Rows
 	if sb.rowScanner == nil {
 		return 0, nil, errors.New("rowScanner func was undefined")
@@ -148,29 +165,33 @@ func (sb *sqlBuilder[T]) Select(ctx context.Context, relation string, fields ...
 	return
 }
 
-func (sb *sqlBuilder[T]) selectQueryString(relation string, fields []string, where strings.Builder) string {
+func (sb *SqlBuild[T]) selectQueryString(relation string, fields []string, where strings.Builder) string {
 	var query strings.Builder
 	query.WriteString(fmt.Sprintf("select %s from %s", strings.Join(fields, ", "), relation))
 	if where.Len() > 0 {
 		query.WriteString(" where " + where.String())
 	}
-	if len(sb.groupBy) > 0 {
+	if len(sb.groupBy) > 0 && !sb.noSort {
 		query.WriteString(" group by " + strings.Join(sb.groupBy, ", "))
 	}
 	if len(sb.orderBy) > 0 {
 		query.WriteString(" order by " + strings.Join(sb.orderBy, ", "))
 	}
-	if sb.limit > 0 {
+	if !sb.noLimit && sb.limit > 0 {
 		query.WriteString(" limit " + fmt.Sprint(sb.limit))
 	}
-	if sb.offset > 0 {
+	if !sb.noLimit && sb.offset > 0 {
 		query.WriteString(" offset " + fmt.Sprint(sb.offset))
 	}
 	return query.String()
 }
 
-func (sb *sqlBuilder[T]) addFieldSort(sort SortType, fields ...string) {
-	if len(fields) == 0 {
+func (sb *SqlBuild[T]) addFieldSort(sort SortType, fields ...string) {
+	if len(fields) == 0 || sb.noSort {
+		return
+	}
+	if sort == SortReset {
+		sb.orderBy, sb.noSort = make([]string, 0), true
 		return
 	}
 	for i := range fields {
@@ -178,7 +199,7 @@ func (sb *sqlBuilder[T]) addFieldSort(sort SortType, fields ...string) {
 	}
 }
 
-func (sb *sqlBuilder[T]) getCriteriaRoot(constraint Constraint) (out *WhereCriteria) {
+func (sb *SqlBuild[T]) getCriteriaRoot(constraint Constraint) (out *WhereCriteria) {
 	if sb.where == nil {
 		sb.where = &WhereCriteria{criteria: make(map[Constraint][]*WhereCriteria)}
 	}

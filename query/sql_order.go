@@ -3,8 +3,9 @@ package query
 type SortType string
 
 const (
-	SortAsc  SortType = "asc"
-	SortDesc SortType = "desc"
+	SortAsc   SortType = "asc"
+	SortDesc  SortType = "desc"
+	SortReset SortType = "clear"
 )
 
 func sortTypeValid(str string) bool {
@@ -28,6 +29,10 @@ func Asc(fields ...string) SortFunc {
 
 func Desc(fields ...string) SortFunc {
 	return func(sc SortConsumer) { sc.addFieldSort(SortDesc, fields...) }
+}
+
+func NoSort() SortFunc {
+	return func(sc SortConsumer) { sc.addFieldSort(SortReset) }
 }
 
 func UrlFieldSort(p URLSearchParam) SortFunc {

@@ -98,20 +98,21 @@ func Config(prefix ...string) *Conf {
 
 func (c *Conf) ConnectionString() string {
 	return fmt.Sprintf(
-		"%s://%s:%s@%s:%s/",
+		"%s://%s:%s@%s:%s/%s",
 		c.Protocol,
 		c.Username,
 		c.Password,
 		c.Host,
 		c.Port,
-	)
+		strings.Trim(c.Vhost, "/"))
 }
 
 func (c *Conf) String() string {
 	return fmt.Sprintf(
-		"%s://%s:%s",
+		"%s://%s:%s/%s",
 		c.Protocol,
 		c.Host,
 		c.Port,
+		strings.Trim(c.Vhost, "/"),
 	)
 }

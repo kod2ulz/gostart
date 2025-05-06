@@ -20,23 +20,28 @@ const (
 	CompareNil                CompareOperator = "nil"
 	CompareLike               CompareOperator = "lyk"
 	CompareIn                 CompareOperator = "in"
+	CompareAny                 CompareOperator = "any"
+	CompareBetween            CompareOperator = "bt"
+	CompareExists             CompareOperator = "exz"
 	CompareRaw                CompareOperator = "-"
 )
 
 func (op CompareOperator) Eval(field string, argCount int) string {
 	switch op {
 	case CompareEqual:
-		return field + "=" + ARG_PLACEHOLDER
+		return field + " = " + ARG_PLACEHOLDER
 	case CompareGreaterThan:
-		return field + ">" + ARG_PLACEHOLDER
+		return field + " > " + ARG_PLACEHOLDER
 	case CompareLessThan:
-		return field + "<" + ARG_PLACEHOLDER
+		return field + " < " + ARG_PLACEHOLDER
 	case CompareGreaterThanOrEqual:
-		return field + ">=" + ARG_PLACEHOLDER
+		return field + " >= " + ARG_PLACEHOLDER
 	case CompareLessThanOrEqual:
-		return field + "<=" + ARG_PLACEHOLDER
+		return field + " <= " + ARG_PLACEHOLDER
 	case CompareNot, CompareNotEqual:
-		return field + "!=" + ARG_PLACEHOLDER
+		return field + " != " + ARG_PLACEHOLDER
+	case CompareNil:
+		return field + " is null"
 	case CompareLike:
 		return field + " " + SELECT_LIKE + " " + ARG_PLACEHOLDER
 	case CompareIn:
@@ -45,6 +50,24 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 			args[i] = ARG_PLACEHOLDER
 		}
 		return field + " in (" + strings.Join(args, ",") + ")"
+	case CompareAny:
+		args := make([]string, argCount)
+		for i := 0; i < argCount; i++ {
+			args[i] = ARG_PLACEHOLDER
+		}
+		return field + " = any(" + strings.Join(args, ",") + ")"
+	case CompareBetween:
+		return field + " between " + fmt.Sprintf("%s and %s", ARG_PLACEHOLDER, ARG_PLACEHOLDER)
+	case CompareExists:
+		args := make([]string, argCount)
+		for i := 0; i < argCount; i++ {
+			args[i] = ARG_PLACEHOLDER
+		}
+		queryString := field
+		if len(args) == 0 {
+			return "exists (" + queryString + ")"
+		}
+		return "exists (" + strings.Replace(queryString, "<?>", strings.Join(args, ","), 1) + ")"
 	default:
 		return field + " " + string(op) + " " + ARG_PLACEHOLDER
 	}
@@ -132,6 +155,16 @@ func GreaterThanOrEqual(field string, value interface{}) Condition {
 func In[T any](field string, values ...T) Condition {
 	return Condition(doLeafCompare(CompareIn, field, values))
 }
+func Any[T any](field string, values ...T) Condition {
+	return Condition(doLeafCompare(CompareAny, field, values))
+}
+func Between[T any](field string, low, high T) Condition {
+	return Condition(doLeafCompare(CompareBetween, field, []T{low, high}))
+}
+func Exists[T any](subQuery string, args ...T) Condition {
+	return Condition(doLeafCompare(CompareExists, subQuery, args))
+}
+
 // func Raw(queryStr string) Condition {
 // 	return Condition(doLeafCompare(CompareIn, field, values))
 // }
@@ -248,9 +281,10 @@ func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interf
 		}
 		return
 	}
-	if wc.operator == CompareIn {
+	switch wc.operator{
+	case CompareIn, CompareBetween:
 		utils.StructCopy(wc.value, &args)
-	} else {
+	default:
 		args = []interface{}{wc.value}
 	}
 	sb.WriteString(wc.operator.Eval(wc.field, len(args)))

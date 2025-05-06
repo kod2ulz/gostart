@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/utils"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -138,4 +140,29 @@ func (m *Metadata) WithPage(page int64) *Metadata {
 func (m *Metadata) WithCurrent(current int64) *Metadata {
 	m.Current = current
 	return m
+}
+
+type FileResponse struct {
+	ContentType string
+	Filename    string
+	// Ext is recommended if filename is not set
+	Ext  string
+	Data []byte
+}
+
+func (r FileResponse) contentType() string {
+	if r.ContentType != "" {
+		return r.ContentType
+	}
+	return "application/octet-stream"
+}
+
+func (r FileResponse) filename(ctx *gin.Context) string {
+	if r.Filename != "" {
+		return r.Filename
+	} else if name := ctx.Writer.Header().Get(requestIdHeader1); name != "" {
+		return utils.String.Join(r.Ext, time.Now().Format(time.DateOnly)+"-"+name)
+	}
+
+	return utils.String.Join(r.Ext, time.Now().Format(time.DateOnly)+"-"+uuid.NewString())
 }

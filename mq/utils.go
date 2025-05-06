@@ -2,7 +2,7 @@ package mq
 
 import (
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type InterExchangeWorkerUtilOnMessageFunc func(*logr.Logger, *amqp.Delivery, ExchangePublisherFunc) error

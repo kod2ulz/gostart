@@ -16,7 +16,7 @@ func arg(name string, num int, op ...string) string {
 	case query.SELECT_LIKE:
 		return fmt.Sprintf("%s %s $%d", name, op[0], num)
 	default:
-		return fmt.Sprintf("%s%s$%d", name, op[0], num)
+		return fmt.Sprintf("%s %s $%d", name, op[0], num)
 	}
 }
 

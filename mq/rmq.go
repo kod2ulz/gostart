@@ -6,8 +6,7 @@ import (
 
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/sirupsen/logrus"
-
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func RabbitMQ(ctx context.Context, log *logr.Logger, conf *Conf) *RMQ {
