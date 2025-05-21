@@ -213,6 +213,16 @@ func WithHandler(key string, handler gin.HandlerFunc) AppIniter {
 	}
 }
 
+func WithStaticFileHandler(webPath, filePath string, ) AppIniter {
+	return func(a *ap) error {
+		if a == nil {
+			return nil
+		}
+		a.router.StaticFile(webPath, filePath)
+		return nil
+	}
+}
+
 func WithoutHeartbeatHandlers() AppIniter {
 	return func(a *ap) error {
 		if a == nil {
@@ -236,10 +246,6 @@ func (a *ap) initAPI(opts ...AppIniter) {
 		},
 	}
 
-	for i := range opts {
-		opts[i](a)
-	}
-
 	a.router = gin.New()
 	a.router.Use(api.JSONLogMiddleware(a.log), gin.Recovery(), cors.New(cors.Config{
 		AllowOrigins:     a.conf.Http.AllowOrigins,
@@ -252,6 +258,11 @@ func (a *ap) initAPI(opts ...AppIniter) {
 		// },
 		MaxAge: a.conf.Http.MaxAge,
 	}))
+
+	for i := range opts {
+		opts[i](a)
+	}
+
 	if !a.noHeartbeatHandlers {
 		a.router.GET("/", a.handlers["ok"])
 		a.router.GET("/ok", a.handlers["ok"])
