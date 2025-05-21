@@ -40,7 +40,7 @@ type ap struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	blankRoot bool
+	noHeartbeatHandlers bool
 	handlers map[string]gin.HandlerFunc
 }
 
@@ -213,12 +213,12 @@ func WithHandler(key string, handler gin.HandlerFunc) AppIniter {
 	}
 }
 
-func WithBlankRoot() AppIniter {
+func WithoutHeartbeatHandlers() AppIniter {
 	return func(a *ap) error {
 		if a == nil {
 			return nil
 		}
-		a.blankRoot = true
+		a.noHeartbeatHandlers = true
 		return nil
 	}
 }
@@ -252,11 +252,11 @@ func (a *ap) initAPI(opts ...AppIniter) {
 		// },
 		MaxAge: a.conf.Http.MaxAge,
 	}))
-	if !a.blankRoot {
+	if !a.noHeartbeatHandlers {
 		a.router.GET("/", a.handlers["ok"])
+		a.router.GET("/ok", a.handlers["ok"])
+		a.router.GET("/stats", a.handlers["stats"])
 	}
-	a.router.GET("/ok", a.handlers["ok"])
-	a.router.GET("/stats", a.handlers["stats"])
 }
 
 func instance() *ap {
