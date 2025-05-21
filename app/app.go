@@ -264,9 +264,9 @@ func (a *ap) initAPI(opts ...AppIniter) {
 	}
 
 	if !a.noHeartbeatHandlers {
-		a.router.GET("/", a.handlers["ok"])
-		a.router.GET("/ok", a.handlers["ok"])
-		a.router.GET("/stats", a.handlers["stats"])
+		// a.router.GET("/", a.handlers["ok"])
+		// a.router.GET("/ok", a.handlers["ok"])
+		// a.router.GET("/stats", a.handlers["stats"])
 	}
 }
 
