@@ -40,7 +40,7 @@ type ap struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	noHeartbeatHandlers bool
+	heartbeatHandlers bool
 	handlers map[string]gin.HandlerFunc
 }
 
@@ -206,7 +206,7 @@ func (a *ap) shutdown() {
 	a.log.Printf("shutting down")
 }
 
-func WithHandler(key string, handler gin.HandlerFunc) AppIniter {
+func WithHandlerOverride(key string, handler gin.HandlerFunc) AppIniter {
 	return func(a *ap) error {
 		a.handlers[key] = handler
 		return nil
@@ -223,12 +223,12 @@ func WithStaticFileHandler(webPath, filePath string, ) AppIniter {
 	}
 }
 
-func WithoutHeartbeatHandlers() AppIniter {
+func WithHeartbeatHandlers() AppIniter {
 	return func(a *ap) error {
 		if a == nil {
 			return nil
 		}
-		a.noHeartbeatHandlers = true
+		a.heartbeatHandlers = true
 		return nil
 	}
 }
@@ -263,10 +263,10 @@ func (a *ap) initAPI(opts ...AppIniter) {
 		opts[i](a)
 	}
 
-	if !a.noHeartbeatHandlers {
-		// a.router.GET("/", a.handlers["ok"])
-		// a.router.GET("/ok", a.handlers["ok"])
-		// a.router.GET("/stats", a.handlers["stats"])
+	if a.heartbeatHandlers {
+		a.router.GET("/", a.handlers["ok"])
+		a.router.GET("/ok", a.handlers["ok"])
+		a.router.GET("/stats", a.handlers["stats"])
 	}
 }
 
