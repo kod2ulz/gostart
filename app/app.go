@@ -24,6 +24,7 @@ import (
 var (
 	// global single instance of the _instance
 	_instance *ap
+	strictEnv bool
 )
 
 type ap struct {
@@ -38,18 +39,29 @@ type ap struct {
 	osc    chan os.Signal
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	blankRoot bool
+	handlers map[string]gin.HandlerFunc
 }
 
-func Init(strict ...bool) *ap {
+type AppIniter func(*ap) error
+
+func WithStrictEnv() AppIniter {
+	return func(a *ap) error {
+		strictEnv = true
+		return nil
+	}
+}
+
+func Init(opts ...AppIniter) *ap {
 	if _instance != nil {
 		return _instance
 	}
-	var _strict bool
-	if len(strict) > 0 {
-		_strict = strict[0]
+	for i := range opts {
+		opts[i](nil)
 	}
 	if err := godotenv.Load(); err != nil {
-		if _strict {
+		if strictEnv {
 			log.Fatalf("error loading env files. %v", err)
 		}
 		log.Printf("error loading env files. %v", err)
@@ -194,18 +206,37 @@ func (a *ap) shutdown() {
 	a.log.Printf("shutting down")
 }
 
-func (a *ap) initAPI() {
-	var (
-		ok = func(c *gin.Context) {
+func WithHandler(key string, handler gin.HandlerFunc) AppIniter {
+	return func(a *ap) error {
+		a.handlers[key] = handler
+		return nil
+	}
+}
+
+func WithBlankRoot() AppIniter {
+	return func(a *ap) error {
+		a.blankRoot = true
+		return nil
+	}
+}
+
+func (a *ap) initAPI(opts ...AppIniter) {
+	a.handlers = map[string]gin.HandlerFunc{
+		"ok": func(c *gin.Context) {
 			c.JSON(http.StatusOK, "OK")
-		}
-		status = func(c *gin.Context) {
+		},
+		"stats": func(c *gin.Context) {
 			c.JSON(http.StatusOK, map[string]interface{}{
 				"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
 				"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),
 			})
-		}
-	)
+		},
+	}
+
+	for i := range opts {
+		opts[i](a)
+	}
+
 	a.router = gin.New()
 	a.router.Use(api.JSONLogMiddleware(a.log), gin.Recovery(), cors.New(cors.Config{
 		AllowOrigins:     a.conf.Http.AllowOrigins,
@@ -218,9 +249,11 @@ func (a *ap) initAPI() {
 		// },
 		MaxAge: a.conf.Http.MaxAge,
 	}))
-	a.router.GET("/", ok)
-	a.router.GET("/ok", ok)
-	a.router.GET("/stats", status)
+	if !a.blankRoot {
+		a.router.GET("/", a.handlers["ok"])
+	}
+	a.router.GET("/ok", a.handlers["ok"])
+	a.router.GET("/stats", a.handlers["stats"])
 }
 
 func instance() *ap {
