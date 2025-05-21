@@ -215,6 +215,9 @@ func WithHandler(key string, handler gin.HandlerFunc) AppIniter {
 
 func WithBlankRoot() AppIniter {
 	return func(a *ap) error {
+		if a == nil {
+			return nil
+		}
 		a.blankRoot = true
 		return nil
 	}
