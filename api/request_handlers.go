@@ -179,7 +179,7 @@ func RequestHandlerWithResponse[R RequestParam, T any](serviceFunc RequestConsum
 	})
 }
 
-func RequestHandlerWithResponseFinalizer[R RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T], finaliser func (*gin.Context, T) gin.HandlerFunc) gin.HandlerFunc {
+func RequestHandlerWithResponseFinalizer[R RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T], finaliser func (*gin.Context, T)) gin.HandlerFunc {
 	return requestHandlerWithParam(serviceFunc, func(ctx *gin.Context, param R, out T) {
 		refs := map[string]any{}
 		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
