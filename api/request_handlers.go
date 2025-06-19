@@ -179,6 +179,20 @@ func RequestHandlerWithResponse[R RequestParam, T any](serviceFunc RequestConsum
 	})
 }
 
+func RequestHandlerWithResponseFinalizer[R RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T], finaliser func (*gin.Context, T) gin.HandlerFunc) gin.HandlerFunc {
+	return requestHandlerWithParam(serviceFunc, func(ctx *gin.Context, param R, out T) {
+		refs := map[string]any{}
+		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
+			refs, _ = val.(map[string]any)
+		}
+		if finaliser != nil {
+			finaliser(ctx, out)
+		} else {
+			ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
+		}
+	})
+}
+
 func RequestHandlerWithFileResponse[R RequestParam](serviceFunc RequestConsumerWithResponseFunc[R, FileResponse]) gin.HandlerFunc {
 	return requestHandlerWithParam(serviceFunc, fileRequestHandler[R])
 }
