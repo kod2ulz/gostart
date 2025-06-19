@@ -33,6 +33,20 @@ func ParamHandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResp
 	})
 }
 
+func ParamHandlerWithResponseFinalser[P RequestParam, T any](serviceFunc RoutineWithResponseFunc[T], finaliser func (*gin.Context, T) gin.HandlerFunc) gin.HandlerFunc {
+	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, out T) {
+		refs := map[string]any{}
+		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
+			refs, _ = val.(map[string]any)
+		} 
+		if finaliser != nil {
+			finaliser(ctx, out)
+		} else {
+			ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
+		}
+	})
+}
+
 func ParamHandlerWithFileResponse[P RequestParam](serviceFunc RoutineWithResponseFunc[FileResponse]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, fileRequestHandler[P])
 }
