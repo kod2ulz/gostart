@@ -16,13 +16,13 @@ The core design philosophy is to be "opinionated" where it matters (structure, s
 
 ## Features
 
-- **Rapid Setup:** Get a production-ready server running in minutes.
-- **Robust API Layer:** A clean pattern for defining HTTP handlers, middleware, and request/response models.
-- **Pluggable Authentication:** Comes with a pre-configured AWS Cognito integration, but is designed to be extensible.
-- **Structured Logging:** Centralized and configurable logging using Logrus.
-- **Database & Cache Ready:** Includes helpers and interfaces for PostgreSQL (via pgx) and Redis.
+- **Rapid Setup:** Get a production-ready server running in minutes with a single `app.Init()` call.
+- **Robust API Layer:** A clean pattern for defining HTTP handlers, middleware, and request/response models on top of Gin.
+- **Pluggable Authentication:** Comes with helpers for JWT and PASETO tokens, with integrations for providers like AWS Cognito.
+- **Structured Logging:** Centralized and configurable logging using Logrus, with built-in adapters for components like `pgx`.
+- **Database & Cache Ready:** Includes helpers and interfaces for PostgreSQL (via pgx v5) and Redis.
 - **Message Queuing:** Integrated RabbitMQ publisher and worker system for background jobs.
-- **Rich Utilities:** A large collection of helpers for configuration, error handling, data structures, and more.
+- **Rich Utilities:** A large collection of helpers for configuration, error handling, concurrent data structures, and more.
 
 ## Getting Started
 
@@ -32,26 +32,28 @@ Here's how to bootstrap a new application using GoStart.
 package main
 
 import (
-	"github.com/kod2ulz/gostart/app"
+	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/app"
 )
 
 func main() {
-    // 1. Initialize the application
-	app, err := app.New()
-	if err != nil {
-		panic(err)
-	}
+	// 1. Initialize the application
+	// This sets up the logger, router, and graceful shutdown handling.
+	a := app.Init()
+	ctx, log := a.Ctx(), a.Log()
 
-    // 2. Define a route
-	app.Router.GET("/hello", func(c *api.Context) {
-		c.Success("world")
+	log.Info("Application starting up...")
+
+	// 2. Define a route using the underlying Gin router
+	a.R().GET("/hello", func(c *gin.Context) {
+		// Use the api.Respond helper for consistent JSON responses
+		api.Respond(c).Success("world")
 	})
 
-    // 3. Run the application
-	if err := app.Run(); err != nil {
-        panic(err)
-    }
+	// 3. Run the application
+	// This starts the HTTP server and blocks until shutdown.
+	a.Run()
 }
 ```
 
@@ -63,6 +65,13 @@ To use GoStart in your project:
 go get github.com/kod2ulz/gostart
 ```
 
+## Usage Examples
+
+For more detailed, real-world examples of how to use specific packages, please see the following guides:
+
+- **Logging:** [Integrating `logr` with `pgx/v5`](./logr/pgxv5_example.md)
+- *(More examples will be added as we refactor each package)*
+
 ## Project Structure
 
 The library is organized into logical packages. For a detailed breakdown, see the [Introduction to GoStart](./docs/01-introduction.md).
@@ -70,22 +79,26 @@ The library is organized into logical packages. For a detailed breakdown, see th
 - `/app`: Core application, configuration, and router.
 - `/api`: API request/response handling.
 - `/auth`: Authentication and session management.
-- `/storage`: Caching and persistence (Redis).
+- `/storage`: Caching (Redis) and persistence helpers.
 - `/mq`: Message queue integration (RabbitMQ).
-- `/services`: Business logic layer.
+- `/logr`: Structured logging configuration.
 - `/query`: Database query builders and helpers.
+- `/collections`: Thread-safe collections and data structures.
+- `/utils`: Common utilities for errors, environment variables, etc.
 
 ## Roadmap
 
 We have an exciting vision for the future of GoStart:
 
-- [ ] **Automatic OpenAPI Generation:** Automatically generate API documentation from your route definitions.
 - [ ] **Pluggable Web Frameworks:** Allow developers to choose their favorite framework (Echo, Fiber, etc.) instead of being locked into Gin.
+- [ ] **Advanced Configuration:** Support for YAML, JSON, and HashiCorp Vault, with a built-in caching layer.
+- [ ] **Advanced Logging:** Add configurable output drivers for sending logs to files, Logstash, Loki, or Sentry.
+- [ ] **Automatic OpenAPI Generation:** Automatically generate API documentation from your route definitions.
 - [ ] **Enhanced Metrics:** Integrate with Prometheus for more detailed application monitoring.
 
 ## Documentation
 
-For more detailed guides and conceptual documentation, please visit the [**docs directory**](./docs).
+For more high-level guides and conceptual documentation, please visit the [**docs directory**](./docs).
 
 - [Introduction to GoStart](./docs/01-introduction.md)
 - [Configuration](./docs/02-configuration.md)
@@ -95,7 +108,3 @@ For more detailed guides and conceptual documentation, please visit the [**docs 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

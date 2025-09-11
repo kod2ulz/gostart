@@ -6,31 +6,33 @@ This package provides a structured, context-aware logging wrapper around the pop
 
 The goal of `logr` is to enrich log messages with useful, consistent context, such as a `trace_id` for tracking a request across services and a `process_id` for identifying a specific task or worker.
 
+Logs can be output to the console (stdout) and optionally to a file.
+
 ## Initialization
 
-Before using the logger, it must be initialized once during application startup. This is typically done in your `main` function or an equivalent setup routine.
+Before using the logger, it must be initialized once during application startup. This is typically done in your `main` function by calling `logr.Config()`.
 
 ```go
 import (
     "github.com/kod2ulz/gostart/logr"
-    "github.com/sirupsen/logrus"
 )
 
 func main() {
-    // Create a standard logrus entry
-    logrusEntry := logrus.NewEntry(logrus.New())
-
-    // Set up the global logger
-    if err := logr.SetUpLogger(logrusEntry); err != nil {
+    if err := logr.Config(); err != nil {
         panic(err)
     }
-
-    // Optionally set the formatter to JSON for production environments
-    logr.SetFormatterJSON()
     
     // ... rest of your application
 }
 ```
+
+### File Logging
+
+To enable logging to a file in addition to the console, set the following environment variable:
+
+- `LOG_FILE_PATH`: The full path to the log file (e.g., `/var/log/myapp.log`).
+
+The logger will create the file if it doesn't exist and append to it if it does.
 
 ## Usage
 
