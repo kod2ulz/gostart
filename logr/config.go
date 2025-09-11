@@ -1,6 +1,7 @@
 package logr
 
 import (
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -9,16 +10,30 @@ import (
 )
 
 const (
-	ENV_LOG_LEVEL  = "LOG_LEVEL"
-	ENV_PRETTY_LOG = "PRETTY_LOG_PRINT"
-	ENV_APP_NAME   = "APP_NAME"
-	ENV_APP_HOST   = "HOST"
+	ENV_LOG_LEVEL       = "LOG_LEVEL"
+	ENV_PRETTY_LOG      = "PRETTY_LOG_PRINT"
+	ENV_APP_NAME        = "APP_NAME"
+	ENV_APP_HOST        = "HOST"
+	ENV_LOG_FILE_PATH   = "LOG_FILE_PATH"
 )
 
 func Config() (err error) {
 	log := logrus.New()
 	log.SetReportCaller(true)
 	log.SetLevel(logrus.TraceLevel)
+
+	// Configure output
+	logFilePath := os.Getenv(ENV_LOG_FILE_PATH)
+	if logFilePath != "" {
+		file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.WithError(err).Error("Failed to open log file, defaulting to stdout")
+		} else {
+			log.SetOutput(io.MultiWriter(os.Stdout, file))
+		}
+	} else {
+		log.SetOutput(os.Stdout)
+	}
 
 	var prettyPrint bool
 	if prettyPrint, err = strconv.ParseBool(os.Getenv(ENV_PRETTY_LOG)); err != nil {
@@ -42,7 +57,6 @@ func Config() (err error) {
 	}
 	return
 }
-
 
 func _getLogLevel() logrus.Level {
 	switch level := strings.ToLower(os.Getenv(ENV_LOG_LEVEL)); level {
