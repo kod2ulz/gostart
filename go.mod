@@ -5,7 +5,7 @@ go 1.24
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/iancoleman/strcase v0.3.0
-	github.com/jackc/pgx/v4 v4.18.2
+	github.com/jackc/pgx/v5 v5.7.6
 	github.com/json-iterator/go v1.1.12
 	github.com/markphelps/optional v0.11.0
 	github.com/onsi/ginkgo/v2 v2.23.4
@@ -32,12 +32,14 @@ require (
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/serf v0.10.2 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	golang.org/x/arch v0.16.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
 )
 
 require (
@@ -68,7 +70,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgproto3/v2 v2.3.3 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgtype v1.14.4 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -92,7 +93,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/consul/api v1.32.0
-	github.com/jackc/pgx/v5 v5.5.5
 	github.com/joho/godotenv v1.5.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1

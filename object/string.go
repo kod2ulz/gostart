@@ -28,7 +28,7 @@ func (s String) Variations(formats...string) (out collections.List[string]) {
 	}
 	out = make(collections.List[string], len(formats))
 	for i := range formats {
-		out = append(out, fmt.Sprintf(formats[i], s))
+		out[i] = fmt.Sprintf(formats[i], s)
 	}
 	return 
 }
