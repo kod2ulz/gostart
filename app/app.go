@@ -191,7 +191,7 @@ func (a *ap) Run() {
 		startupMsg += " with http router " + a.conf.Address()
 		go a.router.Run(a.conf.Address())
 	}
-	a.log.Printf(startupMsg)
+	a.log.Printf("%s", startupMsg)
 	<-a.osc
 	a.cancel()
 	fmt.Println()
