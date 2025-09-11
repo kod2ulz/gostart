@@ -1,0 +1,77 @@
+# Logr Package
+
+This package provides a structured, context-aware logging wrapper around the popular `logrus` library.
+
+## Overview
+
+The goal of `logr` is to enrich log messages with useful, consistent context, such as a `trace_id` for tracking a request across services and a `process_id` for identifying a specific task or worker.
+
+## Initialization
+
+Before using the logger, it must be initialized once during application startup. This is typically done in your `main` function or an equivalent setup routine.
+
+```go
+import (
+    "github.com/kod2ulz/gostart/logr"
+    "github.com/sirupsen/logrus"
+)
+
+func main() {
+    // Create a standard logrus entry
+    logrusEntry := logrus.NewEntry(logrus.New())
+
+    // Set up the global logger
+    if err := logr.SetUpLogger(logrusEntry); err != nil {
+        panic(err)
+    }
+
+    // Optionally set the formatter to JSON for production environments
+    logr.SetFormatterJSON()
+    
+    // ... rest of your application
+}
+```
+
+## Usage
+
+Once initialized, you can get a logger instance and add context to it.
+
+The logger is designed to be used with a chaining syntax. Each call to add context returns a new logger instance, preventing context from one log statement from leaking into another.
+
+### Basic Logging
+
+```go
+import "github.com/kod2ulz/gostart/logr"
+
+// Get a logger instance
+logr.Log().Info("This is a standard log message.")
+logr.Log().Warn("This is a warning.")
+```
+
+### Logging with Context
+
+This is the primary strength of the `logr` package.
+
+```go
+// Log with a Trace ID for a specific request
+logr.Log().TID().Info("User login attempt.")
+// Output will include a field like: "trace_id":"<some-uuid>"
+
+// Use a specific Trace ID if you have one from an incoming request
+logr.Log().WithTID("existing-trace-id").Error("Failed to process payment.")
+
+// Add a Process ID for a background job
+logr.Log().PID().WithField("job_name", "invoice-processor").Info("Starting job.")
+// Output will include: "process_id":"<some-uuid>"
+
+// Combine multiple context fields
+logr.Log().TID().WithField("user_id", 123).Infof("User %d updated their profile", 123)
+```
+
+### Key Context Methods
+
+- `TID()`: Generates and adds a new UUID as the `trace_id`.
+- `WithTID(string)`: Adds the given string as the `trace_id`.
+- `PID()`: Generates and adds a new UUID as the `process_id`.
+- `WithField(key, value)`: The standard logrus method for adding a custom field.
+- `WithFields(logrus.Fields)`: The standard logrus method for adding multiple custom fields.
