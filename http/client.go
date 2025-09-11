@@ -2,11 +2,9 @@ package http
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 	"time"
 
@@ -209,43 +207,42 @@ func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Er
 
 func (c *client[T]) getResponse(res *http.Response) (out api.Response[T]) {
 	if res.ContentLength == 0 {
+		out = out.WithCode(res.StatusCode)
 		return
 	}
 	data, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
-		return api.ErrorResponse[T](api.GeneralError[T](errors.Wrap(readErr, "failed to read json body into []byte")).
-			WithErrorCode(api.ErrorCodeResponseProcessingError))
-	}
-	out = api.Response[T]{}
-	var t *T = new(T)
-	var errBody collections.Map[string, interface{}]
-	resErr := api.GeneralError[T](errors.New(res.Status + ". request failed")).
-		WithHttpStatusCode(res.StatusCode).WithErrorCode(api.ErrorCodeServiceError).
-		WithError(errors.Errorf("call to %s returned %d: %s", res.Request.RequestURI, res.StatusCode, res.Status))
-	if unmarshallErr := json.Unmarshal(data, &out); unmarshallErr == nil && !reflect.DeepEqual(out, api.Response[T]{}) {
-		if out.HasError() {
-			out.Error = resErr.WithCause(out.Error)
-		} else {
-			out.Success = res.StatusCode < 400
-		}
-		out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
-		out.Timestamp = time.Now().Unix()
+		out = api.ErrorResponse[T](api.GeneralError[T](errors.Wrap(readErr, "failed to read json body into []byte")).WithErrorCode(api.ErrorCodeResponseProcessingError))
+		out = out.WithCode(res.StatusCode)
 		return
-	} else if unmarshallErr := json.Unmarshal(data, &t); unmarshallErr == nil && t != nil {
-		out = api.DataResponse[T](*t).
-			WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
-		// anything else
-	} else if unmarshallErr = json.Unmarshal(data, &errBody); unmarshallErr != nil {
-		if res.StatusCode < 400 {
-			t = new(T)
-			return api.DataResponse[T](*t).WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
-		} else if errorMessage := errBody.AnyOfKey("err", "error", "errors", "msg", "message"); errorMessage != nil && errorMessage != "" {
-			return api.ErrorResponse[T](resErr.WithCause(api.GeneralError[any](errors.New(fmt.Sprint(errorMessage)))))
-		}
-	} else if errBody.Empty() {
-		t = new(T)
-		return api.DataResponse[T](*t).WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 	}
-	out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
+
+	// A temporary struct to help unmarshal the error field into a concrete type
+	type tempResponse struct {
+		Success bool               `json:"success"`
+		Error   *api.ErrorModel[T] `json:"error"`
+		Data    interface{}        `json:"data"`
+		Meta    *api.Metadata      `json:"meta"`
+	}
+
+	var temp tempResponse
+	if err := json.Unmarshal(data, &temp); err != nil {
+		// If unmarshalling into the temp struct fails, it might be a raw data response
+		var t T
+		if unmarshalErr2 := json.Unmarshal(data, &t); unmarshalErr2 == nil {
+			out = api.DataResponse(t)
+		} else {
+			out = api.ErrorResponse[T](api.GeneralError[T](errors.New("failed to parse response body")))
+		}
+	} else {
+		out.Success = temp.Success
+		out.Data = temp.Data
+		out.Meta = temp.Meta
+		if temp.Error != nil {
+			out.Error = temp.Error
+		}
+	}
+
+	out = out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 	return
 }
