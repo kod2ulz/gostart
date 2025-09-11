@@ -75,3 +75,8 @@ logr.Log().TID().WithField("user_id", 123).Infof("User %d updated their profile"
 - `PID()`: Generates and adds a new UUID as the `process_id`.
 - `WithField(key, value)`: The standard logrus method for adding a custom field.
 - `WithFields(logrus.Fields)`: The standard logrus method for adding multiple custom fields.
+
+## Roadmap
+
+- **Multiple Outputs:** Enhance the logger to support writing to multiple outputs simultaneously (e.g., console and a file).
+- **External Service Integration:** Add native support for shipping logs to external services like Logstash, Loki, or Sentry.

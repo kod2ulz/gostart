@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/kod2ulz/gostart/sqlc"
 	"github.com/kod2ulz/gostart/utils"
 )

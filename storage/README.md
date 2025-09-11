@@ -80,3 +80,64 @@ if user != nil {
 // Pre-load multiple users into the cache
 users, err := userCache.Fetch(context.Background(), "user-456", "user-789")
 ```
+
+## Roadmap
+
+- **Configuration Backends:** Support for loading configurations from sources other than environment variables, such as HashiCorp Vault, YAML, or JSON files.
+- **Dynamic Configuration:** Introduce a caching layer for configuration that can be refreshed without restarting the application.
+- **Expanded Cache Support:** Add support for other caching backends besides the default in-memory cache.
+
+## End-to-End Initialization Example
+
+The `storage.Config` function is a key part of bootstrapping a service. It reads environment variables based on a prefix to configure a component.
+
+Here is an example of how `storage.Config` is used in a `main.go` file to set up a database connection.
+
+```go
+package main
+
+import (
+	"context"
+
+	"github.com/kod2ulz/gostart/app"
+	"github.com/kod2ulz/gostart/logr"
+	"github.com/kod2ulz/gostart/storage"
+	"github.com/kod2ulz/gostart/utils"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// This function would live in your project's database package
+func InitDB(ctx context.Context, log *logr.Logger, conf *storage.Conf) (*pgxpool.Pool, error) {
+    connString := conf.ConnectionString()
+    config, err := pgxpool.ParseConfig(connString)
+    if err != nil {
+        return nil, err
+    }
+
+    // Attach the pgx/v5 logger
+    config.ConnConfig.Tracer = storage.NewPgxLogger(log)
+
+    return pgxpool.NewWithConfig(ctx, config)
+}
+
+func main() {
+	// Initialize the core application
+	app := app.Init()
+	ctx, log := app.Ctx(), app.Log()
+
+	// Use storage.Config to get database configuration from environment variables
+	// (e.g., POSTGRES_DB_HOST, POSTGRES_DB_PORT, etc.)
+	dbConf := storage.Config("POSTGRES_DB")
+
+	// Pass the config to your database initializer
+	db_conn, err := InitDB(ctx, log, dbConf)
+	utils.Error.Fail(log.Entry, err, "failed to connect to database")
+	defer db_conn.Close()
+
+	log.Info("Database connection successful!")
+
+	// ... rest of your application
+	app.Run()
+}
+```

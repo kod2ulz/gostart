@@ -84,3 +84,9 @@ if err != nil {
 // To stop it:
 // worker.Stop()
 ```
+
+## Roadmap
+
+- **Broker-agnostic Interface:** Refine the interfaces to allow for different underlying message brokers.
+- **Kafka Support:** Add a Kafka implementation for the `mq` interfaces.
+- **Redis Streams Support:** Add a Redis Streams implementation.
