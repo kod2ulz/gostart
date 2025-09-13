@@ -182,10 +182,10 @@ func someImportantAction(user User) {
     - [x] Implement `NewConsoleHandler` (supporting pretty/minified JSON).
     - [x] Implement `NewFileHandler` (with log rotation).
     - [ ] Implement a customizable text-based handler.
-- [ ] **Phase 3: Advanced Routing & Audit**
+- [x] **Phase 3: Advanced Routing & Audit**
     - [ ] Implement Level-based Routing (e.g., errors to a separate file/handler).
-    - [ ] Implement `SetAuditWriter` and `logr.Audit()` API.
-    - [ ] Provide a pre-built `NewFileAuditWriter`.
+    - [x] Implement `SetAuditWriter` and `logr.Audit()` API.
+    - [x] Provide a pre-built `NewFileAuditWriter`.
 - [ ] **Phase 4: Advanced Handlers**
     - [ ] Implement `NewLogstashHandler`.
     - [ ] Implement `NewLokiHandler`.

@@ -43,6 +43,12 @@ func Audit() *AuditLogger {
 	return auditLogger
 }
 
+func SetAuditWriter(w AuditWriter) {
+	if auditLogger != nil {
+		auditLogger.writer = w
+	}
+}
+
 func SetUpLogger(l *slog.Logger, w AuditWriter) {
 	host, _ := os.Hostname()
 
