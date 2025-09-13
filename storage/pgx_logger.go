@@ -3,10 +3,10 @@ package storage
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/sirupsen/logrus"
 )
 
 // pgxLoggerAdapter implements the pgx/v5 tracelog.Logger interface.
@@ -17,26 +17,30 @@ type pgxLoggerAdapter struct {
 
 // Log translates a pgx log call to a logr log call.
 func (p *pgxLoggerAdapter) Log(ctx context.Context, level tracelog.LogLevel, msg string, data map[string]interface{}) {
-	var logrusLevel logrus.Level
+	var slogLevel slog.Level
 	switch level {
 	case tracelog.LogLevelTrace, tracelog.LogLevelDebug:
-		logrusLevel = logrus.DebugLevel
+		slogLevel = slog.LevelDebug
 	case tracelog.LogLevelInfo:
-		logrusLevel = logrus.InfoLevel
+		slogLevel = slog.LevelInfo
 	case tracelog.LogLevelWarn:
-		logrusLevel = logrus.WarnLevel
+		slogLevel = slog.LevelWarn
 	case tracelog.LogLevelError:
-		logrusLevel = logrus.ErrorLevel
+		slogLevel = slog.LevelError
 	default:
-		logrusLevel = logrus.InfoLevel // Default to Info
+		slogLevel = slog.LevelInfo // Default to Info
 	}
 
-	// Do not log trace-level messages unless our logger is configured for debug
-	if level == tracelog.LogLevelTrace && p.log.Logger.GetLevel() < logrus.DebugLevel {
+	if !p.log.Enabled(ctx, slogLevel) {
 		return
 	}
 
-	p.log.WithFields(logrus.Fields(data)).Log(logrusLevel, msg)
+	args := make([]interface{}, 0, len(data)*2)
+	for k, v := range data {
+		args = append(args, k, v)
+	}
+
+	p.log.Log(ctx, slogLevel, msg, args...)
 }
 
 // NewPgxLogger creates a tracer for pgx/v5 that is compatible with the application's logr logger.

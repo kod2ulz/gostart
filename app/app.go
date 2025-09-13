@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -62,14 +62,16 @@ func Init(opts ...AppIniter) *ap {
 	}
 	if err := godotenv.Load(); err != nil {
 		if strictEnv {
-			log.Fatalf("error loading env files. %v", err)
+			slog.Error("error loading env files", "error", err)
+			panic(err)
 		}
-		log.Printf("error loading env files. %v", err)
+		slog.Warn("error loading env files", "error", err)
 	}
 	if err := logr.Config(); err != nil {
-		logr.Log().WithError(err).Fatal("Application log initialisation failed")
+		slog.Error("Application log initialisation failed", "error", err)
+		panic(err)
 	}
-	logr.Log().Println("starting app initialisation")
+	logr.Log().Info("starting app initialisation")
 	_instance = &ap{
 		log:   logr.Log(),
 		start: time.Now(),
@@ -112,7 +114,8 @@ func (a *ap) Config() *conf {
 func Consul() (client *consulapi.Client) {
 	a := instance()
 	if client = a.consul; client == nil {
-		a.Log().Panic("consul client not initialsed")
+		a.log.Error("consul client not initialsed")
+		panic("consul client not initialsed")
 	}
 	return
 }
@@ -136,7 +139,7 @@ func ServiceUrl(name string) (out string) {
 	if err == nil {
 		return fmt.Sprintf("http://%s:%v", service.Address, service.Port)
 	}
-	Log().WithError(err).WithField("consul.service", name).Error("failed to get service url")
+	Log().Error("failed to get service url", "consul.service", name, "error", err)
 	return
 }
 
@@ -144,11 +147,13 @@ func (a *ap) Register(name ...string) (err error) {
 	var serviceName string
 	var env = utils.Env.Helper("CONSUL")
 	var serviceHost = env.Get("SERVICE_HOST", a.conf.Host).String()
-	// var consulUrlEnv = "CONSUL_HTTP_ADDR"
+
 	if a.consul != nil {
-		return utils.Error.LogOK(a.log.Infof, "service already registered with consul")
+		a.log.Info("service already registered with consul")
+		return nil
 	} else if consulAddress := env.Get("HTTP_ADDR", ""); !consulAddress.Valid() {
-		return utils.Error.LogOK(a.log.Warnf, "env var %s_HTTP_ADDR not set. skipping consul initialization", env.Prefix())
+		a.log.Warn(fmt.Sprintf("env var %s_HTTP_ADDR not set. skipping consul initialization", env.Prefix()))
+		return nil
 	}
 	config := consulapi.DefaultConfig()
 	if len(name) > 0 && name[0] != "" {
@@ -164,7 +169,8 @@ func (a *ap) Register(name ...string) (err error) {
 		a.serviceId = serviceName
 	}
 	if a.consul, err = consulapi.NewClient(config); err != nil {
-		return utils.Error.Log(a.log.Entry, err, "consul client initialisation failed")
+		a.log.Error("consul client initialisation failed", "error", err)
+		return err
 	} else if err = a.consul.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
 		ID:      a.serviceId,
 		Name:    serviceName,
@@ -177,21 +183,25 @@ func (a *ap) Register(name ...string) (err error) {
 			Timeout:  a.conf.Uptime.Timeout.String(),
 		},
 	}); err != nil {
-		return utils.Error.Log(a.log.Entry, err, "service registration failed")
+		a.log.Error("service registration failed", "error", err)
+		return err
 	}
-	return utils.Error.LogOK(a.log.Infof, "service successfully registered with consul")
+	a.log.Info("service successfully registered with consul")
+	return nil
 }
 
 func (a *ap) Run() {
 	fmt.Println()
-	utils.Error.Fail(a.log.Entry, a.Register(), "failed to register service with consul")
+	if err := a.Register(); err != nil {
+		a.log.Error("failed to register service with consul", "error", err)
+	}
 	signal.Notify(a.osc, os.Interrupt, syscall.SIGTERM)
 	startupMsg := "started"
 	if a.router != nil {
 		startupMsg += " with http router " + a.conf.Address()
 		go a.router.Run(a.conf.Address())
 	}
-	a.log.Printf("%s", startupMsg)
+	a.log.Info(startupMsg)
 	<-a.osc
 	a.cancel()
 	fmt.Println()
@@ -199,11 +209,11 @@ func (a *ap) Run() {
 	if a.consul != nil && a.serviceId != "" {
 		a.consul.Agent().ServiceDeregister(a.serviceId)
 	}
-	a.log.Printf("shutdown complete")
+	a.log.Info("shutdown complete")
 }
 
 func (a *ap) shutdown() {
-	a.log.Printf("shutting down")
+	a.log.Info("shutting down")
 }
 
 func WithHandlerOverride(key string, handler gin.HandlerFunc) AppIniter {
@@ -253,9 +263,6 @@ func (a *ap) initAPI(opts ...AppIniter) {
 		AllowHeaders:     a.conf.Http.AllowHeaders,
 		ExposeHeaders:    a.conf.Http.ExposeHeaders,
 		AllowCredentials: a.conf.Http.AllowCredentials,
-		// AllowOriginFunc: func(origin string) bool {
-		// 	return true
-		// },
 		MaxAge: a.conf.Http.MaxAge,
 	}))
 

@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/kod2ulz/gostart/logr"
@@ -93,7 +94,7 @@ func (w *workerManager) Exchange() Exchange[amqp.Delivery] {
 			for {
 				select {
 				case <-w.ctx.Done():
-					w.log.Warnf("%T: %s %s closing connection", w, w.theme, w.exchange)
+					w.log.Warn(fmt.Sprintf("%T: %s %s closing connection", w, w.theme, w.exchange))
 					time.Sleep(100 * time.Millisecond)
 					rmq.Close()
 					return

@@ -1,87 +1,59 @@
 package logr
 
 import (
-	"io"
+	"log/slog"
 	"os"
-	"strconv"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
-const (
-	ENV_LOG_LEVEL       = "LOG_LEVEL"
-	ENV_PRETTY_LOG      = "PRETTY_LOG_PRINT"
-	ENV_APP_NAME        = "APP_NAME"
-	ENV_APP_HOST        = "HOST"
-	ENV_LOG_FILE_PATH   = "LOG_FILE_PATH"
-)
-
-func Config() (err error) {
-	log := logrus.New()
-	log.SetReportCaller(true)
-	log.SetLevel(logrus.TraceLevel)
-
-	// Configure output
-	logFilePath := os.Getenv(ENV_LOG_FILE_PATH)
-	if logFilePath != "" {
-		file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			log.WithError(err).Error("Failed to open log file, defaulting to stdout")
-		} else {
-			log.SetOutput(io.MultiWriter(os.Stdout, file))
-		}
-	} else {
-		log.SetOutput(os.Stdout)
+// Config initializes the logger with default settings.
+func Config() error {
+	levelStr := os.Getenv("LOG_LEVEL")
+	if levelStr == "" {
+		levelStr = "info"
 	}
+	level := _getLogLevel(levelStr)
 
-	var prettyPrint bool
-	if prettyPrint, err = strconv.ParseBool(os.Getenv(ENV_PRETTY_LOG)); err != nil {
-		log.WithError(err).Errorf("error parsing %s", ENV_PRETTY_LOG)
-		prettyPrint = true
-		log.Infof("defaulting to log.Formatter.PrettyPrint=%v", prettyPrint)
-	}
-
-	log.SetFormatter(&logrus.JSONFormatter{
-		PrettyPrint: prettyPrint,
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     level,
 	})
 
-	defaultFields := logrus.Fields{
-		"application": os.Getenv(ENV_APP_NAME),
-	}
+	logger := slog.New(handler)
 
-	if err = SetUpLogger(log.WithFields(defaultFields)); err != nil {
-		log.WithError(err).WithField("logrus", map[string]interface{}{
-			"level": log.GetLevel(),
-		}).Error("Error setting up logger")
-	}
-	return
+	// For now, the audit writer is nil. It will be configured separately.
+	SetUpLogger(logger, nil)
+
+	return nil
 }
 
-func _getLogLevel() logrus.Level {
-	switch level := strings.ToLower(os.Getenv(ENV_LOG_LEVEL)); level {
-	case "panic", "0":
-		return logrus.PanicLevel
-	case "fatal", "1":
-		return logrus.FatalLevel
-	case "error", "2":
-		return logrus.ErrorLevel
-	case "warn", "3":
-		return logrus.WarnLevel
-	case "info", "4":
-		return logrus.InfoLevel
-	case "debug", "5":
-		return logrus.DebugLevel
-	case "trace", "6":
-		return logrus.TraceLevel
+func _getLogLevel(level string) slog.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
-	return logrus.TraceLevel
 }
 
-func _getHost() string {
-	host, err := os.Hostname()
-	if err == nil {
-		return host
-	}
-	return os.Getenv(ENV_APP_HOST)
+func _getHost() (string, error) {
+	return os.Hostname()
+}
+
+// These functions are kept for backward compatibility but are no longer used by the new slog-based configuration.
+
+func _getLogrusLogLevel(level string) int {
+	// Kept for reference, but not used.
+	return 0
+}
+
+func _getLogrusHost() string {
+	// Kept for reference, but not used.
+	return ""
 }

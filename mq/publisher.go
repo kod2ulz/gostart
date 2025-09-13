@@ -8,7 +8,6 @@ import (
 	colz "github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -53,11 +52,15 @@ func (p *publisher) init(routingKey ...string) (err error) {
 	return nil
 }
 
-func (p *publisher) error(err error, params logrus.Fields, msg string, args ...any) error {
+func (p *publisher) error(err error, params map[string]any, msg string, args ...any) error {
+	_args := make([]any, 0)
 	fields := colz.Map[string, any]{
-		"exchange": p.exchange.Name(), "worker": fmt.Sprintf("%T", p),
+		"exchange": p.exchange.Name(), "worker": fmt.Sprintf("%T", p), "error": err, 
 	}
-	p.log.WithError(err).WithFields(logrus.Fields(fields.Merge(params))).Errorf(msg, args...)
+	for k, v := range fields.Merge(params) {
+		_args = append(_args, k, v)
+	}
+	p.log.Error(fmt.Sprintf(msg, args...), _args...)
 	return errors.Wrapf(err, msg, args...)
 }
 

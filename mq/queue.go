@@ -5,7 +5,6 @@ import (
 
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -63,9 +62,7 @@ func (q *rmqQueue) consume(shared bool) (in <-chan amqp.Delivery, err error) {
 					q.log.Error("error channel closed")
 					return
 				}
-				q.log.WithError(er).WithFields(logrus.Fields{
-					"queue": q.name,
-				}).Error("encountered error while consuming exchange")
+				q.log.Error("encountered error while consuming exchange", "queue", q.name, "error", er)
 				return
 			case msg, ok := <-incoming:
 				if !ok {

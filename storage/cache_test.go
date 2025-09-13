@@ -11,7 +11,6 @@ import (
 	"github.com/kod2ulz/gostart/storage"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sirupsen/logrus"
 )
 
 // TestUser is a mock model for testing the cache
@@ -48,10 +47,7 @@ var _ = Describe("MemoryCache", func() {
 		fetcherMutex.Unlock()
 
 		// Initialize logger
-		logr.SetUpLogger(logrus.NewEntry(logrus.New()))
-		logger := logr.Log()
-		logger.Logger.SetOutput(GinkgoWriter)
-		logger.Logger.SetLevel(logrus.DebugLevel)
+		Expect(logr.Config()).To(Succeed())
 	})
 
 	JustBeforeEach(func() {

@@ -41,10 +41,9 @@ func WithTokenConfig[ID comparable, U SessionUser[ID]](conf *TokenConfig) Servic
 func SessionService[ID comparable, U SessionUser[ID]](log *logr.Logger, store SessionStore[ID, U], opts ...ServiceInitFunc[ID, U]) (out *GenericSessionService[ID, U]) {
 	if store == nil {
 		if log != nil {
-			log.Fatal("SessionService: store is nil")
-		} else {
-			panic("SessionService: store is nil")
+			log.Error("SessionService: store is nil")
 		}
+		panic("SessionService: store is nil")
 	}
 	out = &GenericSessionService[ID, U]{
 		db: store, log: log,

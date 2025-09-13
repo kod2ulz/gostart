@@ -2,10 +2,10 @@ package mq
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/sirupsen/logrus"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -55,19 +55,17 @@ type RMQ struct {
 func (q *RMQ) Close() error {
 	defer func() {
 		if err := recover(); err != nil {
-			q.log.WithField(
-				"conn", q.conf.String(),
-			).Errorf("panic occurred while closing instance. %v", err)
+			q.log.Error(fmt.Sprintf("panic occurred while closing instance"), "error", err, "conn", q.conf.String())
 		}
 	}()
 	go func() {
 		if err := q.publisher.close(); err != nil {
-			q.log.WithError(err).Error("error closing publisher")
+			q.log.Error("error closing publisher", "error", err)
 		}
 	}()
 	go func() {
 		if err := q.consumer.close(); err != nil {
-			q.log.WithError(err).Error("error closing consumer")
+			q.log.Error("error closing consumer", "error", err)
 		}
 	}()
 	return nil
@@ -76,12 +74,10 @@ func (q *RMQ) Close() error {
 func (q *RMQ) DeclareExchange(name, kind string, durable bool, autoDelete bool, internal bool, noWait bool, args amqp.Table) (exchange *rmqExchange) {
 	var ok bool
 	if exchange, ok = q.exchanges[name]; ok {
-		q.log.WithField("exchange", name).Warnf("%s exchange already initialised", kind)
+		q.log.Warn(fmt.Sprintf("%s exchange already initialised", kind), "exchange", name)
 		return
 	}
-	q.log.WithField("exchange", logrus.Fields{
-		"name": name, "type": kind,
-	}).Info("initiaising exchange")
+	q.log.Info("initiaising exchange", "name", name, "type", kind)
 	exchange = &rmqExchange{
 		rmExchangeDeclare: rmExchangeDeclare{name: name, kind: kind, durable: durable, autoDelete: autoDelete, internal: internal, noWait: noWait, args: args},
 		publisher:         q.publisher,
@@ -104,10 +100,10 @@ func (q *RMQ) TopicExchange(name string) (exc *rmqExchange) {
 func (q *RMQ) DeclareQueue(name string, durable bool, autoDelete bool, exclusive bool, noWait bool, args amqp.Table) (queue *rmqQueue) {
 	var ok bool
 	if queue, ok = q.queues[name]; ok {
-		q.log.WithField("exchange", name).Warnf("queue already initialised")
+		q.log.Warn("queue already initialised", "exchange", name)
 		return
 	}
-	q.log.WithField("queue", name).Info("initiaising exchange")
+	q.log.Warn("initiaising initialised", "queue", name)
 	queue = &rmqQueue{
 		rmQueueDeclare: rmQueueDeclare{name: name, durable: durable, autoDelete: autoDelete, exclusive: exclusive, noWait: noWait, args: args},
 		publisher:      q.publisher,

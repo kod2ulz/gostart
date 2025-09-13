@@ -8,7 +8,6 @@ import (
 	json "github.com/json-iterator/go"
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -62,10 +61,10 @@ func InitWorkerStrict[P, R any](
 		processorFunc: processorFunc,
 	}
 	err = out.start()
-	log.WithFields(logrus.Fields{
-		"exchange": exchange.Name(), "routingKeys": out.bindkeys,
-		"processFn": out.ProcessFn(), "errorFn": out.ErrorFn(),
-	}).Debugf("initialised worker with processor: %T", processorFunc)
+	log.Debug(fmt.Sprintf("initialised worker with processor: %T", processorFunc),
+		"exchange", exchange.Name(), "routingKeys", out.bindkeys,
+		"processFn", out.ProcessFn(), "errorFn", out.ErrorFn(),
+	)
 	return
 }
 
@@ -91,9 +90,7 @@ type worker[P, R any] struct {
 }
 
 func (w *worker[P, R]) error(err error, msg string, args ...interface{}) error {
-	w.log.WithError(err).WithFields(logrus.Fields{
-		"queue": w.queue, "keys": w.bindkeys, "exchange": w.exchange.Name(),
-	}).Errorf(msg, args...)
+	w.log.Error(fmt.Sprintf(msg, args...), "queue", w.queue, "keys", w.bindkeys, "exchange", w.exchange.Name(), "error", err,)
 	return errors.Wrapf(err, msg, args...)
 }
 

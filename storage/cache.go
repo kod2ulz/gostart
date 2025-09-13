@@ -107,7 +107,8 @@ func NewMemoryCache[K comparable, T CacheModel[K, T], E error](log *logr.Logger,
 	}
 	if out.fetcher == nil {
 		var t = new(T)
-		log.Fatalf("cache is unusable without a way to load %T objects into cache. Please initialise with option NewMemoryCache(WithDataFunc(<func>))", t)
+		log.Error(fmt.Sprintf("cache is unusable without a way to load %T objects into cache. Please initialise with option NewMemoryCache(WithDataFunc(<func>))", t))
+		panic("unusable cache")
 	}
 	if out.delimiter == "" {
 		out.delimiter = "."

@@ -12,7 +12,7 @@ func Load(ctx context.Context, cnf *Conf, log *logr.Logger) *RMQ {
 	case "rabbitmq":
 		return RabbitMQ(ctx, log, cnf)
 	default:
-		log.Fatalf("unsupported MQ driver %s", driver)
+		log.Error("unsupported MQ driver", "driver", driver)
 	}
 	return nil
 }

@@ -2,12 +2,12 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/sirupsen/logrus"
 )
 
 type taskUtils struct{}
@@ -23,7 +23,7 @@ func (u taskUtils) WithRetry(log *logr.Logger, tries int, wait time.Duration, fn
 			return
 		}
 		tries--
-		log.WithError(e).Errorf("attempt %d failed. retrying in %v", tr-tries, wait)
+		log.Error(fmt.Sprintf("attempt %d failed. retrying in %v", tr-tries, wait), "error", e)
 		time.Sleep(wait)
 	}
 }
@@ -42,7 +42,7 @@ func (u taskUtils) WithTimeout(timeout time.Duration, fn func() error) (success 
 	}
 }
 
-func SafeChannelWrite[T any](ctx context.Context, log *logrus.Entry, data T, out chan<- T, closeMessage ...string) (err error) {
+func SafeChannelWrite[T any](ctx context.Context, log *logr.Logger, data T, out chan<- T, closeMessage ...string) (err error) {
 	go func(in T) {
 		for {
 			select {

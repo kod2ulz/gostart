@@ -17,14 +17,14 @@ type ApiFunc[R any] func(context.Context) (R, api.Error)
 
 func GenericWorkerErrorHandler[P api.RequestParam](log *logr.Logger, operation string) WorkerErrorFunc[P] {
 	return func(p *P, err error) (retry bool, delay time.Duration) {
-		log.WithError(err).WithField("msg", p).Errorf("%s %T failed", operation, p)
+		log.Error(fmt.Sprintf("%s %T failed", operation, p), "msg", p)
 		return false, 0
 	}
 }
 
 func GenericWorkerProcessHandler[P api.RequestParam, R any](log *logr.Logger, operation string, fn ApiFunc[R]) WorkerProcessorFunc[P, R] {
 	return func(msg *P, routingKey string, redelivered bool) (out R, err error) {
-		log.Debugf("received payload:[%T] on route:[%s] :: %T", msg, routingKey, fn)
+		log.Debug(fmt.Sprintf("received payload:[%T] on route:[%s] :: %T", msg, routingKey, fn))
 		return fn(context.WithValue(context.TODO(), (*msg).ContextKey(), *msg))
 	}
 }

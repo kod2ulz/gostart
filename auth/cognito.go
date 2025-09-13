@@ -16,9 +16,11 @@ func Client(log *logr.Logger, ctx context.Context, conf *Config) *CognitoClient 
 	awCfg, err := config.LoadDefaultConfig(ctx)
 
 	if err != nil {
-		log.WithError(err).Fatal("failed to load default AWS config")
+		log.Error("failed to load default AWS config", "error", err)
+		panic(err)
 	} else if conf.Driver != cognitoDriver {
-		log.Fatalf("unsupported auth provider %s", conf.Driver)
+		log.Error("unsupported auth provider", "provider", conf.Driver)
+		panic("unsupported auth provider")
 	}
 
 	return &CognitoClient{

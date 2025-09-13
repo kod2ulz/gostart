@@ -7,7 +7,6 @@ import (
 	"github.com/kod2ulz/gostart/logr"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -32,29 +31,28 @@ func JSONLogMiddleware(log *logr.Logger) gin.HandlerFunc {
 
 		c.Next()
 
-		fields := logrus.Fields{
-			"client_ip":  c.ClientIP(),
-			"duration":   time.Since(start).Milliseconds(),
-			"method":     c.Request.Method,
-			"path":       c.Request.RequestURI,
-			"status":     c.Writer.Status(),
-			"referrer":   c.Request.Referer(),
-			"request_id": c.Writer.Header().Get(requestIdHeader1),
-			"size":       c.Writer.Size(),
-			// "api_version": util.ApiVersion,
+		args := []interface{}{
+			"client_ip", c.ClientIP(),
+			"duration", time.Since(start).Milliseconds(),
+			"method", c.Request.Method,
+			"path", c.Request.RequestURI,
+			"status", c.Writer.Status(),
+			"referrer", c.Request.Referer(),
+			"request_id", c.Writer.Header().Get(requestIdHeader1),
+			"size", c.Writer.Size(),
 		}
 
 		if user, ok := c.Get("auth.User"); ok {
-			fields["user_id"] = user.(User).ID()
+			args = append(args, "user_id", user.(User).ID())
 		}
 
-		entry := log.WithFields(fields)
+		entry := log.With(args...)
 		if c.Writer.Status() >= 500 {
 			entry.Error(c.Errors.String())
 		} else if c.Writer.Status() >= 400 {
-			entry.WithField("errors", c.Errors).Warn("")
-		} else if fields["path"] == "/ok" {
-			entry.Trace("consul hc")
+			entry.Warn("", "errors", c.Errors.String())
+		} else if c.Request.RequestURI == "/ok" {
+			entry.Debug("consul hc")
 		} else {
 			entry.Info("")
 		}

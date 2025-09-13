@@ -6,7 +6,6 @@ import (
 
 	"github.com/kod2ulz/gostart/logr"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -81,13 +80,11 @@ func (e *rmqExchange) consumeQueue(tempQueue string, shared bool, routingKeys ..
 			select {
 			case er, ok := <-errs:
 				if !ok {
-					e.log.Fatal("error channel closed")
-					return
+					e.log.Error("error channel closed")
+					panic("error channel closed")
+					// return
 				}
-				e.log.WithError(er).WithFields(logrus.Fields{
-					"exchange": e.name,
-					"type":     e.kind,
-				}).Error("encountered error while consuming exchange")
+				e.log.Error("encountered error while consuming exchange", "exchange", e.name, "type", e.kind, "error", er)
 				return
 			case msg, ok := <-incoming:
 				if !ok {
@@ -98,7 +95,7 @@ func (e *rmqExchange) consumeQueue(tempQueue string, shared bool, routingKeys ..
 			}
 		}
 	}()
-	e.log.WithField("routingKeys", routingKeys).Info("listener initialised")
+	e.log.Info("listener initialised", "routingKeys", routingKeys)
 	return e.in, err
 }
 
