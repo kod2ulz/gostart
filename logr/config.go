@@ -1,27 +1,133 @@
 package logr
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/lmittmann/tint"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Config initializes the logger with default settings.
-func Config() error {
-	levelStr := os.Getenv("LOG_LEVEL")
-	if levelStr == "" {
-		levelStr = "info"
-	}
-	level := _getLogLevel(levelStr)
+// --- Multi Handler ---
 
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+// MultiHandler dispatches log records to multiple handlers.
+type MultiHandler struct {
+	handlers []slog.Handler
+}
+
+func NewMultiHandler(handlers ...slog.Handler) *MultiHandler {
+	return &MultiHandler{handlers: handlers}
+}
+
+func (h *MultiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, handler := range h.handlers {
+		if handler.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *MultiHandler) Handle(ctx context.Context, record slog.Record) error {
+	for _, handler := range h.handlers {
+		_ = handler.Handle(ctx, record)
+	}
+	return nil
+}
+
+func (h *MultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newHandlers := make([]slog.Handler, len(h.handlers))
+	for i, handler := range h.handlers {
+		newHandlers[i] = handler.WithAttrs(attrs)
+	}
+	return NewMultiHandler(newHandlers...)
+}
+
+func (h *MultiHandler) WithGroup(name string) slog.Handler {
+	newHandlers := make([]slog.Handler, len(h.handlers))
+	for i, handler := range h.handlers {
+		newHandlers[i] = handler.WithGroup(name)
+	}
+	return NewMultiHandler(newHandlers...)
+}
+
+// --- Handler Constructors ---
+
+// RotationConfig configures the log file rotation.
+type RotationConfig struct {
+	MaxSize    int  // Max size in megabytes before rotation
+	MaxAge     int  // Max number of days to retain old log files
+	MaxBackups int  // Max number of old log files to retain
+	Compress   bool // Whether to compress/gzip old log files
+}
+
+// NewConsoleHandler creates a handler that writes to stdout.
+// If pretty is true, it uses a colorized, human-friendly format.
+// Otherwise, it writes minified JSON.
+func NewConsoleHandler(pretty bool) slog.Handler {
+	level := _getLogLevel(getEnv("LOG_LEVEL", "info"))
+	opts := &slog.HandlerOptions{
 		AddSource: true,
 		Level:     level,
+	}
+
+	if pretty {
+		return tint.NewHandler(os.Stdout, &tint.Options{
+			AddSource:  true,
+			Level:      level,
+			TimeFormat: time.Kitchen,
+		})
+	}
+	return slog.NewJSONHandler(os.Stdout, opts)
+}
+
+// NewFileHandler creates a handler that writes to a file with rotation.
+// If rotation is nil, default settings are read from environment variables.
+func NewFileHandler(path string, rotation *RotationConfig) slog.Handler {
+	if rotation == nil {
+		rotation = &RotationConfig{
+			MaxSize:    getEnvInt("LOG_ROTATE_MAX_SIZE", 100),
+			MaxBackups: getEnvInt("LOG_ROTATE_MAX_BACKUPS", 5),
+			MaxAge:     getEnvInt("LOG_ROTATE_MAX_AGE", 30),
+			Compress:   getEnvBool("LOG_ROTATE_COMPRESS", true),
+		}
+	}
+
+	writer := &lumberjack.Logger{
+		Filename:   path,
+		MaxSize:    rotation.MaxSize,
+		MaxAge:     rotation.MaxAge,
+		MaxBackups: rotation.MaxBackups,
+		Compress:   rotation.Compress,
+	}
+
+	return slog.NewJSONHandler(writer, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     _getLogLevel(getEnv("LOG_LEVEL", "info")),
 	})
+}
 
-	logger := slog.New(handler)
+// --- Main Config ---
 
-	// For now, the audit writer is nil. It will be configured separately.
+// Config initializes the logger.
+// It can take multiple handlers, which will all receive log entries.
+// If no handlers are provided, it defaults to a JSON handler to stdout.
+func Config(handlers ...slog.Handler) error {
+	var finalHandler slog.Handler
+
+	if len(handlers) == 0 {
+		finalHandler = NewConsoleHandler(false) // Default to minified JSON
+	} else if len(handlers) == 1 {
+		finalHandler = handlers[0]
+	} else {
+		finalHandler = NewMultiHandler(handlers...)
+	}
+
+	logger := slog.New(finalHandler)
+
 	SetUpLogger(logger, nil)
 
 	return nil
@@ -44,16 +150,4 @@ func _getLogLevel(level string) slog.Level {
 
 func _getHost() (string, error) {
 	return os.Hostname()
-}
-
-// These functions are kept for backward compatibility but are no longer used by the new slog-based configuration.
-
-func _getLogrusLogLevel(level string) int {
-	// Kept for reference, but not used.
-	return 0
-}
-
-func _getLogrusHost() string {
-	// Kept for reference, but not used.
-	return ""
 }
