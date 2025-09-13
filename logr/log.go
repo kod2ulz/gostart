@@ -8,11 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// AuditWriter defines the interface for writing audit logs to a destination.
-type AuditWriter interface {
-	Write(entry map[string]interface{}) error
-}
-
 var (
 	log         *Logger
 	auditLogger *AuditLogger
@@ -45,7 +40,8 @@ func Audit() *AuditLogger {
 
 func SetAuditWriter(w AuditWriter) {
 	if auditLogger != nil {
-		auditLogger.writer = w
+		// Ensure the writer is non-blocking.
+		auditLogger.writer = NewNonBlockingAuditWriter(w, getEnvInt("AUDIT_LOG_ASYNC_WRITER_BUFFER_MAX_SIZE", 1000)) // Default buffer size of 1000
 	}
 }
 
@@ -56,7 +52,10 @@ func SetUpLogger(l *slog.Logger, w AuditWriter) {
 		Logger: l.With("host", host),
 		host:   host,
 	}
-	auditLogger = &AuditLogger{writer: w}
+	auditLogger = &AuditLogger{}
+	if w != nil {
+		SetAuditWriter(w)
+	}
 }
 
 // TID add trace_id field to log output

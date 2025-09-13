@@ -147,7 +147,10 @@ The default JSON handler produces a consistent, top-level structure. While top-l
 
 ## 5. Audit Logging
 
-Audit logging is a separate, critical concern. The audit logger is configured independently from the main application logger to ensure audit trails are never dropped and are routed to a secure, permanent destination.
+Audit logging is a separate, critical concern. The audit logger is configured independently from the main application logger to ensure audit trails are never dropped and are routed to a secure, permanent destination. By default, the audit writer is **non-blocking** to prevent performance degradation.
+
+**Environment Variables for Audit Writer:**
+- `AUDIT_LOG_ASYNC_WRITER_BUFFER_MAX_SIZE`: The size of the in-memory buffer for the async writer. (Default: `1000`)
 
 **Example: Configuring a Database Audit Writer**
 ```go

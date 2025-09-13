@@ -54,15 +54,7 @@ func (h *MultiHandler) WithGroup(name string) slog.Handler {
 	return NewMultiHandler(newHandlers...)
 }
 
-// --- Handler Constructors ---
 
-// RotationConfig configures the log file rotation.
-type RotationConfig struct {
-	MaxSize    int  // Max size in megabytes before rotation
-	MaxAge     int  // Max number of days to retain old log files
-	MaxBackups int  // Max number of old log files to retain
-	Compress   bool // Whether to compress/gzip old log files
-}
 
 // NewConsoleHandler creates a handler that writes to stdout.
 // If pretty is true, it uses a colorized, human-friendly format.
