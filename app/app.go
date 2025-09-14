@@ -14,17 +14,15 @@ import (
 	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/pkg/errors"
+	
 
 	"github.com/gin-gonic/gin"
 	consulapi "github.com/hashicorp/consul/api"
-	"github.com/joho/godotenv"
 )
 
 var (
 	// global single instance of the _instance
 	_instance *ap
-	strictEnv bool
 )
 
 type ap struct {
@@ -32,7 +30,6 @@ type ap struct {
 	log    *logr.Logger
 	start  time.Time
 	conf   *conf
-	consul *consulapi.Client
 
 	serviceId string
 
@@ -46,13 +43,6 @@ type ap struct {
 
 type AppIniter func(*ap) error
 
-func WithStrictEnv() AppIniter {
-	return func(a *ap) error {
-		strictEnv = true
-		return nil
-	}
-}
-
 func Init(opts ...AppIniter) *ap {
 	if _instance != nil {
 		return _instance
@@ -60,13 +50,8 @@ func Init(opts ...AppIniter) *ap {
 	for i := range opts {
 		opts[i](nil)
 	}
-	if err := godotenv.Load(); err != nil {
-		if strictEnv {
-			slog.Error("error loading env files", "error", err)
-			panic(err)
-		}
-		slog.Warn("error loading env files", "error", err)
-	}
+	config.Load() // Load .env file
+
 	if err := logr.Config(); err != nil {
 		slog.Error("Application log initialisation failed", "error", err)
 		panic(err)
@@ -111,51 +96,27 @@ func (a *ap) Config() *conf {
 	return a.conf
 }
 
-func Consul() (client *consulapi.Client) {
-	a := instance()
-	if client = a.consul; client == nil {
-		a.log.Error("consul client not initialsed")
-		panic("consul client not initialsed")
-	}
-	return
-}
-
 func Log() *logr.Logger {
 	return instance().log
 }
 
-func Service(name string) (out *consulapi.AgentService, err error) {
-	var ok bool
-	if services, err := Consul().Agent().Services(); err != nil {
-		return out, errors.Wrap(err, "error fetching registered consul services")
-	} else if out, ok = services[name]; !ok {
-		return out, errors.Errorf("service %s unknown to consul agent", name)
-	}
-	return
-}
-
-func ServiceUrl(name string) (out string) {
-	service, err := Service(name)
-	if err == nil {
-		return fmt.Sprintf("http://%s:%v", service.Address, service.Port)
-	}
-	Log().Error("failed to get service url", "consul.service", name, "error", err)
-	return
-}
-
 func (a *ap) Register(name ...string) (err error) {
+	// Ensure the shared consul client is configured
+	if _, err = config.Consul.Endpoint(); err != nil {
+		a.log.Warn("skipping consul registration", "error", err)
+		return nil // Do not block app startup if consul is not available
+	}
+
+	client := config.Consul.Client()
+	if client == nil {
+		a.log.Warn("skipping consul registration: client not configured")
+		return nil
+	}
+
 	var serviceName string
 	var env = config.Env.Helper("CONSUL")
 	var serviceHost = env.Get("SERVICE_HOST", a.conf.Host).String()
 
-	if a.consul != nil {
-		a.log.Info("service already registered with consul")
-		return nil
-	} else if consulAddress := env.Get("HTTP_ADDR", ""); !consulAddress.Valid() {
-		a.log.Warn(fmt.Sprintf("env var %s_HTTP_ADDR not set. skipping consul initialization", env.Prefix()))
-		return nil
-	}
-	config := consulapi.DefaultConfig()
 	if len(name) > 0 && name[0] != "" {
 		serviceName = name[0]
 	} else {
@@ -168,10 +129,8 @@ func (a *ap) Register(name ...string) (err error) {
 	} else {
 		a.serviceId = serviceName
 	}
-	if a.consul, err = consulapi.NewClient(config); err != nil {
-		a.log.Error("consul client initialisation failed", "error", err)
-		return err
-	} else if err = a.consul.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
+
+	if err = client.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
 		ID:      a.serviceId,
 		Name:    serviceName,
 		Port:    a.conf.HttpPort,
@@ -206,8 +165,8 @@ func (a *ap) Run() {
 	a.cancel()
 	fmt.Println()
 	a.shutdown()
-	if a.consul != nil && a.serviceId != "" {
-		a.consul.Agent().ServiceDeregister(a.serviceId)
+	if client := config.Consul.Client(); client != nil && a.serviceId != "" {
+		client.Agent().ServiceDeregister(a.serviceId)
 	}
 	a.log.Info("shutdown complete")
 }

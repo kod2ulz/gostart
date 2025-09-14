@@ -59,6 +59,19 @@ featureFlag := config.DB.Get("feature.new_dashboard.enabled", false).Bool()
 apiKey := config.Vault.Get("secret/keys.api-key").String()
 ```
 
+### Service Discovery (Consul)
+
+Once configured, you can use the `Consul` provider to discover the URLs of other services registered in Consul. The results are cached to prevent excessive network calls.
+
+```go
+// Get the URL for "my-other-service"
+serviceUrl, err := config.Consul.GetServiceUrl("my-other-service")
+if err != nil {
+    // handle error
+}
+// serviceUrl is now "http://service.host:port"
+```
+
 ### Configuring Sources
 
 Each source must be configured during application startup before `config.Get()` is called.
@@ -91,7 +104,13 @@ func main() {
     config.DB.From(dbPool, "").WithCache(5 * time.Minute).WithLookup(customLookup).WithSeeder(customSeeder)
 
     // Configure Vault source
-    if _, err := config.Vault.Endpoint("https://vault.example.com:8200", "VAULT_TOKEN_ENV_VAR"); err != nil {
+    if _, err := config.Vault.Endpoint(); err != nil {
+        // handle error
+    }
+
+    // Configure Consul for service discovery
+    // Reads CONSUL_HTTP_ADDR from config
+    if _, err := config.Consul.Endpoint(); err != nil {
         // handle error
     }
 
