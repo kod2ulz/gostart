@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/iancoleman/strcase"
+	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/object"
-	"github.com/kod2ulz/gostart/utils"
 )
 
 var (
@@ -15,7 +15,7 @@ var (
 // _ URLSearchLoader = (*urlSearch).(nil)
 )
 
-type UrlFieldReader func(ctx context.Context, name string, _default ...string) (out utils.Value)
+type UrlFieldReader func(ctx context.Context, name string, _default ...string) (out config.Value)
 
 type URLSearchParam interface {
 	GetFieldValues() map[string]any
@@ -131,12 +131,12 @@ func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) 
 			}
 		}
 		for _, field := range object.String(fields[i]).Variations("~%s", "~%s~", "%s~") {
-			var val utils.Value
+			var val config.Value
 			if val = s.query(ctx, field); !val.Valid() {
 				val = s.query(ctx, strcase.ToCamel(field))
 			}
 			if val.Valid() {
-				s.comparisons[fields[i]][CompareLike] = utils.Value(strings.Replace(strings.ReplaceAll(field, "~", "%"), fields[i], val.String(), 1))
+				s.comparisons[fields[i]][CompareLike] = config.Value(strings.Replace(strings.ReplaceAll(field, "~", "%"), fields[i], val.String(), 1))
 				break
 			}
 		}
@@ -244,11 +244,11 @@ func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchPar
 			if s1, ok := v.(string); ok {
 				if _, ok := r.comparisons[f]; ok {
 					if _, ok = r.comparisons[f][CompareLike]; ok {
-						r.comparisons[f][CompareEqual] = utils.Value(s1).Time(format).UTC()
+						r.comparisons[f][CompareEqual] = config.Value(s1).Time(format).UTC()
 					}
 				}
-				return utils.Value(s1).Time(format).UTC()
-			} else if v1, ok := v.(utils.Value); ok {
+				return config.Value(s1).Time(format).UTC()
+			} else if v1, ok := v.(config.Value); ok {
 				if _, ok := r.comparisons[f]; ok {
 					if _, ok = r.comparisons[f][CompareLike]; ok {
 						r.comparisons[f][CompareEqual] = v1.Time(format).UTC()

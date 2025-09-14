@@ -7,8 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kod2ulz/gostart/config"
 	"github.com/lmittmann/tint"
 	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+var (
+	logrEnv = config.Env.Helper()
 )
 
 // --- Multi Handler ---
@@ -60,7 +65,8 @@ func (h *MultiHandler) WithGroup(name string) slog.Handler {
 // If pretty is true, it uses a colorized, human-friendly format.
 // Otherwise, it writes minified JSON.
 func NewConsoleHandler(pretty bool) slog.Handler {
-	level := _getLogLevel(getEnv("LOG_LEVEL", "info"))
+	
+	level := _getLogLevel(logrEnv.GetString("LOG_LEVEL", "info"))
 	opts := &slog.HandlerOptions{
 		AddSource: true,
 		Level:     level,
@@ -80,11 +86,12 @@ func NewConsoleHandler(pretty bool) slog.Handler {
 // If rotation is nil, default settings are read from environment variables.
 func NewFileHandler(path string, rotation *RotationConfig) slog.Handler {
 	if rotation == nil {
+		fileHandlerEnv := logrEnv.Extend("LOG_ROTATE")
 		rotation = &RotationConfig{
-			MaxSize:    getEnvInt("LOG_ROTATE_MAX_SIZE", 100),
-			MaxBackups: getEnvInt("LOG_ROTATE_MAX_BACKUPS", 5),
-			MaxAge:     getEnvInt("LOG_ROTATE_MAX_AGE", 30),
-			Compress:   getEnvBool("LOG_ROTATE_COMPRESS", true),
+			MaxSize:    fileHandlerEnv.Get("MAX_SIZE", 100).Int(),
+			MaxBackups: fileHandlerEnv.Get("MAX_BACKUPS", 5).Int(),
+			MaxAge:     fileHandlerEnv.Get("MAX_AGE", 30).Int(),
+			Compress:   fileHandlerEnv.Get("COMPRESS", true).Bool(),
 		}
 	}
 
@@ -98,7 +105,7 @@ func NewFileHandler(path string, rotation *RotationConfig) slog.Handler {
 
 	return slog.NewJSONHandler(writer, &slog.HandlerOptions{
 		AddSource: true,
-		Level:     _getLogLevel(getEnv("LOG_LEVEL", "info")),
+		Level:     _getLogLevel(logrEnv.GetString("LOG_LEVEL", "info")),
 	})
 }
 

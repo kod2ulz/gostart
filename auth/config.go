@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 )
 
 type Config struct {
@@ -13,12 +13,12 @@ type Config struct {
 	ClientID           string
 	ClientSecret       string
 	AuthIssuerURL      string
-	JwkRefreshInterval utils.Value
+	JwkRefreshInterval config.Value
 	PublicKeyURL       string
 }
 
 func InitConfig(prefix ...string) (conf *Config) {
-	env := utils.Env.Helper(prefix...).OrDefault("AUTH")
+	env := config.Env.Helper(prefix...).OrDefault("AUTH")
 	conf = &Config{
 		Driver:             env.GetString("DRIVER", cognitoDriver),
 		UserPool:           env.GetString("USER_POOL", ""),

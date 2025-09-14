@@ -1,4 +1,4 @@
-package utils
+package config
 
 import (
 	"strconv"
@@ -12,7 +12,8 @@ import (
 type Value string
 
 func (v Value) Int() int {
-	return String.ToInt(strings.Trim(string(v), " "))
+	i, _ := strconv.Atoi(strings.Trim(string(v), " "))
+	return i
 }
 
 func (v Value) Int32() int32 {

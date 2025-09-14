@@ -3,7 +3,7 @@ package api
 import (
 	"time"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 )
 
 type HttpClientConfig struct {
@@ -17,7 +17,7 @@ type HttpClientConfig struct {
 }
 
 func ClientConfig(prefix ...string) (conf *HttpClientConfig) {
-	env := utils.Env.Helper(prefix...).OrDefault("SERVICE_API")
+	env := config.Env.Helper(prefix...).OrDefault("SERVICE_API")
 
 	conf = &HttpClientConfig{
 		Host:           env.GetString("URL", "https://api.service.io"),

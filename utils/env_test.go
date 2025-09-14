@@ -4,14 +4,14 @@ package utils_test
 import (
 	"os"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Env Util", func() {
 
-	var helper utils.EnvUtil
+	var helper config.EnvUtil
 
 	BeforeEach(func() {
 		os.Clearenv()
@@ -20,17 +20,17 @@ var _ = Describe("Env Util", func() {
 	Context("when using the global helper", func() {
 		It("should get an existing environment variable", func() {
 			os.Setenv("MY_VAR", "my_value")
-			Expect(utils.Env.GetOrDefault("MY_VAR", "default").String()).To(Equal("my_value"))
+			Expect(config.Env.GetOrDefault("MY_VAR", "default").String()).To(Equal("my_value"))
 		})
 
 		It("should get the default value when the variable is not set", func() {
-			Expect(utils.Env.GetOrDefault("MY_VAR", "default").String()).To(Equal("default"))
+			Expect(config.Env.GetOrDefault("MY_VAR", "default").String()).To(Equal("default"))
 		})
 	})
 
 	Context("when using a prefixed helper", func() {
 		BeforeEach(func() {
-			helper = utils.Env.Helper("MY_APP")
+			helper = config.Env.Helper("MY_APP")
 		})
 
 		It("should return the correct prefix", func() {
@@ -65,17 +65,17 @@ var _ = Describe("Env Util", func() {
 
 	Context("Value conversions", func() {
 		It("should convert to an integer", func() {
-			val := utils.Value("123")
+			val := config.Value("123")
 			Expect(val.Int()).To(Equal(123))
 		})
 
 		It("should convert to a boolean", func() {
-			Expect(utils.Value("true").Bool()).To(BeTrue())
-			Expect(utils.Value("false").Bool()).To(BeFalse())
+			Expect(config.Value("true").Bool()).To(BeTrue())
+			Expect(config.Value("false").Bool()).To(BeFalse())
 		})
 
 		It("should split into a string list", func() {
-			val := utils.Value("a,b,c")
+			val := config.Value("a,b,c")
 			Expect(val.StringList(",")).To(Equal([]string{"a", "b", "c"}))
 		})
 	})

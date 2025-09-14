@@ -41,7 +41,8 @@ func Audit() *AuditLogger {
 func SetAuditWriter(w AuditWriter) {
 	if auditLogger != nil {
 		// Ensure the writer is non-blocking.
-		auditLogger.writer = NewNonBlockingAuditWriter(w, getEnvInt("AUDIT_LOG_ASYNC_WRITER_BUFFER_MAX_SIZE", 1000)) // Default buffer size of 1000
+		auditEnv := logrEnv.Extend("AUDIT_LOG")
+		auditLogger.writer = NewNonBlockingAuditWriter(w, auditEnv.Get("ASYNC_WRITER_BUFFER_MAX_SIZE", 1000).Int()) // Default buffer size of 1000
 	}
 }
 

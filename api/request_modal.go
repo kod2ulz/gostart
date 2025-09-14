@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 )
@@ -108,20 +109,20 @@ func (p RequestModal[T]) InContext(ctx context.Context, in T) context.Context {
 	return context.WithValue(ctx, in.ContextKey(), in)
 }
 
-func (p RequestModal[T]) Query(ctx context.Context, name string, _default ...string) (out utils.Value) {
+func (p RequestModal[T]) Query(ctx context.Context, name string, _default ...string) (out config.Value) {
 	if v := ctx.(*gin.Context).Query(name); v != "" {
-		return utils.Value(v)
+		return config.Value(v)
 	} else if len(_default) > 0 {
-		return utils.Value(_default[0])
+		return config.Value(_default[0])
 	}
 	return
 }
 
-func (p RequestModal[T]) Path(ctx context.Context, name string, _default ...string) (out utils.Value) {
+func (p RequestModal[T]) Path(ctx context.Context, name string, _default ...string) (out config.Value) {
 	if v := ctx.(*gin.Context).Param(name); v != "" {
-		return utils.Value(v)
+		return config.Value(v)
 	} else if len(_default) > 0 {
-		return utils.Value(_default[0])
+		return config.Value(_default[0])
 	}
 	return
 }

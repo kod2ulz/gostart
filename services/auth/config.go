@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 )
 
 type TokenConfig struct {
@@ -22,10 +22,10 @@ type TokenConfig struct {
 }
 
 func InitTokenConfig(prefix ...string) (out *TokenConfig) {
-	env := utils.Env.Helper(prefix...).OrDefault("TOKEN")
+	env := config.Env.Helper(prefix...).OrDefault("TOKEN")
 	out = &TokenConfig{
 		AccessTimeout:  env.Get("ACCESS_TIMEOUT", "60m").Duration(),
-		Issuer:         env.Get("ISSUER", fmt.Sprintf("http://%s", utils.Env.GetHost())).String(),
+		Issuer:         env.Get("ISSUER", fmt.Sprintf("http://%s", config.Env.GetHost())).String(),
 		ClientID:       env.Get("CLIENT_ID", "TQcXMsCGc3RaMlHiUfiF").String(),
 		ClientSecret:   env.Get("CLIENT_SECRET", "MHz7SszY1ujSFp9TFMNU").String(),
 		SigningKeySeed: env.Get("SIGNING_KEY", "").String(),

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 )
 
 type Conf struct {
@@ -38,7 +38,7 @@ var defaults = map[string]map[string]string{
 }
 
 func Config(prefix ...string) (conf *Conf) {
-	env := utils.Env.Helper(prefix...)
+	env := config.Env.Helper(prefix...)
 	heartbeat := env.Get("HEARTBEAT_MILLISECONDS", DefaultHeartbeat).Int()
 	heartbeatTimeout := env.Get("HEARTBEAT_TIMEOUT_MILLISECONDS", DefaultHeartbeatTimeout).Int()
 

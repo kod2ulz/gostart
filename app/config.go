@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 )
 
 var _config *conf
@@ -13,8 +13,8 @@ func Conf() *conf {
 	if _config != nil {
 		return _config
 	}
-	var host = utils.Env.GetHost()
-	var env = utils.Env.Helper("APP")
+	var host = config.Env.GetHost()
+	var env = config.Env.Helper("APP")
 	_config = &conf{
 		Host:        host,
 		Name:        env.Get("NAME", host).String(),
@@ -53,7 +53,7 @@ type httpConf struct {
 }
 
 func HttpConf(prefix ...string) (conf *httpConf) {
-	env := utils.Env.Helper(prefix...).OrDefault("HTTP_SERVER")
+	env := config.Env.Helper(prefix...).OrDefault("HTTP_SERVER")
 
 	return &httpConf{
 		AllowOrigins:     env.Get("ALLOW_ORIGINS", "*").StringList(","),
@@ -71,7 +71,7 @@ type uptimeCheckConf struct {
 }
 
 func UptimeCheckConf(prefix ...string) (conf *uptimeCheckConf) {
-	env := utils.Env.Helper(prefix...).OrDefault("UPTIME_CHECK")
+	env := config.Env.Helper(prefix...).OrDefault("UPTIME_CHECK")
 
 	return &uptimeCheckConf{
 		Interval: env.Get("INTERVAL", "10s").Duration(),

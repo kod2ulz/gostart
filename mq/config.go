@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 )
 
 type ExchangeConfig struct {
@@ -68,7 +68,7 @@ const (
 )
 
 func Config(prefix ...string) *Conf {
-	env := utils.Env.Helper(prefix...).OrDefault("MQ")
+	env := config.Env.Helper(prefix...).OrDefault("MQ")
 	heartbeat := env.Get("HEARTBEAT_MILLISECONDS", DefaultHeartbeat).Int()
 	heartbeatTimeout := env.Get("HEARTBEAT_TIMEOUT_MILLISECONDS", DefaultHeartbeatTimeout).Int()
 

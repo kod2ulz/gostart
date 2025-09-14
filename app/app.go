@@ -12,8 +12,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/kod2ulz/gostart/utils"
 	"github.com/pkg/errors"
 
 	"github.com/gin-gonic/gin"
@@ -145,7 +145,7 @@ func ServiceUrl(name string) (out string) {
 
 func (a *ap) Register(name ...string) (err error) {
 	var serviceName string
-	var env = utils.Env.Helper("CONSUL")
+	var env = config.Env.Helper("CONSUL")
 	var serviceHost = env.Get("SERVICE_HOST", a.conf.Host).String()
 
 	if a.consul != nil {

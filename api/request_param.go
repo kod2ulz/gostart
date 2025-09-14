@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 	"github.com/pkg/errors"
 )
 
@@ -29,11 +29,11 @@ func ParamsFromContext[P RequestParam](ctx context.Context) (P, error) {
 	return reqParam.(P), nil
 }
 
-func QueryFromContext(ctx context.Context, name, _default string) utils.Value {
+func QueryFromContext(ctx context.Context, name, _default string) config.Value {
 	if v := ctx.(*gin.Context).Query(name); v != "" {
-		return utils.Value(v)
+		return config.Value(v)
 	}
-	return utils.Value(_default)
+	return config.Value(_default)
 }
 
 
