@@ -2,17 +2,13 @@ package config_test
 
 import (
 	"os"
-	"testing"
 
 	"github.com/kod2ulz/gostart/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-func TestYamlConfig(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "YAML Config Suite")
-}
+
 
 var _ = Describe("YAML Configuration", func() {
 

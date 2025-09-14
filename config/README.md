@@ -70,9 +70,19 @@ func main() {
     // Configure YAML source
     config.Yaml.Load("config.yaml")
 
-    // Configure DB source
-    dbConn, _ := connectToDatabase()
-    config.DB.From(dbConn, "app_settings_table").WithCache(5 * time.Minute)
+    // Configure DB source (simple method)
+    dbPool, _ := connectToPostgres()
+    config.DB.From(dbPool, "app_settings").WithCache(5 * time.Minute)
+
+    // Configure DB source (advanced method with custom lookup)
+    // This is useful for complex schemas or query logic.
+    customLookup := func(ctx context.Context, db config.Dbtx, key string) (string, error) {
+        // ... your custom query logic ...
+        var value string
+        err := db.QueryRow(ctx, "SELECT config_value FROM my_special_table WHERE config_key = $1", key).Scan(&value)
+        return value, err
+    }
+    config.DB.From(dbPool, "").WithCache(5 * time.Minute).WithLookup(customLookup)
 
     // Configure Vault source
     config.Vault.Endpoint("https://vault.example.com:8200", "VAULT_TOKEN_ENV_VAR")
