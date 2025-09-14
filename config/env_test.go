@@ -1,5 +1,5 @@
 
-package utils_test
+package config_test
 
 import (
 	"os"
@@ -59,6 +59,23 @@ var _ = Describe("Env Util", func() {
 
 			It("should panic if the value does not exist", func() {
 				Expect(func() { helper.MustGet("REQUIRED") }).To(Panic())
+			})
+		})
+
+		Context("with key transformation", func() {
+			It("should find a dot.case key", func() {
+				os.Setenv("MY_APP_SERVER_PORT", "8080")
+				Expect(helper.Get("server.port").Int()).To(Equal(8080))
+			})
+
+			It("should find a camelCase key", func() {
+				os.Setenv("MY_APP_DB_HOST", "localhost")
+				Expect(helper.Get("dbHost").String()).To(Equal("localhost"))
+			})
+
+			It("should find a kebab-case key", func() {
+				os.Setenv("MY_APP_ENABLE_FEATURE_X", "true")
+				Expect(helper.Get("enable-feature-x").Bool()).To(BeTrue())
 			})
 		})
 	})

@@ -42,25 +42,26 @@ timeout := config.Get("cache.ttl", "5m").Duration()
 
 ### Explicit Source Access
 
-For cases where you need to bypass the hierarchy and read from a specific source, the package will provide explicit accessor objects.
+For cases where you need to bypass the hierarchy and read from a specific source, each source provider has its own `Get()` method.
 
 ```go
 // Explicitly get a value from Environment Variables
-logLevel := config.Env.GetString("LOG_LEVEL", "info")
+// Note: The Env helper requires a prefix, or use an empty string for global scope.
+logLevel := config.Env.Helper("").Get("LOG_LEVEL", "info").String()
 
 // Explicitly get a value from a YAML file
-debugMode := config.Yaml.GetBool("debug", false)
+debugMode := config.Yaml.Get("debug", false).Bool()
 
 // Explicitly get a value from the Database
-featureFlag := config.DB.GetBool("feature.new_dashboard.enabled", false)
+featureFlag := config.DB.Get("feature.new_dashboard.enabled", false).Bool()
 
 // Explicitly get a secret from Vault
-apiKey := config.Vault.GetString("external_api.key")
+apiKey := config.Vault.Get("secret/keys.api-key").String()
 ```
 
 ### Configuring Sources
 
-Each source will require some initial setup, which will be handled during application startup.
+Each source must be configured during application startup before `config.Get()` is called.
 
 ```go
 // Example of how sources might be configured (conceptual)
@@ -68,7 +69,9 @@ func main() {
     // The Env and Default sources work out of the box.
 
     // Configure YAML source
-    config.Yaml.Load("config.yaml")
+    if err := config.Yaml.Load("config.yaml"); err != nil {
+        // handle error
+    }
 
     // Configure DB source (simple method)
     // For seeding to work, the 'key' column must have a UNIQUE or PRIMARY KEY constraint.
@@ -77,20 +80,20 @@ func main() {
 
     // Configure DB source (advanced method with custom lookup and seeder)
     customLookup := func(ctx context.Context, db config.Dbtx, key string) (string, error) {
-        // ... your custom query logic ...
         var value string
         err := db.QueryRow(ctx, "SELECT config_value FROM my_special_table WHERE config_key = $1", key).Scan(&value)
         return value, err
     }
-    customSeeder := func(ctx context.Context, db config.Dbtx, key, value string) error {
-        // ... your custom upsert logic ...
+    customSeeder := func(ctx context.Context, db config.Dbtx, key, value string) (string, error) {
         _, err := db.Exec(ctx, "INSERT INTO my_special_table (config_key, config_value) VALUES ($1, $2) ON CONFLICT DO NOTHING", key, value)
-        return err
+        return value, err // Return the value that was intended to be set
     }
-    config.DB.From(dbPool, "").WithCache(5 * time.Minute).WithLookup(customLookup).WithSeeder(customSeeder).SeedMissing(true)
+    config.DB.From(dbPool, "").WithCache(5 * time.Minute).WithLookup(customLookup).WithSeeder(customSeeder)
 
     // Configure Vault source
-    config.Vault.Endpoint("https://vault.example.com:8200", "VAULT_TOKEN_ENV_VAR")
+    if _, err := config.Vault.Endpoint("https://vault.example.com:8200", "VAULT_TOKEN_ENV_VAR"); err != nil {
+        // handle error
+    }
 
     // ... start application
 }
@@ -98,32 +101,12 @@ func main() {
 
 ---
 
-## Development Roadmap
+## Implementation Status
 
-The `config` package will be developed in the following phases:
+As of the latest update, all planned features for the `config` package are implemented:
 
-*   **Phase 1: Centralize Environment Configuration**
-    *   **Goal:** Establish the `config` package and make it the central point for all environment variable access.
-    *   **Steps:**
-        1. Create the `config` package.
-        2. Move the core logic from `utils.Env` into `config/env.go`.
-        3. Refactor all existing modules (starting with `app/config.go`) to use `config.Env.Get...` instead of `utils.Env`.
-
-*   **Phase 2: Introduce File-based Configuration (YAML)**
-    *   **Goal:** Add support for loading configuration from YAML files.
-    *   **Steps:**
-        1. Implement `config.Yaml.Load(path)` to parse a YAML file.
-        2. Integrate the YAML source into the unified `config.Get()` function, with YAML values overriding Environment Variables.
-
-*   **Phase 3: Add Database-backed Dynamic Configuration**
-    *   **Goal:** Allow configuration to be managed dynamically from a database table.
-    *   **Steps:**
-        1. Implement `config.DB.From(...)` to configure the database source.
-        2. Implement a caching mechanism with a configurable TTL to optimize performance.
-        3. Integrate the DB source into `config.Get()`, with DB values overriding YAML and Env.
-
-*   **Phase 4: Integrate Vault for Secrets Management**
-    *   **Goal:** Add Vault as the highest-priority source for secrets.
-    *   **Steps:**
-        1. Implement `config.Vault.Endpoint(...)` to configure the Vault client.
-        2. Integrate the Vault source into `config.Get()`, with Vault values overriding all other sources.
+- [x] **Phase 1: Centralize Environment Configuration**
+- [x] **Phase 2: Introduce File-based Configuration (YAML)**
+- [x] **Phase 3: Add Database-backed Dynamic Configuration** (including caching, custom lookups, and seeding)
+- [x] **Phase 4: Integrate Vault for Secrets Management** (including caching)
+- [x] **Final: Unified `Get()` function** with hierarchical lookup.

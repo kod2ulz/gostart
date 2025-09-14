@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/iancoleman/strcase"
 )
 
 type EnvUtil interface {
@@ -68,15 +70,18 @@ func (e *_env) setPrx(prx ...string) *_env {
 
 func (e _env) Get(name string, _default ...interface{}) Value {
 	var def string
+	// Transform the key to SCREAMING_SNAKE_CASE for the env var lookup.
+	lookupKey := strcase.ToScreamingSnake(name)
+
 	if len(_default) == 0 {
-		return Env.GetOrDefault(e._prx(name), def)
+		return Env.GetOrDefault(e._prx(lookupKey), def)
 	}
 	for i := range _default {
 		if def = fmt.Sprint(_default[i]); def != "" {
 			break
 		}
 	}
-	return Env.GetOrDefault(e._prx(name), def)
+	return Env.GetOrDefault(e._prx(lookupKey), def)
 }
 
 func (e _env) MustGet(name string) (val Value) {
@@ -91,7 +96,11 @@ func (e _env) GetString(name string, _default ...interface{}) string {
 }
 
 func (e _env) _prx(name string) string {
-	return fmt.Sprintf("%s_%s", strings.Trim(e.prx, "_"), name)
+	prefix := strings.Trim(e.prx, "_")
+	if prefix == "" {
+		return name
+	}
+	return fmt.Sprintf("%s_%s", prefix, name)
 }
 
 func (e _env) Prefix() string {
