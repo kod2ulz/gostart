@@ -71,18 +71,23 @@ func main() {
     config.Yaml.Load("config.yaml")
 
     // Configure DB source (simple method)
+    // For seeding to work, the 'key' column must have a UNIQUE or PRIMARY KEY constraint.
     dbPool, _ := connectToPostgres()
-    config.DB.From(dbPool, "app_settings").WithCache(5 * time.Minute)
+    config.DB.From(dbPool, "app_settings").WithCache(5 * time.Minute).SeedMissing(true)
 
-    // Configure DB source (advanced method with custom lookup)
-    // This is useful for complex schemas or query logic.
+    // Configure DB source (advanced method with custom lookup and seeder)
     customLookup := func(ctx context.Context, db config.Dbtx, key string) (string, error) {
         // ... your custom query logic ...
         var value string
         err := db.QueryRow(ctx, "SELECT config_value FROM my_special_table WHERE config_key = $1", key).Scan(&value)
         return value, err
     }
-    config.DB.From(dbPool, "").WithCache(5 * time.Minute).WithLookup(customLookup)
+    customSeeder := func(ctx context.Context, db config.Dbtx, key, value string) error {
+        // ... your custom upsert logic ...
+        _, err := db.Exec(ctx, "INSERT INTO my_special_table (config_key, config_value) VALUES ($1, $2) ON CONFLICT DO NOTHING", key, value)
+        return err
+    }
+    config.DB.From(dbPool, "").WithCache(5 * time.Minute).WithLookup(customLookup).WithSeeder(customSeeder).SeedMissing(true)
 
     // Configure Vault source
     config.Vault.Endpoint("https://vault.example.com:8200", "VAULT_TOKEN_ENV_VAR")

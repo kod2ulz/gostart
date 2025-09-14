@@ -114,4 +114,47 @@ var _ = Describe("Database Configuration", func() {
 		// Expect the value returned by the custom lookup
 		Expect(val.String()).To(Equal("custom_value"))
 	})
+
+	It("should seed a missing value when configured", func() {
+		// Enable seeding
+		config.DB.From(dbPool, "app_config").SeedMissing(true)
+
+		// 1. Get a non-existent key with a default. This should seed the DB.
+		val := config.DB.Get("new.feature.flag", "false")
+		Expect(val.Bool()).To(BeFalse())
+
+		// 2. Verify the value was actually inserted into the database
+		var dbValue string
+		err := dbPool.QueryRow(ctx, "SELECT value FROM app_config WHERE key = 'new.feature.flag'").Scan(&dbValue)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dbValue).To(Equal("false"))
+
+		// 3. Disable seeding and get again to ensure it reads the new value
+		config.DB.SeedMissing(false)
+		val2 := config.DB.Get("new.feature.flag", "true") // Use different default
+		Expect(val2.Bool()).To(BeFalse()) // Should be the value from the DB, not the default
+	})
+
+	It("should implicitly enable seeding when a custom seeder is provided", func() {
+		// Define a custom seeder
+		customSeeder := func(ctx context.Context, db config.Dbtx, key, value string) (string, error) {
+			seededValue := "custom_" + value
+			query := fmt.Sprintf(`INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+			_, err := db.Exec(ctx, query, key, seededValue)
+			return seededValue, err
+		}
+
+		// Configure with the custom seeder, WITHOUT calling SeedMissing()
+		config.DB.From(dbPool, "app_config").WithSeeder(customSeeder)
+
+		// Get a non-existent key. This should trigger the custom seeder.
+		val := config.DB.Get("custom.seed.key", "seeded_val")
+		Expect(val.String()).To(Equal("custom_seeded_val"))
+
+		// Verify the value was inserted by the custom seeder
+		var dbValue string
+		err := dbPool.QueryRow(ctx, "SELECT value FROM app_config WHERE key = 'custom.seed.key'").Scan(&dbValue)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dbValue).To(Equal("custom_seeded_val"))
+	})
 })
