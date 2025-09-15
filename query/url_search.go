@@ -139,7 +139,11 @@ func (s *urlSearch) parseValue(val string, def FieldDefinition) (any, bool) {
 	case TypeBool:
 		b, err := strconv.ParseBool(val)
 		return b, err == nil
-	case TypeNumeric:
+	case TypeInt:
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+			return i, true
+		}
+	case TypeFloat:
 		if f, err := strconv.ParseFloat(val, 64); err == nil {
 			return f, true
 		}

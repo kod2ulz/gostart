@@ -18,9 +18,9 @@ The entire system is driven by a `FieldDefinitions` map, which serves as the sin
 You define every field that can be queried, sorted, or filtered. This is done using a fluent builder API that is both easy to read and write.
 
 ```go
-var TransactionFields = query.FieldDefinitions{
-    "serviceType": query.Text("serviceType").Sortable(),
-    "serviceAmount": query.Numeric("serviceAmount").Sortable(),
+var TransactionFields = query.NewDefinitions(
+    query.Text("serviceType").Sortable(),
+    query.Float("serviceAmount").Sortable(),
     "approvedAt": query.Date("approvedAt", "2006-01-02").Sortable(),
     "paymentDetails": query.JSON("paymentDetails").WithSchema(
         query.Text("prn"),
@@ -31,7 +31,7 @@ var TransactionFields = query.FieldDefinitions{
 
 ### 2. Fluent Builders
 
-Builders like `Text()`, `Numeric()`, `Date()`, and `JSON()` create a `FieldDefinition` with sensible defaults.
+Builders like `Text()`, `Int()`, `Float()`, `Date()`, and `JSON()` create a `FieldDefinition` with sensible defaults.
 - The database column name is automatically inferred by converting the field name to `snake_case` (e.g., `serviceAmount` becomes `service_amount`).
 - You can chain methods like `.Sortable()`, `.WithDBName()`, `.WithOperators()`, and `.WithSchema()` to customize the behavior.
 
