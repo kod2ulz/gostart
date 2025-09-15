@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/iancoleman/strcase"
@@ -88,7 +89,22 @@ func (s *urlSearch) loadFields(ctx context.Context, defs FieldDefinitions, paren
 		}
 
 		for _, op := range def.Operators {
+			if op == CompareBetween { // Skip between, as it's handled separately
+				continue
+			}
 			s.loadComparison(ctx, apiPath, dbPath, def, op)
+		}
+
+		// Special handling for 'between' operator
+		var hasBetween bool
+		for _, op := range def.Operators {
+			if op == CompareBetween {
+				hasBetween = true
+				break
+			}
+		}
+		if hasBetween {
+			s.loadBetweenComparison(ctx, apiPath, dbPath, def)
 		}
 	}
 }
@@ -129,6 +145,35 @@ func (s *urlSearch) loadComparison(ctx context.Context, apiPath string, dbPath [
 		DBPath:   dbPath,
 		Operator: op,
 		Value:    parsedVal,
+	})
+}
+
+func (s *urlSearch) loadBetweenComparison(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition) {
+	paramName := fmt.Sprintf("%s_%s", apiPath, string(CompareBetween))
+	val := s.query(ctx, paramName)
+	if !val.Valid() {
+		val = s.query(ctx, strcase.ToCamel(paramName))
+	}
+	if !val.Valid() {
+		return
+	}
+
+	parts := strings.Split(val.String(), ":")
+	if len(parts) != 2 {
+		return // Invalid format for between
+	}
+
+	from, ok1 := s.parseValue(parts[0], def)
+	to, ok2 := s.parseValue(parts[1], def)
+
+	if !ok1 || !ok2 {
+		return // Failed to parse one of the values
+	}
+
+	s.conditions = append(s.conditions, ParsedCondition{
+		DBPath:   dbPath,
+		Operator: CompareBetween,
+		Value:    []interface{}{from, to},
 	})
 }
 

@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/kod2ulz/gostart/query"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 )
@@ -55,25 +54,7 @@ func (r ListRequest) RequestLoad(ctx context.Context) (param RequestParam, err e
 	return out, err
 }
 
-func (r ListRequest) SearchURL(ctx context.Context, fields query.UrlFields) query.URLSearchParam {
-	return fields.SearchParams(ctx, r.Query)
-}
 
-func (r ListRequest) QuerySearch(ctx context.Context, fields ...string) query.URLSearchParam {
-	return query.SearchUrl(r.Query).Load(ctx, fields...)
-}
-
-func (r ListRequest) QuerySearchFields(ctx context.Context, fields ...string) query.URLSearchParam {
-	return query.SearchUrl(r.Query).LoadBoundaries(ctx).LoadFieldLookups(ctx, fields...)
-}
-
-func (r ListRequest) QuerySearchSort(ctx context.Context, fields ...string) query.URLSearchParam {
-	return query.SearchUrl(r.Query).LoadBoundaries(ctx).LoadFieldSort(ctx, fields...)
-}
-
-func (r ListRequest) QuerySearchComparisons(ctx context.Context, fields ...string) query.URLSearchParam {
-	return query.SearchUrl(r.Query).LoadBoundaries(ctx).LoadFieldComparisons(ctx, fields...)
-}
 
 type ListRequestIdType interface {
 	string | uuid.UUID | constraints.Integer

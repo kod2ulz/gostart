@@ -98,12 +98,12 @@ func Text(name string) FieldDefinition {
 
 // Int defines a field of type integer.
 func Int(name string) FieldDefinition {
-	return newField(name, TypeInt).WithOperators(CompareEqual, CompareNotEqual, CompareIn, CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareLessThanOrEqual)
+	return newField(name, TypeInt).WithOperators(CompareEqual, CompareNotEqual, CompareIn, CompareBetween, CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareLessThanOrEqual)
 }
 
 // Float defines a field of type float.
 func Float(name string) FieldDefinition {
-	return newField(name, TypeFloat).WithOperators(CompareEqual, CompareNotEqual, CompareIn, CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareLessThanOrEqual)
+	return newField(name, TypeFloat).WithOperators(CompareEqual, CompareNotEqual, CompareIn, CompareBetween, CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareLessThanOrEqual)
 }
 
 // Date defines a field of type date.
