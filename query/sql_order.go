@@ -37,11 +37,11 @@ func NoSort() SortFunc {
 
 func UrlFieldSort(p URLSearchParam) SortFunc {
 	return func(sc SortConsumer) {
-		if len(p.GetFieldSort()) == 0 {
+		if len(p.GetSorts()) == 0 {
 			return
 		}
-		for field, sort := range p.GetFieldSort() {
-			sc.addFieldSort(sort, field)
+		for _, s := range p.GetSorts() {
+			sc.addFieldSort(s.Type, s.DBName)
 		}
 	}
 }

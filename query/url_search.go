@@ -3,80 +3,64 @@ package query
 import (
 	"context"
 	"fmt"
-	"strings"
+	"strconv"
+	"time"
 
 	"github.com/iancoleman/strcase"
 	"github.com/kod2ulz/gostart/config"
-	"github.com/kod2ulz/gostart/object"
 )
 
-var (
-// _ URLSearchParam  = (nil).(*urlSearch)
-// _ URLSearchLoader = (*urlSearch).(nil)
-)
+// UrlParameterProvider is a function type that reads a value from a URL query.
+type UrlParameterProvider func(ctx context.Context, name string, _default ...string) (out config.Value)
 
-type UrlFieldReader func(ctx context.Context, name string, _default ...string) (out config.Value)
+// ParsedCondition holds a validated and typed condition ready for the SQL builder.
+type ParsedCondition struct {
+	DBPath   []string
+	Operator CompareOperator
+	Value    any
+}
 
+// ParsedSort holds a validated sort instruction.
+type ParsedSort struct {
+	DBName string
+	Type   SortType
+}
+
+// URLSearchParam is the interface for accessing parsed URL search parameters.
 type URLSearchParam interface {
-	GetFieldValues() map[string]any
-	GetFieldNullables() map[string]bool
-	GetFieldSort() map[string]SortType
-	GetFieldComparisons() map[string]map[CompareOperator]any
+	GetConditions() []ParsedCondition
+	GetSorts() []ParsedSort
 	GetLimit() int64
 	GetOffset() int64
-	HasFieldParams() bool
-	HasField(field string) bool
-	HasComparison(field string, comparator CompareOperator) bool
-	HasAnyComparison(field string, comparator ...CompareOperator) bool
-	WithField(field string, val any) URLSearchParam
-	WithTimeFormat(format string, fields ...string) URLSearchParam
-	WithComparison(field string, comparator CompareOperator, val any) URLSearchParam
 }
 
-type URLSearchLoader interface {
-	Load(ctx context.Context, fields ...string) URLSearchLoader
-	LoadBoundaries(ctx context.Context) URLSearchLoader
-	LoadFieldSort(ctx context.Context, fields ...string) URLSearchLoader
-	LoadFieldLookups(ctx context.Context, fields ...string) URLSearchLoader
-	LoadFieldComparisons(ctx context.Context, fields ...string) URLSearchLoader
-}
-
-func SearchUrl(queryReader UrlFieldReader) *urlSearch {
-	return &urlSearch{query: queryReader}
+// SearchURL initializes a new URL search parser.
+func SearchURL(queryReader UrlParameterProvider, defs FieldDefinitions) *urlSearch {
+	return &urlSearch{
+		query:      queryReader,
+		defs:       defs,
+		conditions: make([]ParsedCondition, 0),
+		sorts:      make([]ParsedSort, 0),
+	}
 }
 
 type urlSearch struct {
-	limit       int64
-	offset      int64
-	fields      map[string]any
-	sort        map[string]SortType
-	null        map[string]bool
-	comparisons map[string]map[CompareOperator]any
-	query       UrlFieldReader
+	limit      int64
+	offset     int64
+	conditions []ParsedCondition
+	sorts      []ParsedSort
+	query      UrlParameterProvider
+	defs       FieldDefinitions
 }
 
-func (s *urlSearch) Load(ctx context.Context, fields ...string) *urlSearch {
-	return s.LoadBoundaries(ctx).
-		LoadFieldSort(ctx, fields...).
-		LoadFieldLookups(ctx, fields...).
-		LoadFieldComparisons(ctx, fields...)
-}
-
-func (s *urlSearch) LoadFieldSort(ctx context.Context, fields ...string) *urlSearch {
-	if len(fields) == 0 {
-		return s
-	} else if s.sort == nil {
-		s.sort = make(map[string]SortType)
-	}
-	for i := range fields {
-		if val := s.query(ctx, "sort_"+fields[i]); val.Valid() && sortTypeValid(val.String()) {
-			s.sort[fields[i]] = SortType(val.String())
-		}
-	}
+// Load parses the URL query parameters based on the provided field definitions.
+func (s *urlSearch) Load(ctx context.Context) *urlSearch {
+	s.loadBoundaries(ctx)
+	s.loadFields(ctx, s.defs, []string{}, "")
 	return s
 }
 
-func (s *urlSearch) LoadBoundaries(ctx context.Context) *urlSearch {
+func (s *urlSearch) loadBoundaries(ctx context.Context) {
 	s.limit = s.query(ctx, "limit", fmt.Sprint(SELECT_LIMIT)).Int64()
 	s.offset = s.query(ctx, "offset", "0").Int64()
 	if s.offset == 0 {
@@ -84,243 +68,109 @@ func (s *urlSearch) LoadBoundaries(ctx context.Context) *urlSearch {
 			s.offset = (page - 1) * s.limit
 		}
 	}
-	return s
 }
 
-func (s *urlSearch) LoadFieldLookups(ctx context.Context, fields ...string) *urlSearch {
-	if len(fields) == 0 {
-		return s
-	} else if s.fields == nil {
-		s.fields = make(map[string]any)
-	}
-	for i := range fields {
-		if val := s.query(ctx, fields[i]); val.Valid() {
-			s.fields[fields[i]] = val
-		} else if val = s.query(ctx, strcase.ToCamel(fields[i])); val.Valid() {
-			s.fields[fields[i]] = val
+func (s *urlSearch) loadFields(ctx context.Context, defs FieldDefinitions, parentDBPath []string, parentAPIPath string) {
+	for name, def := range defs {
+		apiPath := name
+		if parentAPIPath != "" {
+			apiPath = parentAPIPath + "." + name
+		}
+
+		dbPath := append(parentDBPath, def.DBName)
+
+		if def.Type == TypeJSON && def.Schema != nil {
+			s.loadFields(ctx, def.Schema, dbPath, apiPath)
+		}
+
+		if def.Sort {
+			s.loadSort(ctx, apiPath, def.DBName)
+		}
+
+		for _, op := range def.Operators {
+			s.loadComparison(ctx, apiPath, dbPath, def, op)
 		}
 	}
-	return s
 }
 
-func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) *urlSearch {
-	if len(fields) == 0 {
-		return s
+func (s *urlSearch) loadSort(ctx context.Context, apiPath, dbName string) {
+	val := s.query(ctx, "sort_"+apiPath)
+	if !val.Valid() {
+		val = s.query(ctx, "sort_"+strcase.ToCamel(apiPath))
 	}
-	if s.comparisons == nil {
-		s.comparisons = make(map[string]map[CompareOperator]any)
-	}
-	if s.null == nil {
-		s.null = make(map[string]bool)
-	}
-	for i := range fields {
-		if val := s.query(ctx, fmt.Sprintf("%s_null", fields[i])); val.Valid() {
-			s.null[fields[i]] = val.Bool()
-		} else if val = s.query(ctx, fmt.Sprintf("%s_null", strcase.ToCamel(fields[i]))); val.Valid() {
-			s.fields[fields[i]] = val
-		}
-		if _, ok := s.comparisons[fields[i]]; !ok {
-			s.comparisons[fields[i]] = make(map[CompareOperator]any)
-		}
-		for _, cp := range []CompareOperator{
-			CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareGreaterThanOrEqual, CompareNot, CompareNotEqual} {
-			if val := s.query(ctx, fmt.Sprintf("%s_%s", fields[i], string(cp))); val.Valid() {
-				s.comparisons[fields[i]][cp] = val
-			} else if val = s.query(ctx, fmt.Sprintf("%s_%s", strcase.ToCamel(fields[i]), string(cp))); val.Valid() {
-				s.fields[fields[i]] = val
-			}
-		}
-		for _, field := range object.String(fields[i]).Variations("~%s", "~%s~", "%s~") {
-			var val config.Value
-			if val = s.query(ctx, field); !val.Valid() {
-				val = s.query(ctx, strcase.ToCamel(field))
-			}
-			if val.Valid() {
-				s.comparisons[fields[i]][CompareLike] = config.Value(strings.Replace(strings.ReplaceAll(field, "~", "%"), fields[i], val.String(), 1))
-				break
-			}
-		}
-	}
-	return s
-}
-
-func (r *urlSearch) GetFieldNullables() (out map[string]bool) {
-	if len(r.fields) == 0 {
-		return map[string]bool{}
-	}
-	return r.null
-}
-
-func (r *urlSearch) GetFieldValues() (out map[string]any) {
-	if len(r.fields) == 0 {
-		return map[string]any{}
-	}
-	return r.fields
-}
-
-func (r *urlSearch) GetFieldSort() (out map[string]SortType) {
-	if len(r.sort) == 0 {
-		return map[string]SortType{}
-	}
-	return r.sort
-}
-
-func (r *urlSearch) GetFieldComparisons() (out map[string]map[CompareOperator]any) {
-	if len(r.comparisons) == 0 {
-		return map[string]map[CompareOperator]any{}
-	}
-	return r.comparisons
-}
-
-func (r *urlSearch) GetField(name string) (out any) {
-	return r.GetFieldValues()[name]
-}
-
-func (r *urlSearch) GetAnyQueryField(names ...string) (out any) {
-	if len(r.fields) == 0 {
-		return
-	}
-	for i := range names {
-		if val, ok := r.fields[names[i]]; ok {
-			return val
-		}
-	}
-	return
-}
-
-func (r *urlSearch) GetLimit() int64 {
-	return r.limit
-}
-
-func (r *urlSearch) GetOffset() int64 {
-	return r.offset
-}
-
-func (r *urlSearch) HasFieldParams() bool {
-	return len(r.fields)+len(r.sort)+len(r.comparisons) > 0
-}
-
-func (r *urlSearch) HasField(field string) bool {
-	if !r.HasFieldParams() {
-		return false
-	}
-	_, ok := r.fields[field]
-	return ok
-}
-
-func (r *urlSearch) HasComparison(field string, comparator CompareOperator) (ok bool) {
-	if _, ok = r.comparisons[field]; !ok {
-		return
-	}
-	_, ok = r.comparisons[field][comparator]
-	return
-}
-
-func (r *urlSearch) HasAnyComparison(field string, comparators ...CompareOperator) (ok bool) {
-	if len(comparators) == 0 {
-		return
-	} else if _, ok = r.comparisons[field]; !ok {
-		return
-	}
-	for _, c := range comparators {
-		if _, ok = r.comparisons[field][c]; ok {
-			return
-		}
-	}
-	return
-}
-
-func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchParam {
-	if len(fields) == 0 {
-		return r
-	}
-	for _, f := range fields {
-		if _, ok := r.comparisons[f]; ok {
-			if _, ok = r.comparisons[f][CompareLike]; ok {
-				delete(r.comparisons[f], CompareLike)
-			}
-		}
-		r.replaceField(f, func(v any) any {
-			if s1, ok := v.(string); ok {
-				if _, ok := r.comparisons[f]; ok {
-					if _, ok = r.comparisons[f][CompareLike]; ok {
-						r.comparisons[f][CompareEqual] = config.Value(s1).Time(format).UTC()
-					}
-				}
-				return config.Value(s1).Time(format).UTC()
-			} else if v1, ok := v.(config.Value); ok {
-				if _, ok := r.comparisons[f]; ok {
-					if _, ok = r.comparisons[f][CompareLike]; ok {
-						r.comparisons[f][CompareEqual] = v1.Time(format).UTC()
-					}
-				}
-				return v1.Time(format).UTC()
-			}
-			return v
+	if val.Valid() && sortTypeValid(val.String()) {
+		s.sorts = append(s.sorts, ParsedSort{
+			DBName: dbName,
+			Type:   SortType(val.String()),
 		})
 	}
-	return r
 }
 
-func (r *urlSearch) replaceField(name string, modifier func(any) any) {
-	if v, ok := r.fields[name]; ok {
-		r.fields[name] = modifier(v)
+func (s *urlSearch) loadComparison(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition, op CompareOperator) {
+	paramName := fmt.Sprintf("%s_%s", apiPath, string(op))
+	if op == CompareEqual { // Allow for shorthand `field=value` for equality
+		paramName = apiPath
 	}
-	if m, ok := r.comparisons[name]; ok {
-		for c, v := range m {
-			r.comparisons[name][c] = modifier(v)
+
+	val := s.query(ctx, paramName)
+	if !val.Valid() {
+		val = s.query(ctx, strcase.ToCamel(paramName))
+	}
+	if !val.Valid() {
+		return
+	}
+
+	parsedVal, ok := s.parseValue(val.String(), def)
+	if !ok {
+		return // Skip if parsing fails
+	}
+
+	s.conditions = append(s.conditions, ParsedCondition{
+		DBPath:   dbPath,
+		Operator: op,
+		Value:    parsedVal,
+	})
+}
+
+func (s *urlSearch) parseValue(val string, def FieldDefinition) (any, bool) {
+	switch def.Type {
+	case TypeText, TypeUUID:
+		return val, true
+	case TypeBool:
+		b, err := strconv.ParseBool(val)
+		return b, err == nil
+	case TypeNumeric:
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f, true
+		}
+	case TypeDate, TypeTime:
+		format := def.TimeFormat
+		if format == "" {
+			format = time.RFC3339
+		}
+		if t, err := time.Parse(format, val); err == nil {
+			return t, true
 		}
 	}
+	return nil, false
 }
 
-func (r *urlSearch) WithField(field string, val any) URLSearchParam {
-	if r.fields == nil {
-		r.fields = make(map[string]any)
-	}
-	r.fields[field] = val
-	return r
+// GetConditions returns the parsed and validated query conditions.
+func (s *urlSearch) GetConditions() []ParsedCondition {
+	return s.conditions
 }
 
-func (r *urlSearch) WithComparison(field string, operator CompareOperator, val any) URLSearchParam {
-	if r.comparisons == nil {
-		r.comparisons = make(map[string]map[CompareOperator]any)
-	}
-	if r.comparisons[field] == nil {
-		r.comparisons[field] = make(map[CompareOperator]any)
-	}
-	r.comparisons[field][operator] = val
-	return r
+// GetSorts returns the parsed and validated sort instructions.
+func (s *urlSearch) GetSorts() []ParsedSort {
+	return s.sorts
 }
 
-func WithField(param URLSearchParam, field string, val any) URLSearchParam {
-	if search, ok := param.(*urlSearch); ok {
-		return search.WithField(field, val)
-	}
-	return param
+// GetLimit returns the pagination limit.
+func (s *urlSearch) GetLimit() int64 {
+	return s.limit
 }
 
-func WithSort(param URLSearchParam, field string, sort SortType) URLSearchParam {
-	search, ok := param.(*urlSearch)
-	if !ok {
-		return param
-	} else if search.sort == nil {
-		search.sort = make(map[string]SortType)
-	}
-	search.sort[field] = sort
-	return search
-}
-
-func WithComparison(param URLSearchParam, field string, operator CompareOperator, val any) URLSearchParam {
-	search, ok := param.(*urlSearch)
-	if !ok {
-		return param
-	}
-	if search.comparisons == nil {
-		search.comparisons = make(map[string]map[CompareOperator]any)
-	}
-	if search.comparisons[field] == nil {
-		search.comparisons[field] = make(map[CompareOperator]any)
-	}
-	search.comparisons[field][operator] = val
-	return search
+// GetOffset returns the pagination offset.
+func (s *urlSearch) GetOffset() int64 {
+	return s.offset
 }
