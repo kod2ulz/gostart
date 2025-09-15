@@ -31,6 +31,14 @@ func (o Org) ParentIdentifier() *uuid.UUID {
 	return o.ParentID
 }
 
+func (o Org) ToMap() map[string]any {
+	return map[string]any{
+		"id": o.ID.String(),
+		"name": o.Name,
+		"parentId": o.ParentID,
+	}
+}
+
 var unitedNations []Org // Declare orgs as an empty slice
 
 func init() {

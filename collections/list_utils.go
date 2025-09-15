@@ -83,3 +83,8 @@ func MapList[A any, B any](list List[A], mapFn func(A) B) (out List[B]) {
 	}
 	return
 }
+
+// AsPointer returns a pointer to the given value.
+func AsPointer[T any](v T) *T {
+	return &v
+}
