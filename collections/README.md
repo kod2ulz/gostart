@@ -232,3 +232,65 @@ For use in concurrent applications, the package provides thread-safe versions of
 - **`ConcurrentList[T]`**: A list where read and write operations are protected by a mutex.
 
 These can be used as direct, thread-safe replacements for their non-concurrent counterparts.
+
+---
+
+## `Cache[K, T, E]`
+
+The `Cache` provides a generic, thread-safe, in-memory caching layer with read-through and write-through capabilities.
+
+### Core Concepts
+
+- **`CacheModel[K, T]`**: Your cached objects must implement this interface, which requires a `Key() K` method to uniquely identify the object.
+- **Fetcher Function**: The cache requires a "fetcher" function that it can call to load objects from a persistent data store (e.g., a database) when they are not in the cache or have expired.
+- **Background Eviction**: The cache automatically starts a background process to periodically remove expired items.
+
+### Example
+
+```go
+import (
+    "context"
+    "time"
+    "github.com/kod2ulz/gostart/collections"
+    "github.com/kod2ulz/gostart/logr"
+)
+
+// 1. Define your model
+type User struct {
+    ID   string
+    Name string
+}
+
+func (u User) Key() string { // Implement the CacheModel interface
+    return u.ID
+}
+
+// 2. Define your fetcher function
+fetcher := func(ctx context.Context, keys []string) ([]User, error) {
+    // In a real application, you would fetch these users from a database
+    var users []User
+    for _, key := range keys {
+        users = append(users, User{ID: key, Name: "User " + key})
+    }
+    return users, nil
+}
+
+// 3. Create the cache instance
+// (Assuming 'logger' is an initialized *logr.Logger)
+userCache := collections.NewMemoryCache[string, User, error](
+    logger,
+    collections.WithFetcherFunc[string, User, error](fetcher),
+    collections.WithDefaultTTL[string, User, error](5 * time.Minute),
+)
+defer userCache.Stop() // Clean up the background eviction goroutine
+
+// 4. Use the cache
+// Get a single user. If not in cache, it will be fetched.
+user, err := userCache.Get(context.Background(), "user-123")
+if err != nil {
+    // handle error
+}
+if user != nil {
+    fmt.Printf("Got user: %s", user.Name)
+}
+```

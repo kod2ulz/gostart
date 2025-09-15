@@ -8,11 +8,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/kod2ulz/gostart/collections"
 )
 
 // Dbtx is an interface for database operations, compatible with *pgxpool.Pool.
 type Dbtx interface {
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
 }
 
@@ -23,18 +25,20 @@ type DBLookupFunc func(ctx context.Context, db Dbtx, key string) (string, error)
 // It should return the value that was persisted.
 type DBSeederFunc func(ctx context.Context, db Dbtx, key, value string) (string, error)
 
-// dbCacheEntry holds a cached value and its expiration time.
-type dbCacheEntry struct {
-	value      string
-	expiration time.Time
+// configValue is a wrapper to make plain string values compatible with collections.Cache.
+type configValue struct {
+	key   string
+	value string
 }
+
+func (v configValue) Key() string { return v.key }
 
 // DBSource manages the database configuration source.
 type DBSource struct {
 	mu          sync.RWMutex
 	db          Dbtx
 	table       string
-	cache       map[string]dbCacheEntry
+	cache       collections.Cache[string, configValue, error]
 	cacheTTL    time.Duration
 	lookupFunc  DBLookupFunc
 	seederFunc  DBSeederFunc
@@ -44,23 +48,56 @@ type DBSource struct {
 // DB provides access to the database configuration source.
 var DB DBSource
 
-// From sets the database connection pool and table name to be used for the default query.
+// From sets the database connection pool and table name, and initializes the cache.
 func (s *DBSource) From(db Dbtx, tableName string) *DBSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.db = db
 	s.table = tableName
+
+	fetcher := func(ctx context.Context, keys []string) ([]configValue, error) {
+		// We need to read-lock here to safely access lookupFunc
+		s.mu.RLock()
+		lookup := s.lookupFunc
+		s.mu.RUnlock()
+
+		if lookup != nil {
+			// If a custom lookup is provided, use it.
+			values := make([]configValue, 0, len(keys))
+			for _, key := range keys {
+				val, err := lookup(ctx, s.db, key)
+				if err == nil {
+					values = append(values, configValue{key: key, value: val})
+				} else if err != pgx.ErrNoRows {
+					return nil, err
+				}
+			}
+			return values, nil
+		}
+		// Otherwise, use the default table-based lookup.
+		return s.getManyFromDB(ctx, keys)
+	}
+
+	// Use the configured TTL, or a default.
+	ttl := s.cacheTTL
+	if ttl == 0 {
+		ttl = collections.DefaultCacheKeyTTL
+	}
+
+	s.cache = collections.NewMemoryCache[string, configValue, error](
+		collections.WithFetcherFunc[string, configValue, error](fetcher),
+		collections.WithDefaultTTL[string, configValue, error](ttl),
+	)
+
 	return s
 }
 
-// WithCache sets the cache TTL for database-retrieved values.
-func (s *DBSource) WithCache(ttl time.Duration) *DBSource {
+// WithCacheTTL sets the cache TTL for the DB source. Must be called before From().
+func (s *DBSource) WithCacheTTL(ttl time.Duration) *DBSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cacheTTL = ttl
-	if s.cache == nil {
-		s.cache = make(map[string]dbCacheEntry)
-	}
 	return s
 }
 
@@ -90,65 +127,60 @@ func (s *DBSource) SeedMissing(seed bool) *DBSource {
 	return s
 }
 
-// Get retrieves a value from the database, using a cache if configured.
-// If the key is not found and seeding is enabled (via SeedMissing or WithSeeder),
-// it will write the provided defaultValue to the database before returning it.
+// Get retrieves a value from the database, using the cache.
 func (s *DBSource) Get(key string, defaultValue ...interface{}) Value {
-	s.mu.RLock()
-	// 1. Check cache
-	useCache := s.cache != nil && s.cacheTTL > 0
-	if useCache {
-		if entry, found := s.cache[key]; found && time.Now().Before(entry.expiration) {
-			s.mu.RUnlock()
-			return Value(entry.value)
-		}
+	if s.cache == nil {
+		// If From() hasn't been called, we can't get a value.
+		// Return invalid to allow fallback.
+		return ""
 	}
-	db := s.db
-	shouldSeed := s.seedMissing
-	s.mu.RUnlock()
 
-	// 2. Try to get from DB
-	if db != nil {
-		dbValue, err := s.getFromDB(context.Background(), key)
+	val, err := s.cache.Get(context.Background(), key)
+	if err == nil && val != nil {
+		return Value(val.value)
+	}
 
-		// 2a. If successful, cache and return
-		if err == nil {
-			s.updateCache(key, dbValue)
-			return Value(dbValue)
-		}
-
-		// 2b. If "not found" and seeding is enabled, seed the value
-		if err == pgx.ErrNoRows && shouldSeed && len(defaultValue) > 0 {
-			defValue := fmt.Sprint(defaultValue[0])
-			seededValue, seedErr := s.seedToDB(context.Background(), key, defValue)
-			if seedErr == nil {
-				s.updateCache(key, seededValue) // Cache the value that was actually seeded
-				return Value(seededValue)
-			}
-			// if seeding fails, fall through to return empty
+	// Value was not in cache and fetcher failed or returned empty.
+	// Now, handle seeding.
+	if s.seedMissing && len(defaultValue) > 0 {
+		defValueStr := fmt.Sprint(defaultValue[0])
+		seededValue, seedErr := s.seedToDB(context.Background(), key, defValueStr)
+		if seedErr == nil {
+			// Manually put the newly seeded value in the cache
+			s.cache.Set(key, configValue{key: key, value: seededValue})
+			return Value(seededValue)
 		}
 	}
 
-	// 3. Not found, or DB not configured. Return invalid.
 	return ""
 }
 
-func (s *DBSource) getFromDB(ctx context.Context, key string) (string, error) {
+// getManyFromDB fetches multiple keys from the database.
+// NOTE: This uses a simple loop. For better performance with many keys,
+// this could be optimized to use a single `WHERE key = ANY($1)` query.
+func (s *DBSource) getManyFromDB(ctx context.Context, keys []string) ([]configValue, error) {
 	s.mu.RLock()
-	lookup := s.lookupFunc
-	table := s.table
 	db := s.db
+	table := s.table
 	s.mu.RUnlock()
 
-	if lookup != nil {
-		return lookup(ctx, db, key)
-	} else if table != "" {
+	if db == nil || table == "" {
+		return nil, fmt.Errorf("database source not configured")
+	}
+
+	// Inefficient loop, but simple. Can be replaced with a single query.
+	values := make([]configValue, 0, len(keys))
+	for _, key := range keys {
 		query := fmt.Sprintf("SELECT value FROM %s WHERE key = $1", table)
 		var value string
 		err := db.QueryRow(ctx, query, key).Scan(&value)
-		return value, err
+		if err == nil {
+			values = append(values, configValue{key: key, value: value})
+		} else if err != pgx.ErrNoRows {
+			return nil, err // Return on actual errors
+		}
 	}
-	return "", pgx.ErrNoRows
+	return values, nil
 }
 
 func (s *DBSource) seedToDB(ctx context.Context, key, value string) (string, error) {
@@ -159,7 +191,7 @@ func (s *DBSource) seedToDB(ctx context.Context, key, value string) (string, err
 	s.mu.RUnlock()
 
 	if db == nil {
-		return value, nil
+		return value, fmt.Errorf("database source not configured")
 	}
 
 	if seeder != nil {
@@ -167,22 +199,10 @@ func (s *DBSource) seedToDB(ctx context.Context, key, value string) (string, err
 	}
 
 	if table != "" {
-		// Default "upsert" logic
 		query := fmt.Sprintf(`INSERT INTO %s (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, table)
 		_, err := db.Exec(ctx, query, key, value)
 		return value, err
 	}
 
 	return value, nil
-}
-
-func (s *DBSource) updateCache(key, value string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cache != nil && s.cacheTTL > 0 {
-		s.cache[key] = dbCacheEntry{
-			value:      value,
-			expiration: time.Now().Add(s.cacheTTL),
-		}
-	}
 }

@@ -71,7 +71,7 @@ var _ = Describe("Database Configuration", func() {
 
 	It("should use the cache", func() {
 		// Set a 1-second cache
-		config.DB.From(dbPool, "app_config").WithCache(1 * time.Second)
+		config.DB.WithCacheTTL(1 * time.Second).From(dbPool, "app_config")
 
 		// First call, should hit DB
 		val1 := config.DB.Get("db.setting")

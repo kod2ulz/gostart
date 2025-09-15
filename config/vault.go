@@ -1,26 +1,21 @@
 package config
 
 import (
-	
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/vault/api"
+	"github.com/kod2ulz/gostart/collections"
 )
-
-// vaultCacheEntry holds a cached value and its expiration time.
-type vaultCacheEntry struct {
-	value      string
-	expiration time.Time
-}
 
 // VaultSource manages the Vault configuration source.
 type VaultSource struct {
 	mu       sync.RWMutex
 	client   *api.Client
-	cache    map[string]vaultCacheEntry
+	cache    collections.Cache[string, configValue, error]
 	cacheTTL time.Duration
 }
 
@@ -34,7 +29,7 @@ func (s *VaultSource) Client() *api.Client {
 	return s.client
 }
 
-// Endpoint configures the Vault client with an address and token.
+// Endpoint configures the Vault client with an address and token, and initializes the cache.
 func (s *VaultSource) Endpoint(addr, token string) (*VaultSource, error) {
 	conf := api.DefaultConfig()
 	conf.Address = addr
@@ -48,64 +43,95 @@ func (s *VaultSource) Endpoint(addr, token string) (*VaultSource, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.client = client
+
+	fetcher := func(ctx context.Context, keys []string) ([]configValue, error) {
+		return s.getManyFromVault(ctx, keys)
+	}
+
+	ttl := s.cacheTTL
+	if ttl == 0 {
+		ttl = collections.DefaultCacheKeyTTL
+	}
+
+	s.cache = collections.NewMemoryCache[string, configValue, error](
+		collections.WithFetcherFunc[string, configValue, error](fetcher),
+		collections.WithDefaultTTL[string, configValue, error](ttl),
+	)
+
 	return s, nil
 }
 
-// WithCache sets the cache TTL for Vault-retrieved values.
-func (s *VaultSource) WithCache(ttl time.Duration) *VaultSource {
+// WithCacheTTL sets the cache TTL for the Vault source. Must be called before Endpoint().
+func (s *VaultSource) WithCacheTTL(ttl time.Duration) *VaultSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cacheTTL = ttl
-	if s.cache == nil {
-		s.cache = make(map[string]vaultCacheEntry)
-	}
 	return s
 }
 
-// Get retrieves a secret from Vault.
+// Get retrieves a secret from Vault, using the cache.
 // The key is expected to be in the format "path/to/secret.key-in-secret".
 func (s *VaultSource) Get(key string, defaultValue ...interface{}) Value {
-	s.mu.RLock()
-	useCache := s.cache != nil && s.cacheTTL > 0
-	if useCache {
-		if entry, found := s.cache[key]; found && time.Now().Before(entry.expiration) {
-			s.mu.RUnlock()
-			return Value(entry.value)
-		}
-	}
-	s.mu.RUnlock()
-
-	// Value not in cache or expired, query Vault
-	if s.client != nil {
-		path, secretKey := parseVaultKey(key)
-		if path != "" && secretKey != "" {
-			secret, err := s.client.Logical().Read(path)
-			if err == nil && secret != nil && secret.Data != nil {
-				if data, ok := secret.Data["data"].(map[string]interface{}); ok {
-					if val, found := data[secretKey]; found {
-							vStr := fmt.Sprint(val)
-							// Found in Vault, update cache if enabled
-							s.mu.Lock()
-							if useCache {
-								s.cache[key] = vaultCacheEntry{
-									value:      vStr,
-									expiration: time.Now().Add(s.cacheTTL),
-								}
-							}
-							s.mu.Unlock()
-							return Value(vStr)
-					}
-				}
-			}
-		}
+	if s.cache == nil {
+		return "" // Not configured
 	}
 
-	// Not found or client not configured, use default
+	val, err := s.cache.Get(context.Background(), key)
+	if err == nil && val != nil {
+		return Value(val.value)
+	}
+
+	// Fallback to default if provided, as Vault doesn't have a seeding mechanism.
 	if len(defaultValue) > 0 {
 		return Value(fmt.Sprint(defaultValue[0]))
 	}
 
 	return ""
+}
+
+func (s *VaultSource) getManyFromVault(ctx context.Context, keys []string) ([]configValue, error) {
+	s.mu.RLock()
+	client := s.client
+	s.mu.RUnlock()
+
+	if client == nil {
+		return nil, fmt.Errorf("vault client not configured")
+	}
+
+	// Group keys by path to read multiple secrets from the same path at once
+	keysByPath := make(map[string][]string)
+	for _, key := range keys {
+		path, _ := parseVaultKey(key)
+		if path != "" {
+			keysByPath[path] = append(keysByPath[path], key)
+		}
+	}
+
+	values := make([]configValue, 0, len(keys))
+	var firstErr error
+
+	for path, pathKeys := range keysByPath {
+		secret, err := client.Logical().Read(path)
+		if err != nil {
+		if firstErr == nil {
+				firstErr = err // Capture the first error we encounter
+			}
+			continue // Can't read this path
+		}
+		if secret == nil || secret.Data == nil {
+			continue
+		}
+		if data, ok := secret.Data["data"].(map[string]interface{}); ok {
+			for _, key := range pathKeys {
+				_, secretKey := parseVaultKey(key)
+				if val, found := data[secretKey]; found {
+					values = append(values, configValue{key: key, value: fmt.Sprint(val)})
+				}
+			}
+		}
+	}
+
+	return values, firstErr
 }
 
 // parseVaultKey splits a key like "path/to/secret.key" into "path/to/secret" and "key".

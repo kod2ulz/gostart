@@ -1,23 +1,21 @@
-package storage
+package collections
 
 import (
 	"strings"
 	"sync"
-
-	"github.com/kod2ulz/gostart/collections"
 )
 
 type trieNode[K comparable, T any] struct {
-	children collections.Map[K, *trieNode[K, T]]
+	children Map[K, *trieNode[K, T]]
 	value    T
 }
 
 func (n *trieNode[K, T]) add(key K, value T) (ok bool) {
 	if n.children == nil {
-		n.children = collections.Map[K, *trieNode[K, T]]{}
+		n.children = Map[K, *trieNode[K, T]]{}
 	}
 	if _, ok = n.children[key]; !ok {
-		n.children[key] = &trieNode[K, T]{children: collections.Map[K, *trieNode[K, T]]{}}
+		n.children[key] = &trieNode[K, T]{children: Map[K, *trieNode[K, T]]{}}
 	}
 	n.children[key].value = value
 	return
@@ -34,7 +32,7 @@ func NewPrefixMapper[T any](delimiter string, _default T) Prefixes[T] {
 		delimiter: delimiter,
 		root: &trieNode[string, T]{
 			value:    _default,
-			children: collections.Map[string, *trieNode[string, T]]{},
+			children: Map[string, *trieNode[string, T]]{},
 		},
 	}
 }
