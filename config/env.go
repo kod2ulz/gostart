@@ -17,24 +17,24 @@ type EnvUtil interface {
 	Prefix() string
 }
 
-var Env envUtils
+var Env EnvSource
 
-type envUtils struct {
+type EnvSource struct {
 }
 
-func (envUtils) GetOrDefault(env, _default string) Value {
+func (EnvSource) GetOrDefault(env, _default string) Value {
 	if val := os.Getenv(env); val != "" {
 		return Value(val)
 	}
 	return Value(_default)
 }
 
-func (envUtils) Helper(prefix ...string) EnvUtil {
+func (EnvSource) Helper(prefix ...string) EnvUtil {
 	env := _env{}
 	return env.setPrx(prefix...)
 }
 
-func (envUtils) GetHost() string {
+func (EnvSource) GetHost() string {
 	host, err := os.Hostname()
 	if err == nil {
 		return host

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,10 +15,8 @@ import (
 	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/logr"
-	
 
 	"github.com/gin-gonic/gin"
-	consulapi "github.com/hashicorp/consul/api"
 )
 
 var (
@@ -100,60 +99,9 @@ func Log() *logr.Logger {
 	return instance().log
 }
 
-func (a *ap) Register(name ...string) (err error) {
-	// Ensure the shared consul client is configured
-	if _, err = config.Consul.Endpoint(); err != nil {
-		a.log.Warn("skipping consul registration", "error", err)
-		return nil // Do not block app startup if consul is not available
-	}
-
-	client := config.Consul.Client()
-	if client == nil {
-		a.log.Warn("skipping consul registration: client not configured")
-		return nil
-	}
-
-	var serviceName string
-	var env = config.Env.Helper("CONSUL")
-	var serviceHost = env.Get("SERVICE_HOST", a.conf.Host).String()
-
-	if len(name) > 0 && name[0] != "" {
-		serviceName = name[0]
-	} else {
-		serviceName = env.Get("SERVICE_NAME", a.conf.Name).String()
-	}
-	if id := env.Get("SERVICE_ID"); id.Valid() {
-		a.serviceId = id.String()
-	} else if autoId := env.Get("SERVICE_ID_AUTO"); autoId.Bool() {
-		a.serviceId = fmt.Sprintf("%s-%s-%s", serviceName, serviceHost, a.conf.Version)
-	} else {
-		a.serviceId = serviceName
-	}
-
-	if err = client.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
-		ID:      a.serviceId,
-		Name:    serviceName,
-		Port:    a.conf.HttpPort,
-		Address: serviceHost,
-		Tags:    []string{a.conf.Version, serviceName, serviceHost, a.start.In(a.conf.Location).Format(time.RFC1123Z)},
-		Check: &consulapi.AgentServiceCheck{
-			HTTP:     fmt.Sprintf("http://%s:%v/ok", a.conf.Host, a.conf.HttpPort),
-			Interval: a.conf.Uptime.Interval.String(),
-			Timeout:  a.conf.Uptime.Timeout.String(),
-		},
-	}); err != nil {
-		a.log.Error("service registration failed", "error", err)
-		return err
-	}
-	a.log.Info("service successfully registered with consul")
-	return nil
-}
-
-func (a *ap) Run() {
+func (a *ap) Run(name ...string) {
 	fmt.Println()
-	if err := a.Register(); err != nil {
-		a.log.Error("failed to register service with consul", "error", err)
-	}
+	a.tryRegisterConsul(name...)
 	signal.Notify(a.osc, os.Interrupt, syscall.SIGTERM)
 	startupMsg := "started"
 	if a.router != nil {
@@ -165,10 +113,28 @@ func (a *ap) Run() {
 	a.cancel()
 	fmt.Println()
 	a.shutdown()
-	if client := config.Consul.Client(); client != nil && a.serviceId != "" {
-		client.Agent().ServiceDeregister(a.serviceId)
+	if err := config.Consul.Deregister(a.serviceId); err != nil {
+		a.log.Warn("failed to deregister service from consul", "error", err)
+	} else if a.serviceId != "" {
+		a.log.Info("service successfully deregistered from consul")
 	}
 	a.log.Info("shutdown complete")
+}
+
+func (a *ap) tryRegisterConsul(name ...string) {
+	id, err := config.Consul.RegisterFromEnv(name...)
+	if err != nil {
+		// Check if the error is because the endpoint is not configured.
+		// In that case, it's a warning, not a fatal error.
+		if strings.Contains(err.Error(), "consul address not configured") {
+			a.log.Warn("skipping consul registration", "reason", "consul address not configured")
+		} else {
+			a.log.Error("service registration failed", "error", err)
+		}
+		return
+	}
+	a.serviceId = id
+	a.log.Info("service successfully registered with consul", "id", a.serviceId)
 }
 
 func (a *ap) shutdown() {

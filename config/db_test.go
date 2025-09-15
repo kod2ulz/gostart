@@ -64,9 +64,9 @@ var _ = Describe("Database Configuration", func() {
 		Expect(val.Int()).To(Equal(5432))
 	})
 
-	It("should return a default value if key is not found", func() {
-		val := config.DB.From(dbPool, "app_config").Get("non.existent", "default_val")
-		Expect(val.String()).To(Equal("default_val"))
+	It("should return an invalid value if key is not found and seeding is disabled", func() {
+		val := config.DB.From(dbPool, "app_config").SeedMissing(false).Get("non.existent", "default_val")
+		Expect(val.Valid()).To(BeFalse())
 	})
 
 	It("should use the cache", func() {

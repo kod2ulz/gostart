@@ -12,13 +12,13 @@ import (
 var yamlData map[string]interface{}
 
 // Yaml provides methods for accessing YAML configuration.
-var Yaml yamlSource
+var Yaml YAMLSource
 
-type yamlSource struct{}
+type YAMLSource struct{}
 
 // Load reads and parses a YAML file from the given path.
 // It populates the package-level yamlData map.
-func (y yamlSource) Load(path string) error {
+func (y YAMLSource) Load(path string) error {
 	file, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -35,7 +35,7 @@ func (y yamlSource) Load(path string) error {
 
 // Get retrieves a value from the loaded YAML data using a dot-separated key.
 // It returns a Value type that can be converted to string, int, bool, etc.
-func (y yamlSource) Get(key string, defaultValue ...interface{}) Value {
+func (y YAMLSource) Get(key string, defaultValue ...interface{}) Value {
 	val := y.get(key)
 	if val != nil {
 		return Value(fmt.Sprint(val))
@@ -48,7 +48,7 @@ func (y yamlSource) Get(key string, defaultValue ...interface{}) Value {
 }
 
 // get recursively searches for a key within the nested map.
-func (y yamlSource) get(key string) interface{} {
+func (y YAMLSource) get(key string) interface{} {
 	keys := strings.Split(key, ".")
 	var current interface{} = yamlData
 

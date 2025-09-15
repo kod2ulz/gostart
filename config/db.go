@@ -29,8 +29,8 @@ type dbCacheEntry struct {
 	expiration time.Time
 }
 
-// dbSource manages the database configuration source.
-type dbSource struct {
+// DBSource manages the database configuration source.
+type DBSource struct {
 	mu          sync.RWMutex
 	db          Dbtx
 	table       string
@@ -42,10 +42,10 @@ type dbSource struct {
 }
 
 // DB provides access to the database configuration source.
-var DB dbSource
+var DB DBSource
 
 // From sets the database connection pool and table name to be used for the default query.
-func (s *dbSource) From(db Dbtx, tableName string) *dbSource {
+func (s *DBSource) From(db Dbtx, tableName string) *DBSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.db = db
@@ -54,7 +54,7 @@ func (s *dbSource) From(db Dbtx, tableName string) *dbSource {
 }
 
 // WithCache sets the cache TTL for database-retrieved values.
-func (s *dbSource) WithCache(ttl time.Duration) *dbSource {
+func (s *DBSource) WithCache(ttl time.Duration) *DBSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cacheTTL = ttl
@@ -65,7 +65,7 @@ func (s *dbSource) WithCache(ttl time.Duration) *dbSource {
 }
 
 // WithLookup sets a custom function for database lookups.
-func (s *dbSource) WithLookup(fn DBLookupFunc) *dbSource {
+func (s *DBSource) WithLookup(fn DBLookupFunc) *DBSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lookupFunc = fn
@@ -73,7 +73,7 @@ func (s *dbSource) WithLookup(fn DBLookupFunc) *dbSource {
 }
 
 // WithSeeder sets a custom function for seeding database values and enables seeding.
-func (s *dbSource) WithSeeder(fn DBSeederFunc) *dbSource {
+func (s *DBSource) WithSeeder(fn DBSeederFunc) *DBSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seederFunc = fn
@@ -83,7 +83,7 @@ func (s *dbSource) WithSeeder(fn DBSeederFunc) *dbSource {
 
 // SeedMissing, if true, will cause the Get method to INSERT or UPDATE a row with the
 // default value if a key is not found in the database. Use with caution.
-func (s *dbSource) SeedMissing(seed bool) *dbSource {
+func (s *DBSource) SeedMissing(seed bool) *DBSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seedMissing = seed
@@ -91,7 +91,9 @@ func (s *dbSource) SeedMissing(seed bool) *dbSource {
 }
 
 // Get retrieves a value from the database, using a cache if configured.
-func (s *dbSource) Get(key string, defaultValue ...interface{}) Value {
+// If the key is not found and seeding is enabled (via SeedMissing or WithSeeder),
+// it will write the provided defaultValue to the database before returning it.
+func (s *DBSource) Get(key string, defaultValue ...interface{}) Value {
 	s.mu.RLock()
 	// 1. Check cache
 	useCache := s.cache != nil && s.cacheTTL > 0
@@ -116,28 +118,22 @@ func (s *dbSource) Get(key string, defaultValue ...interface{}) Value {
 		}
 
 		// 2b. If "not found" and seeding is enabled, seed the value
-		if err == pgx.ErrNoRows && len(defaultValue) > 0 {
+		if err == pgx.ErrNoRows && shouldSeed && len(defaultValue) > 0 {
 			defValue := fmt.Sprint(defaultValue[0])
-			if shouldSeed {
-				seededValue, seedErr := s.seedToDB(context.Background(), key, defValue)
-				if seedErr == nil {
-					s.updateCache(key, seededValue) // Cache the value that was actually seeded
-					return Value(seededValue)
-				}
+			seededValue, seedErr := s.seedToDB(context.Background(), key, defValue)
+			if seedErr == nil {
+				s.updateCache(key, seededValue) // Cache the value that was actually seeded
+				return Value(seededValue)
 			}
-			return Value(defValue)
+			// if seeding fails, fall through to return empty
 		}
 	}
 
-	// 3. Fallback to default
-	if len(defaultValue) > 0 {
-		return Value(fmt.Sprint(defaultValue[0]))
-	}
-
+	// 3. Not found, or DB not configured. Return invalid.
 	return ""
 }
 
-func (s *dbSource) getFromDB(ctx context.Context, key string) (string, error) {
+func (s *DBSource) getFromDB(ctx context.Context, key string) (string, error) {
 	s.mu.RLock()
 	lookup := s.lookupFunc
 	table := s.table
@@ -155,7 +151,7 @@ func (s *dbSource) getFromDB(ctx context.Context, key string) (string, error) {
 	return "", pgx.ErrNoRows
 }
 
-func (s *dbSource) seedToDB(ctx context.Context, key, value string) (string, error) {
+func (s *DBSource) seedToDB(ctx context.Context, key, value string) (string, error) {
 	s.mu.RLock()
 	db := s.db
 	table := s.table
@@ -180,7 +176,7 @@ func (s *dbSource) seedToDB(ctx context.Context, key, value string) (string, err
 	return value, nil
 }
 
-func (s *dbSource) updateCache(key, value string) {
+func (s *DBSource) updateCache(key, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cache != nil && s.cacheTTL > 0 {

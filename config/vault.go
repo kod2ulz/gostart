@@ -16,8 +16,8 @@ type vaultCacheEntry struct {
 	expiration time.Time
 }
 
-// vaultSource manages the Vault configuration source.
-type vaultSource struct {
+// VaultSource manages the Vault configuration source.
+type VaultSource struct {
 	mu       sync.RWMutex
 	client   *api.Client
 	cache    map[string]vaultCacheEntry
@@ -25,10 +25,17 @@ type vaultSource struct {
 }
 
 // Vault provides access to the Vault configuration source.
-var Vault vaultSource
+var Vault VaultSource
+
+// Client returns the underlying Vault API client.
+func (s *VaultSource) Client() *api.Client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.client
+}
 
 // Endpoint configures the Vault client with an address and token.
-func (s *vaultSource) Endpoint(addr, token string) (*vaultSource, error) {
+func (s *VaultSource) Endpoint(addr, token string) (*VaultSource, error) {
 	conf := api.DefaultConfig()
 	conf.Address = addr
 
@@ -45,7 +52,7 @@ func (s *vaultSource) Endpoint(addr, token string) (*vaultSource, error) {
 }
 
 // WithCache sets the cache TTL for Vault-retrieved values.
-func (s *vaultSource) WithCache(ttl time.Duration) *vaultSource {
+func (s *VaultSource) WithCache(ttl time.Duration) *VaultSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cacheTTL = ttl
@@ -57,7 +64,7 @@ func (s *vaultSource) WithCache(ttl time.Duration) *vaultSource {
 
 // Get retrieves a secret from Vault.
 // The key is expected to be in the format "path/to/secret.key-in-secret".
-func (s *vaultSource) Get(key string, defaultValue ...interface{}) Value {
+func (s *VaultSource) Get(key string, defaultValue ...interface{}) Value {
 	s.mu.RLock()
 	useCache := s.cache != nil && s.cacheTTL > 0
 	if useCache {
