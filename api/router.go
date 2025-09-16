@@ -5,6 +5,7 @@ import (
 
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/api/openapi"
 )
 
 // Router defines a framework-agnostic router interface
@@ -85,6 +86,15 @@ type RouterConfig struct {
 
 // RouterFactory creates a new router instance
 type RouterFactory func(config *RouterConfig) (Router, error)
+
+// OpenAPIRouter extends the Router interface with OpenAPI documentation support
+type OpenAPIRouter interface {
+	Router
+	// OpenAPI documentation methods
+	GetOpenAPIHandler() http.Handler
+	GetSwaggerUIHandler() http.Handler
+	GenerateOpenAPIDoc() (*openapi.Document, error)
+}
 
 // DefaultRouterConfig creates a router configuration from environment variables
 func DefaultRouterConfig() *RouterConfig {

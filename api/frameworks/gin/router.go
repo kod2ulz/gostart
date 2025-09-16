@@ -1,18 +1,22 @@
 package gin
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/api/openapi"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/logr"
 )
 
 // GinRouter implements the api.Router interface using Gin
 type GinRouter struct {
-	engine *gin.Engine
-	group  *gin.RouterGroup
+	engine         *gin.Engine
+	group          *gin.RouterGroup
+	openAPIRegistry *openapi.RouteRegistry
+	openAPIConfig  *openapi.Info
 }
 
 // RequestContext implements both contracts.RequestContext and api.RequestContext
@@ -24,6 +28,16 @@ type RequestContext struct {
 func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
+
+	// Initialize OpenAPI registry
+	openAPIRegistry := openapi.NewRouteRegistry()
+
+	// Default OpenAPI configuration
+	openAPIConfig := &openapi.Info{
+		Title:       "GoStart API",
+		Description: "API generated automatically by GoStart",
+		Version:     "1.0.0",
+	}
 
 	// Apply default middleware
 	if config.EnableRecovery {
@@ -75,48 +89,104 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 		})
 	}
 
-	router := &GinRouter{engine: engine}
+	router := &GinRouter{
+		engine:         engine,
+		openAPIRegistry: openAPIRegistry,
+		openAPIConfig:  openAPIConfig,
+	}
 
 	// Configure static paths
 	for path, root := range config.StaticPaths {
 		router.engine.Static(path, root)
 	}
 
+	// Add OpenAPI documentation routes
+	router.addOpenAPIRoutes()
+
 	return router, nil
 }
 
 // HTTP Methods
 func (r *GinRouter) GET(path string, handler api.HandlerFunc) api.Router {
+	// Register with OpenAPI registry
+	annotation := openapi.Annotation{
+		Summary: r.generateDefaultSummary("GET", path),
+		Tags:    []string{"default"},
+	}
+	r.openAPIRegistry.Register("GET", path, handler, annotation)
+
 	r.currentGroup().GET(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) POST(path string, handler api.HandlerFunc) api.Router {
+	// Register with OpenAPI registry
+	annotation := openapi.Annotation{
+		Summary: r.generateDefaultSummary("POST", path),
+		Tags:    []string{"default"},
+	}
+	r.openAPIRegistry.Register("POST", path, handler, annotation)
+
 	r.currentGroup().POST(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) PUT(path string, handler api.HandlerFunc) api.Router {
+	// Register with OpenAPI registry
+	annotation := openapi.Annotation{
+		Summary: r.generateDefaultSummary("PUT", path),
+		Tags:    []string{"default"},
+	}
+	r.openAPIRegistry.Register("PUT", path, handler, annotation)
+
 	r.currentGroup().PUT(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) DELETE(path string, handler api.HandlerFunc) api.Router {
+	// Register with OpenAPI registry
+	annotation := openapi.Annotation{
+		Summary: r.generateDefaultSummary("DELETE", path),
+		Tags:    []string{"default"},
+	}
+	r.openAPIRegistry.Register("DELETE", path, handler, annotation)
+
 	r.currentGroup().DELETE(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) PATCH(path string, handler api.HandlerFunc) api.Router {
+	// Register with OpenAPI registry
+	annotation := openapi.Annotation{
+		Summary: r.generateDefaultSummary("PATCH", path),
+		Tags:    []string{"default"},
+	}
+	r.openAPIRegistry.Register("PATCH", path, handler, annotation)
+
 	r.currentGroup().PATCH(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) OPTIONS(path string, handler api.HandlerFunc) api.Router {
+	// Register with OpenAPI registry
+	annotation := openapi.Annotation{
+		Summary: r.generateDefaultSummary("OPTIONS", path),
+		Tags:    []string{"default"},
+	}
+	r.openAPIRegistry.Register("OPTIONS", path, handler, annotation)
+
 	r.currentGroup().OPTIONS(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) HEAD(path string, handler api.HandlerFunc) api.Router {
+	// Register with OpenAPI registry
+	annotation := openapi.Annotation{
+		Summary: r.generateDefaultSummary("HEAD", path),
+		Tags:    []string{"default"},
+	}
+	r.openAPIRegistry.Register("HEAD", path, handler, annotation)
+
 	r.currentGroup().HEAD(path, r.wrapHandler(handler))
 	return r
 }
@@ -244,6 +314,45 @@ func (ctx *RequestContext) Cookie(name string) (string, error) {
 
 func (ctx *RequestContext) ClientIP() string {
 	return ctx.ctx.ClientIP()
+}
+
+// OpenAPIRouter interface implementation
+func (r *GinRouter) GetOpenAPIHandler() http.Handler {
+	return r.openAPIRegistry.GetOpenAPIJSONHandler("/openapi.json")
+}
+
+func (r *GinRouter) GetSwaggerUIHandler() http.Handler {
+	return r.openAPIRegistry.GetSwaggerUIHandler("/swagger")
+}
+
+func (r *GinRouter) GenerateOpenAPIDoc() (*openapi.Document, error) {
+	servers := []openapi.Server{
+		{
+			URL:         "http://localhost:8080",
+			Description: "Development server",
+		},
+	}
+	return r.openAPIRegistry.GenerateOpenAPIDoc(*r.openAPIConfig, servers)
+}
+
+// generateDefaultSummary generates a default summary for a route
+func (r *GinRouter) generateDefaultSummary(method, path string) string {
+	// Simple summary generation
+	return fmt.Sprintf("%s %s", method, path)
+}
+
+// addOpenAPIRoutes adds routes for serving OpenAPI documentation
+func (r *GinRouter) addOpenAPIRoutes() {
+	// OpenAPI JSON endpoint
+	r.engine.GET("/openapi.json", gin.WrapH(r.GetOpenAPIHandler()))
+
+	// Swagger UI endpoint
+	r.engine.GET("/swagger", gin.WrapH(r.GetSwaggerUIHandler()))
+
+	// Redirect /swagger/ to /swagger
+	r.engine.GET("/swagger/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger")
+	})
 }
 
 // shouldEnableLogging checks if logging should be enabled based on config
