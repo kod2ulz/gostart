@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/kod2ulz/gostart/api/contracts"
+	globalConfig "github.com/kod2ulz/gostart/config"
 )
 
 // Document represents the complete OpenAPI 3.0 specification
@@ -292,35 +293,44 @@ type RouteInfo struct {
 
 // Generator handles OpenAPI specification generation
 type Generator struct {
-	doc             *Document
-	routes          []RouteInfo
-	typeCache       map[reflect.Type]*Schema
-	annotations     map[string]Annotation
-	config          *Config
-	contractAnalyzer *contracts.ContractAnalyzer
+	doc               *Document
+	routes            []RouteInfo
+	typeCache         map[reflect.Type]*Schema
+	annotations       map[string]Annotation
+	config            *Config
+	contractAnalyzer  *contracts.ContractAnalyzer
+	annotationStore   *contracts.AnnotationStore
+	accessController  *AccessController
 }
 
 // Config holds configuration for the OpenAPI generator
 type Config struct {
-	Title       string
-	Description string
-	Version     string
-	BaseURL     string
-	Servers     []Server
-	Tags        []Tag
-	Contact     *Contact
-	License     *License
+	Title             string
+	Description       string
+	Version           string
+	BaseURL           string
+	Servers           []Server
+	Tags              []Tag
+	Contact           *Contact
+	License           *License
+	AccessControl     *AccessControlConfig
 }
 
 // NewGenerator creates a new OpenAPI generator
 func NewGenerator(config *Config) *Generator {
 	if config == nil {
 		config = &Config{
-			Title:       "GoStart API",
+			Title:       fmt.Sprintf("%s API", globalConfig.Get("app.name", "GoStart").String()),
 			Description: "API documentation generated automatically",
-			Version:     "1.0.0",
-			BaseURL:     "http://localhost:8080",
+			Version:     globalConfig.Get("version", "1.0.0").String(),
+			BaseURL:     globalConfig.Get("app.base-url", fmt.Sprintf("http://%s:%s", globalConfig.Get("host", "localhost").String(), globalConfig.Get("port", "8080").String())).String(),
 		}
+	}
+
+	// Initialize access controller if configured
+	var accessController *AccessController
+	if config.AccessControl != nil {
+		accessController, _ = NewAccessController(config.AccessControl)
 	}
 
 	return &Generator{
@@ -341,10 +351,12 @@ func NewGenerator(config *Config) *Generator {
 			},
 			Tags: config.Tags,
 		},
-		typeCache:       make(map[reflect.Type]*Schema),
-		annotations:     make(map[string]Annotation),
-		config:          config,
+		typeCache:        make(map[reflect.Type]*Schema),
+		annotations:      make(map[string]Annotation),
+		config:           config,
 		contractAnalyzer: contracts.NewContractAnalyzer(),
+		annotationStore:  contracts.NewAnnotationStore(),
+		accessController: accessController,
 	}
 }
 
@@ -395,6 +407,126 @@ func (g *Generator) AddRoute(method, path string, handler interface{}, annotatio
 	}
 
 	g.routes = append(g.routes, route)
+
+	// Add annotation to the annotation store if it's a new annotation
+	if g.annotationStore != nil {
+		g.annotationStore.AddRouteAnnotation(method, path, contracts.Annotation{
+			Summary:     annotation.Summary,
+			Description: annotation.Description,
+			Tags:        annotation.Tags,
+			Deprecated:  annotation.Deprecated,
+		})
+	}
+}
+
+// AddRouteWithAnnotation registers a route with a contract annotation
+func (g *Generator) AddRouteWithAnnotation(method, path string, handler interface{}, annotation contracts.Annotation) {
+	// Add to annotation store
+	if g.annotationStore != nil {
+		g.annotationStore.AddRouteAnnotation(method, path, annotation)
+	}
+
+	// Convert to internal annotation format
+	internalAnnotation := Annotation{
+		Summary:     annotation.Summary,
+		Description: annotation.Description,
+		OperationID: annotation.OperationID,
+		Tags:        annotation.Tags,
+		Deprecated:  annotation.Deprecated,
+		Consumes:    annotation.Consumes,
+		Produces:    annotation.Produces,
+		Security:    annotation.Security,
+		Custom:      annotation.Extensions,
+	}
+
+	g.AddRoute(method, path, handler, map[string]interface{}{
+		"openapi": internalAnnotation,
+	})
+}
+
+// AddHandlerAnnotation adds an annotation to a handler function
+func (g *Generator) AddHandlerAnnotation(handler interface{}, annotation contracts.Annotation) {
+	if g.annotationStore != nil {
+		g.annotationStore.AddHandlerAnnotation(handler, annotation)
+	}
+}
+
+// GetAnnotations retrieves combined annotations for a route and handler
+func (g *Generator) GetAnnotations(method, path string, handler interface{}) []contracts.Annotation {
+	if g.annotationStore == nil {
+		return nil
+	}
+	return g.annotationStore.GetCombinedAnnotations(method, path, handler)
+}
+
+// GetOpenAPIHandler returns an HTTP handler that serves the OpenAPI specification
+func (g *Generator) GetOpenAPIHandler() http.Handler {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		doc, err := g.Generate()
+		if err != nil {
+			http.Error(w, "Failed to generate OpenAPI spec: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(doc); err != nil {
+			http.Error(w, "Failed to encode OpenAPI spec: "+err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Apply access control if configured
+	if g.accessController != nil {
+		return g.accessController.Middleware()(handler)
+	}
+
+	return handler
+}
+
+// GetSwaggerUIHandler returns an HTTP handler that serves the Swagger UI
+func (g *Generator) GetSwaggerUIHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Serve Swagger UI HTML
+		html := `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swagger UI</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css">
+    <style>
+        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body { margin: 0; background: #fafafa; }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: "` + r.URL.Path + `/../openapi.json",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout"
+            });
+        };
+    </script>
+</body>
+</html>`
+
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	})
 }
 
 // Generate produces the complete OpenAPI specification

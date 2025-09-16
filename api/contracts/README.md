@@ -696,6 +696,62 @@ The contract analysis system is designed to be efficient:
 - **Minimal Reflection**: Reflection is used sparingly and cached
 - **Concurrent Safe**: The analyzer is safe for concurrent use
 
+## Integration with Access Control
+
+The contract analysis system integrates seamlessly with the OpenAPI access control system:
+
+```go
+// Create OpenAPI generator with IP-based access control
+config := &openapi.Config{
+    Title:       "My API",
+    Description: "API with comprehensive annotations and access control",
+    Version:     "2.0.0",
+    AccessControl: &openapi.AccessControlConfig{
+        DefaultAccess:      openapi.AccessNonPublic, // Allow non-public IPs by default
+        AllowedCIDRs:       []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+        EnableRateLimiter:  true,
+        RateLimitRequests:  60,
+        RateLimitWindow:    60,
+        EnableAuditLogging: true,
+    },
+}
+
+generator := openapi.NewGenerator(config)
+
+// Add routes with annotations
+generator.AddRouteWithAnnotation("GET", "/users/{id}", getUserHandler, userAnnotation)
+
+// The generated handlers will automatically include access control
+openapiHandler := generator.GetOpenAPIHandler()     // With IP filtering
+swaggerHandler := generator.GetSwaggerUIHandler()   // With IP filtering
+```
+
+**Note:** The `AccessNonPublic` default now automatically includes Tailscale IPs (`100.64.0.0/10`), so you don't need to explicitly add them to the `AllowedCIDRs` list unless you want to be explicit.
+
+## Access Control Presets
+
+The system provides several access control presets:
+
+```go
+// Development - Allow all access
+config := openapi.DevelopmentAccessControlConfig()
+
+// Production - Non-public IPs only with rate limiting
+config := openapi.ProductionAccessControlConfig()
+
+// Strict - Only specific subnets allowed
+config := openapi.StrictAccessControlConfig()
+
+// Custom - Full control over access rules
+config := &openapi.AccessControlConfig{
+    DefaultAccess: openapi.AccessDenyAll,
+    AllowedCIDRs: []string{"192.168.1.0/24", "10.0.0.0/24"},
+    EnableRateLimiter: true,
+    RateLimitRequests: 30,
+    RateLimitWindow: 60,
+}
+```
+
 ## Future Enhancements
 
 - [ ] Support for GraphQL schema generation
@@ -703,3 +759,5 @@ The contract analysis system is designed to be efficient:
 - [ ] Custom documentation generators
 - [ ] Performance optimizations for large APIs
 - [ ] Integration with API testing tools
+- [ ] Advanced audit logging and analytics
+- [ ] API key and OAuth integration for access control

@@ -557,6 +557,120 @@ If you're migrating from manually written OpenAPI specifications:
 3. **Update route handlers** - Ensure they return proper types for schema generation
 4. **Configure UI** - Choose your preferred UI implementation and configure paths
 
+## Access Control and Security
+
+The OpenAPI system includes comprehensive access control for documentation endpoints:
+
+### IP-Based Access Control
+
+```go
+// Configure access control for documentation
+config := &openapi.Config{
+    Title:       "My API",
+    Description: "Secured API documentation",
+    Version:     "1.0.0",
+    AccessControl: &openapi.AccessControlConfig{
+        // Default behavior: allow non-public IPs
+        DefaultAccess: openapi.AccessNonPublic,
+
+        // Allow specific CIDR blocks
+        AllowedCIDRs: []string{
+            "10.0.0.0/8",      // Private network
+            "172.16.0.0/12",    // Private network
+            "192.168.0.0/16",   // Private network
+        },
+
+        // Enable rate limiting
+        EnableRateLimiter: true,
+        RateLimitRequests: 60,
+        RateLimitWindow: 60,
+
+        // Enable audit logging
+        EnableAuditLogging: true,
+    },
+}
+
+generator := openapi.NewGenerator(config)
+
+// Generated handlers automatically include access control
+openapiHandler := generator.GetOpenAPIHandler()  // With IP filtering
+swaggerHandler := generator.GetSwaggerUIHandler() // With IP filtering
+```
+
+**Default Private IP Ranges (AccessNonPublic):**
+- `10.0.0.0/8` - Private networks
+- `100.64.0.0/10` - Tailscale and CGNAT
+- `172.16.0.0/12` - Private networks
+- `192.168.0.0/16` - Private networks
+- `169.254.0.0/16` - Link-local addresses
+- `127.0.0.0/8` - Loopback addresses
+
+### Access Control Presets
+
+```go
+// Development - No restrictions
+devConfig := openapi.DevelopmentAccessControlConfig()
+
+// Production - Non-public IPs with rate limiting
+prodConfig := openapi.ProductionAccessControlConfig()
+
+// Strict - Only specific subnets
+strictConfig := openapi.StrictAccessControlConfig()
+```
+
+### Access Control Options
+
+```go
+config := &openapi.AccessControlConfig{
+    // Default access behavior
+    DefaultAccess: openapi.AccessNonPublic, // or AccessDenyAll, AccessAllowAll
+
+    // CIDR blocks for explicit allow/deny
+    AllowedCIDRs: []string{"10.0.0.0/8", "172.16.0.0/12"},
+    DeniedCIDRs:  []string{"192.168.100.0/24"}, // Deny takes precedence
+
+    // Rate limiting
+    EnableRateLimiter: true,
+    RateLimitRequests: 100,
+    RateLimitWindow: 60, // seconds
+
+    // Audit logging
+    EnableAuditLogging: true,
+    AuditLogPath: "/var/log/openapi-access.log",
+}
+```
+
+### Custom Annotation System
+
+The system provides a comprehensive annotation system for enriching API documentation:
+
+```go
+// Create detailed annotations
+annotation := contracts.NewSummary("Get user by ID").
+    WithDescription("Retrieve detailed user information").
+    WithTags("users", "read").
+    WithOperationID("getUser").
+    WithParameter(contracts.NewParameter("id", "path", true)).
+    WithResponse(200, contracts.NewResponse("User retrieved successfully")).
+    WithResponse(404, contracts.NewResponse("User not found")).
+    WithSecurity(map[string][]string{"bearerAuth": {}})
+
+// Add route with annotations
+generator.AddRouteWithAnnotation("GET", "/users/{id}", handler, annotation)
+
+// Add handler-level annotations
+handlerAnnotation := contracts.NewDescription("User management operations")
+generator.AddHandlerAnnotation(handler, handlerAnnotation)
+```
+
+### Annotation Features
+
+- **Basic Information**: Summary, description, operation ID, tags, deprecated status
+- **Request/Response**: Consumes, produces, custom parameters, response specifications
+- **Security**: Security requirements and authentication schemes
+- **Extensions**: Custom extensions for additional metadata
+- **Inheritance**: Route and handler annotations merge intelligently
+
 ## Next Steps
 
 - [ ] Implement client SDK generation
