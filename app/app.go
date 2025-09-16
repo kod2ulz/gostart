@@ -11,9 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-contrib/cors"
-	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/logr"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +24,7 @@ var (
 )
 
 type ap struct {
-	router *gin.Engine
+	router Router
 	log    *logr.Logger
 	start  time.Time
 	conf   *conf
@@ -83,11 +82,11 @@ func (a *ap) Ctx() context.Context {
 	return a.ctx
 }
 
-func (a *ap) Router() *gin.Engine {
+func (a *ap) Router() Router {
 	return a.router
 }
 
-func (a *ap) R() *gin.Engine {
+func (a *ap) R() Router {
 	return a.router
 }
 
@@ -169,6 +168,25 @@ func WithHeartbeatHandlers() AppIniter {
 }
 
 func (a *ap) initAPI(opts ...AppIniter) {
+	// Create router using the new abstraction
+	routerConfig := &RouterConfig{
+		AllowOrigins:     a.conf.Http.AllowOrigins,
+		AllowMethods:     a.conf.Http.AllowMethods,
+		AllowHeaders:     a.conf.Http.AllowHeaders,
+		ExposeHeaders:    a.conf.Http.ExposeHeaders,
+		AllowCredentials: a.conf.Http.AllowCredentials,
+		MaxAge:           int(a.conf.Http.MaxAge),
+		EnableRecovery:   true,
+		EnableLogging:    true,
+	}
+
+	var err error
+	a.router, err = NewGinRouter(routerConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	// Convert legacy handlers to new format
 	a.handlers = map[string]gin.HandlerFunc{
 		"ok": func(c *gin.Context) {
 			c.JSON(http.StatusOK, "OK")
@@ -181,24 +199,31 @@ func (a *ap) initAPI(opts ...AppIniter) {
 		},
 	}
 
-	a.router = gin.New()
-	a.router.Use(api.JSONLogMiddleware(a.log), gin.Recovery(), cors.New(cors.Config{
-		AllowOrigins:     a.conf.Http.AllowOrigins,
-		AllowMethods:     a.conf.Http.AllowMethods,
-		AllowHeaders:     a.conf.Http.AllowHeaders,
-		ExposeHeaders:    a.conf.Http.ExposeHeaders,
-		AllowCredentials: a.conf.Http.AllowCredentials,
-		MaxAge: a.conf.Http.MaxAge,
-	}))
-
 	for i := range opts {
 		opts[i](a)
 	}
 
 	if a.heartbeatHandlers {
-		a.router.GET("/", a.handlers["ok"])
-		a.router.GET("/ok", a.handlers["ok"])
-		a.router.GET("/stats", a.handlers["stats"])
+		// Use new router interface with wrapped handlers
+		a.router.GET("/", func(ctx contracts.RequestContext) {
+			// For contracts.RequestContext, we need to use the app.RequestContext wrapper
+			if appCtx, ok := ctx.(RequestContext); ok {
+				appCtx.JSON(http.StatusOK, "OK")
+			}
+		})
+		a.router.GET("/ok", func(ctx contracts.RequestContext) {
+			if appCtx, ok := ctx.(RequestContext); ok {
+				appCtx.JSON(http.StatusOK, "OK")
+			}
+		})
+		a.router.GET("/stats", func(ctx contracts.RequestContext) {
+			if appCtx, ok := ctx.(RequestContext); ok {
+				appCtx.JSON(http.StatusOK, map[string]interface{}{
+					"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
+					"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),
+				})
+			}
+		})
 	}
 }
 

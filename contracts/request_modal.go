@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/kod2ulz/gostart/utils"
 )
 
 // RequestModal provides default implementation for RequestParam interface
@@ -16,9 +18,12 @@ type RequestModal[T RequestParam] struct{}
 
 // Validate provides default validation using struct tags
 func (r RequestModal[T]) Validate(ctx RequestContext) error {
-	// Default validation implementation
-	// This would typically use a validation library like go-playground/validator
-	// For now, we assume validation is handled by the concrete type
+	// Get the value from context and validate it
+	if impl, ok := ctx.(*contextImpl); ok {
+		if val := impl.Value(r.ContextKey()); val != nil {
+			return utils.Validate.Struct(val)
+		}
+	}
 	return nil
 }
 
