@@ -446,6 +446,315 @@ If you encounter issues during migration:
 3. Look at the provided examples
 4. Check test files for reference implementations
 
+## Practical Examples
+
+### Example 1: Notification Service Migration
+
+#### Before (Old API - Crash-prone)
+```go
+func startNotificationService(logger *logr.Logger) {
+    // Old initialization - panic-prone
+    conf := &mq.Config{
+        Host:       "localhost",
+        Port:       "5672",
+        // ... other config
+    }
+
+    rmqHandler := mq.RabbitMQ(ctx, logger, conf)
+
+    // Direct exchange access
+    notificationExchange := rmqHandler.TopicExchange("notifications.topic")
+    notificationQueue := rmqHandler.Queue("email-notifications")
+
+    // Old publisher
+    publisher, err := mq.InitPublisher(logger, notificationExchange, "notification.email")
+    if err != nil {
+        panic(err) // This would crash the service
+    }
+
+    // Old worker with panic-based error handling
+    processor := func(msg *Notification, routingKey string, redelivered bool) (any, error) {
+        sendEmail(msg.To, msg.Subject, msg.Body)
+        return nil, nil
+    }
+
+    errorHandler := func(msg *Notification, err error) (retry bool, delay time.Duration) {
+        log.Printf("Failed to send notification: %v", err)
+        return false, 0 // No retry strategy
+    }
+
+    worker, err := mq.InitWorkerStrict(ctx, logger, notificationExchange,
+        notificationQueue.Name(), "notification.*", errorHandler, processor)
+
+    // Service would crash on connection failures and rely on Docker restarts
+}
+```
+
+#### After (New API - Graceful)
+```go
+func startNotificationService(ctx context.Context, logger *logr.Logger) error {
+    // New configuration with retry strategy
+    config := mq.Config{
+        Host:             "localhost",
+        Port:             "5672",
+        Vhost:            "/",
+        Username:         "guest",
+        Password:         "guest",
+        Heartbeat:        10 * time.Second,
+        HeartbeatTimeout: 30 * time.Second,
+        Protocol:         "amqp",
+        ConsumerExchange: mq.ExchangeConfig{
+            Name:        "notifications.topic",
+            BindingKeys: "notification.*",
+        },
+        ProducerExchange: mq.ExchangeConfig{
+            Name:        "notifications.topic",
+            BindingKeys: "notification.*",
+        },
+    }
+
+    // New connection with automatic retry
+    conn, err := mq.NewRabbitMQConnection(ctx, &config, logger)
+    if err != nil {
+        return fmt.Errorf("failed to create connection: %w", err)
+    }
+    defer conn.Close()
+
+    manager := mq.NewRabbitMQWorkerManager(conn.Manager(), logger, ctx)
+    defer manager.Close()
+
+    // New publisher
+    publisher, err := manager.CreatePublisher("notifications.topic", "notification.email")
+    if err != nil {
+        return fmt.Errorf("failed to create publisher: %w", err)
+    }
+
+    // New unified handler with retry strategy
+    handlerConfig := mq.HandlerConfig{
+        Manager: manager,
+        Theme:   "notification-service",
+        Logger:  logger,
+        Context: ctx,
+        ErrorHandler: mq.RetryableErrorHandler(logger, "notification-service", 3),
+    }
+
+    handler := mq.NewUnifiedHandler(handlerConfig)
+
+    // Business logic function
+    sendNotification := func(ctx context.Context, notif Notification) (string, error) {
+        err := sendEmail(notif.To, notif.Subject, notif.Body)
+        if err != nil {
+            return "", fmt.Errorf("failed to send email: %w", err)
+        }
+        return fmt.Sprintf("Notification sent to %s", notif.To), nil
+    }
+
+    // Create worker with flexible options
+    worker, err := handler.CreateWorker("notifications.topic", "notification.*", sendNotification,
+        mq.WithPrefetchCount(5),
+        mq.WithAutoAck(false),
+        mq.WithQueueOptions(mq.QueueOptions{
+            Durable:    true,
+            AutoDelete: false,
+        }),
+    )
+    if err != nil {
+        return fmt.Errorf("failed to create worker: %w", err)
+    }
+
+    // Graceful start and stop
+    if err := worker.Start(); err != nil {
+        return fmt.Errorf("failed to start worker: %w", err)
+    }
+    defer worker.Stop()
+
+    // Service now handles connection failures gracefully with automatic retry
+    logger.Info("Notification service started successfully")
+    return nil
+}
+```
+
+### Example 2: Payment Processing Service
+
+#### Before (Old API - Manual Retry Logic)
+```go
+func processPaymentWorker(logger *logr.Logger) {
+    // Complex connection handling with manual retries
+    rmqHandler := mq.RabbitMQ(ctx, logger, conf)
+
+    processor := func(msg *PaymentRequest, routingKey string, redelivered bool) (any, error) {
+        // Manual retry logic in business code
+        for i := 0; i < 3; i++ {
+            err := processPayment(msg)
+            if err == nil {
+                return nil, nil
+            }
+            time.Sleep(time.Duration(i+1) * time.Second)
+        }
+        return nil, fmt.Errorf("payment processing failed after retries")
+    }
+
+    // Error handler with manual retry count tracking
+    errorHandler := func(msg *PaymentRequest, err error) (retry bool, delay time.Duration) {
+        retryCount := getRetryCountFromHeaders(msg)
+        if retryCount < 3 {
+            return true, time.Duration(retryCount+1) * time.Second
+        }
+        return false, 0
+    }
+
+    worker, _ := mq.InitWorkerStrict(ctx, logger, exchange, queue, "payment.*", errorHandler, processor)
+}
+```
+
+#### After (New API - Built-in Retry Logic)
+```go
+func processPaymentWorker(ctx context.Context, logger *logr.Logger) error {
+    config := mq.Config{
+        // ... configuration
+    }
+
+    conn, err := mq.NewRabbitMQConnection(ctx, &config, logger)
+    if err != nil {
+        return err
+    }
+    defer conn.Close()
+
+    manager := mq.NewRabbitMQWorkerManager(conn.Manager(), logger, ctx)
+    defer manager.Close()
+
+    handlerConfig := mq.HandlerConfig{
+        Manager:     manager,
+        Theme:       "payment-processor",
+        Logger:      logger,
+        Context:     ctx,
+        ErrorHandler: mq.RetryableErrorHandler(logger, "payment-processor", 3),
+    }
+
+    handler := mq.NewUnifiedHandler(handlerConfig)
+
+    // Clean business logic without retry concerns
+    processPayment := func(ctx context.Context, payment PaymentRequest) (string, error) {
+        // Just process the payment - retry logic is handled by the framework
+        result, err := paymentGateway.Process(payment)
+        if err != nil {
+            return "", fmt.Errorf("payment gateway error: %w", err)
+        }
+        return result.TransactionID, nil
+    }
+
+    worker, err := handler.CreateWorker("payments.topic", "payment.process", processPayment,
+        mq.WithPrefetchCount(1), // Process one payment at a time
+        mq.WithQueueOptions(mq.QueueOptions{
+            Durable:    true,
+            AutoDelete: false,
+            Exclusive:  false,
+        }),
+    )
+    if err != nil {
+        return err
+    }
+
+    return worker.Start()
+}
+```
+
+### Example 3: Multi-Exchange Publishing
+
+#### Before (Old API - Multiple Publishers)
+```go
+func setupEventPublishers(logger *logr.Logger) (map[string]any, error) {
+    rmqHandler := mq.RabbitMQ(ctx, logger, conf)
+
+    userExchange := rmqHandler.TopicExchange("users.topic")
+    orderExchange := rmqHandler.TopicExchange("orders.topic")
+    notificationExchange := rmqHandler.TopicExchange("notifications.topic")
+
+    userPublisher, err := mq.InitPublisher(logger, userExchange, "user.event")
+    if err != nil {
+        return nil, err
+    }
+
+    orderPublisher, err := mq.InitPublisher(logger, orderExchange, "order.event")
+    if err != nil {
+        return nil, err
+    }
+
+    notificationPublisher, err := mq.InitPublisher(logger, notificationExchange, "notification.sent")
+    if err != nil {
+        return nil, err
+    }
+
+    return map[string]any{
+        "users":        userPublisher,
+        "orders":       orderPublisher,
+        "notifications": notificationPublisher,
+    }, nil
+}
+```
+
+#### After (New API - Single Manager)
+```go
+func setupEventPublishers(ctx context.Context, logger *logr.Logger) (map[string]mq.NewPublisher, error) {
+    config := mq.Config{
+        // ... configuration
+    }
+
+    conn, err := mq.NewRabbitMQConnection(ctx, &config, logger)
+    if err != nil {
+        return nil, err
+    }
+
+    manager := mq.NewRabbitMQWorkerManager(conn.Manager(), logger, ctx)
+
+    // Single manager handles all exchanges
+    userPublisher, err := manager.CreatePublisher("users.topic", "user.event")
+    if err != nil {
+        return nil, err
+    }
+
+    orderPublisher, err := manager.CreatePublisher("orders.topic", "order.event")
+    if err != nil {
+        return nil, err
+    }
+
+    notificationPublisher, err := manager.CreatePublisher("notifications.topic", "notification.sent")
+    if err != nil {
+        return nil, err
+    }
+
+    return map[string]mq.NewPublisher{
+        "users":        userPublisher,
+        "orders":       orderPublisher,
+        "notifications": notificationPublisher,
+    }, nil
+}
+```
+
+## Migration Benefits Summary
+
+### 1. **Reliability Improvements**
+- **Before**: Service crashes on connection failures, relies on Docker restarts
+- **After**: Automatic connection recovery with exponential backoff
+
+### 2. **Code Quality**
+- **Before**: Manual retry logic scattered throughout business code
+- **After**: Clean separation of concerns with framework-managed retry
+
+### 3. **Testability**
+- **Before**: Difficult to test due to panic-based error handling
+- **After**: Interface-based design enables easy mocking and testing
+
+### 4. **Flexibility**
+- **Before**: Tightly coupled to RabbitMQ implementation
+- **After**: Broker-agnostic interfaces ready for Kafka, Redis Streams, etc.
+
+### 5. **Monitoring**
+- **Before**: Limited visibility into connection health
+- **After**: Comprehensive logging and metrics through unified handler
+
 ## Conclusion
 
 The enhanced MQ package provides significant improvements in reliability, maintainability, and flexibility. While the migration requires some code changes, the benefits far outweigh the costs, especially for production environments where service stability is critical.
+
+The migration examples above demonstrate how the new API eliminates entire categories of operational issues while making the code more maintainable and testable.
