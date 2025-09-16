@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/kod2ulz/gostart/api/contracts"
 )
 
 // Document represents the complete OpenAPI 3.0 specification
@@ -290,11 +292,12 @@ type RouteInfo struct {
 
 // Generator handles OpenAPI specification generation
 type Generator struct {
-	doc         *Document
-	routes      []RouteInfo
-	typeCache   map[reflect.Type]*Schema
-	annotations map[string]Annotation
-	config      *Config
+	doc             *Document
+	routes          []RouteInfo
+	typeCache       map[reflect.Type]*Schema
+	annotations     map[string]Annotation
+	config          *Config
+	contractAnalyzer *contracts.ContractAnalyzer
 }
 
 // Config holds configuration for the OpenAPI generator
@@ -338,9 +341,10 @@ func NewGenerator(config *Config) *Generator {
 			},
 			Tags: config.Tags,
 		},
-		typeCache:   make(map[reflect.Type]*Schema),
-		annotations: make(map[string]Annotation),
-		config:      config,
+		typeCache:       make(map[reflect.Type]*Schema),
+		annotations:     make(map[string]Annotation),
+		config:          config,
+		contractAnalyzer: contracts.NewContractAnalyzer(),
 	}
 }
 
@@ -375,6 +379,19 @@ func (g *Generator) AddRoute(method, path string, handler interface{}, annotatio
 		Annotations: map[string]interface{}{
 			"openapi": annotation,
 		},
+	}
+
+	// Analyze request and response contracts
+	if g.contractAnalyzer != nil {
+		requestContract, err := g.contractAnalyzer.AnalyzeRequest(handler, path)
+		if err == nil {
+			route.Annotations["requestContract"] = requestContract
+		}
+
+		responseContract, err := g.contractAnalyzer.AnalyzeResponse(handler)
+		if err == nil {
+			route.Annotations["responseContract"] = responseContract
+		}
 	}
 
 	g.routes = append(g.routes, route)
@@ -443,10 +460,241 @@ func (g *Generator) createOperation(route RouteInfo) *Operation {
 		Responses:   g.createDefaultResponses(),
 	}
 
+	// Use contract information if available
+	if requestContract, ok := route.Annotations["requestContract"].(*contracts.RequestContract); ok {
+		g.enrichOperationFromRequestContract(operation, requestContract)
+	}
+
+	if responseContract, ok := route.Annotations["responseContract"].(*contracts.ResponseContract); ok {
+		g.enrichOperationFromResponseContract(operation, responseContract)
+	}
+
 	// Analyze handler to extract parameter and response types
 	g.analyzeHandler(route, operation)
 
 	return operation
+}
+
+// enrichOperationFromRequestContract enriches operation with request contract information
+func (g *Generator) enrichOperationFromRequestContract(operation *Operation, contract *contracts.RequestContract) {
+	// Add path parameters
+	for name, param := range contract.PathParameters {
+		operation.Parameters = append(operation.Parameters, Parameter{
+			Name:        name,
+			In:          "path",
+			Required:    param.Required,
+			Description: param.Description,
+			Schema: &Schema{
+				Type:   param.Type,
+				Format: param.Format,
+			},
+		})
+	}
+
+	// Add query parameters
+	for name, param := range contract.QueryParameters {
+		operation.Parameters = append(operation.Parameters, Parameter{
+			Name:        name,
+			In:          "query",
+			Required:    param.Required,
+			Description: param.Description,
+			Schema: &Schema{
+				Type:   param.Type,
+				Format: param.Format,
+			},
+		})
+	}
+
+	// Add header parameters
+	for name, param := range contract.Headers {
+		operation.Parameters = append(operation.Parameters, Parameter{
+			Name:        name,
+			In:          "header",
+			Required:    param.Required,
+			Description: param.Description,
+			Schema: &Schema{
+				Type:   param.Type,
+				Format: param.Format,
+			},
+		})
+	}
+
+	// Add cookie parameters
+	for name, param := range contract.Cookies {
+		operation.Parameters = append(operation.Parameters, Parameter{
+			Name:        name,
+			In:          "cookie",
+			Required:    param.Required,
+			Description: param.Description,
+			Schema: &Schema{
+				Type:   param.Type,
+				Format: param.Format,
+			},
+		})
+	}
+
+	// Add request body if available
+	if contract.Body != nil && contract.Body.Required {
+		operation.RequestBody = &RequestBody{
+			Content: map[string]MediaType{
+				contract.Body.ContentType: {
+					Schema: g.convertSchemaContract(contract.Body.Schema),
+				},
+			},
+			Required: contract.Body.Required,
+		}
+	}
+}
+
+// enrichOperationFromResponseContract enriches operation with response contract information
+func (g *Generator) enrichOperationFromResponseContract(operation *Operation, contract *contracts.ResponseContract) {
+	statusCode := fmt.Sprintf("%d", contract.StatusCode)
+
+	response := Response{
+		Description: fmt.Sprintf("%d response", contract.StatusCode),
+	}
+
+	// Add response body if available
+	if contract.Body != nil {
+		response.Content = map[string]MediaType{
+			contract.Body.ContentType: {
+				Schema: g.convertSchemaContract(contract.Body.Schema),
+			},
+		}
+	}
+
+	// Add headers if available
+	if len(contract.Headers) > 0 {
+		response.Headers = make(map[string]Header)
+		for name, header := range contract.Headers {
+			response.Headers[name] = Header{
+				Description: header.Description,
+				Schema: &Schema{
+					Type:   header.Type,
+					Format: header.Format,
+				},
+			}
+		}
+	}
+
+	operation.Responses[statusCode] = response
+
+	// Add error responses if available
+	for statusCode, errorResponse := range contract.ErrorResponses {
+		errorStatusCode := fmt.Sprintf("%d", statusCode)
+		operation.Responses[errorStatusCode] = Response{
+			Description: fmt.Sprintf("%d error response", statusCode),
+			Content: map[string]MediaType{
+				errorResponse.ContentType: {
+					Schema: g.convertSchemaContract(errorResponse.Body.Schema),
+				},
+			},
+		}
+	}
+}
+
+// convertSchemaContract converts a contracts.SchemaContract to openapi.Schema
+func (g *Generator) convertSchemaContract(schemaContract *contracts.SchemaContract) *Schema {
+	if schemaContract == nil {
+		return nil
+	}
+
+	schema := &Schema{
+		Type:                 schemaContract.Type,
+		Format:               schemaContract.Format,
+		Description:          schemaContract.Description,
+		Nullable:             false,
+		ReadOnly:             schemaContract.ReadOnly,
+		WriteOnly:            schemaContract.WriteOnly,
+		Deprecated:           schemaContract.Deprecated,
+	}
+
+	if schemaContract.Properties != nil {
+		schema.Properties = make(map[string]Schema)
+		for name, prop := range schemaContract.Properties {
+			schema.Properties[name] = *g.convertSchemaContract(&prop)
+		}
+	}
+
+	if schemaContract.Required != nil {
+		schema.Required = schemaContract.Required
+	}
+
+	if schemaContract.Items != nil {
+		schema.Items = g.convertSchemaContract(schemaContract.Items)
+	}
+
+	if schemaContract.AdditionalProperties {
+		schema.AdditionalProperties = &AdditionalProperties{
+			Bool: true,
+		}
+	}
+
+	if schemaContract.Enum != nil {
+		schema.Enum = schemaContract.Enum
+	}
+
+	if schemaContract.Default != nil {
+		schema.Default = schemaContract.Default
+	}
+
+	if schemaContract.Example != nil {
+		schema.Example = schemaContract.Example
+	}
+
+	if schemaContract.MinLength != nil {
+		schema.MinLength = *schemaContract.MinLength
+	}
+
+	if schemaContract.MaxLength != nil {
+		schema.MaxLength = *schemaContract.MaxLength
+	}
+
+	if schemaContract.Pattern != "" {
+		schema.Pattern = schemaContract.Pattern
+	}
+
+	if schemaContract.Minimum != nil {
+		schema.Minimum = *schemaContract.Minimum
+	}
+
+	if schemaContract.Maximum != nil {
+		schema.Maximum = *schemaContract.Maximum
+	}
+
+	if schemaContract.ExclusiveMinimum {
+		schema.ExclusiveMinimum = true
+	}
+
+	if schemaContract.ExclusiveMaximum {
+		schema.ExclusiveMaximum = true
+	}
+
+	if schemaContract.MultipleOf != nil {
+		schema.MultipleOf = *schemaContract.MultipleOf
+	}
+
+	if schemaContract.MinItems != nil {
+		schema.MinItems = *schemaContract.MinItems
+	}
+
+	if schemaContract.MaxItems != nil {
+		schema.MaxItems = *schemaContract.MaxItems
+	}
+
+	if schemaContract.UniqueItems {
+		schema.UniqueItems = true
+	}
+
+	if schemaContract.MinProperties != nil {
+		schema.MinProperties = *schemaContract.MinProperties
+	}
+
+	if schemaContract.MaxProperties != nil {
+		schema.MaxProperties = *schemaContract.MaxProperties
+	}
+
+	return schema
 }
 
 // createDefaultResponses creates default response schemas
