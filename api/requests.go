@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/kod2ulz/gostart/api/ginadapter"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
 	"golang.org/x/exp/constraints"
@@ -46,8 +45,8 @@ func (r ListRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.
 	if page := query("page", 1); page > 1 && out.Offset == 0 {
 		out.Offset = out.Limit * (page - 1)
 	}
-	if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
-		ginCtx.Set(out.ContextKey(), &out)
+	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		ctxSetter.Set(out.ContextKey(), &out)
 	}
 	return out, err
 }
@@ -95,8 +94,8 @@ func (r ListRequestWithID[ID]) RequestLoad(ctx contracts.RequestContext) (param 
 		i, _ := strconv.Atoi(pathId)
 		out.setId(i)
 	}
-	if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
-		ginCtx.Set(out.ContextKey(), out)
+	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		ctxSetter.Set(out.ContextKey(), out)
 	}
 	return out, err
 }

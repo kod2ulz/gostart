@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/api"
-	"github.com/kod2ulz/gostart/api/ginadapter"
 	"github.com/kod2ulz/gostart/auth"
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/contracts"
@@ -15,6 +14,49 @@ import (
 	"github.com/kod2ulz/gostart/ierrors"
 	"github.com/kod2ulz/gostart/utils"
 )
+
+// ginContextAdapter provides a minimal RequestContext implementation for gin.Context
+type ginContextAdapter struct {
+	ctx *gin.Context
+}
+
+func (g *ginContextAdapter) Query(key string, defaultValue ...string) contracts.Value {
+	if val := g.ctx.Query(key); val != "" {
+		return contracts.Value(val)
+	} else if len(defaultValue) > 0 {
+		return contracts.Value(defaultValue[0])
+	}
+	return ""
+}
+
+func (g *ginContextAdapter) Param(key string, defaultValue ...string) contracts.Value {
+	if val := g.ctx.Param(key); val != "" {
+		return contracts.Value(val)
+	} else if len(defaultValue) > 0 {
+		return contracts.Value(defaultValue[0])
+	}
+	return ""
+}
+
+func (g *ginContextAdapter) Header(key string) string {
+	return g.ctx.Request.Header.Get(key)
+}
+
+func (g *ginContextAdapter) ShouldBindJSON(obj interface{}) error {
+	return g.ctx.ShouldBindJSON(obj)
+}
+
+func (g *ginContextAdapter) Context() context.Context {
+	return g.ctx
+}
+
+func (g *ginContextAdapter) Value(key interface{}) interface{} {
+	return g.ctx.Value(key)
+}
+
+func (g *ginContextAdapter) Set(key string, value interface{}) {
+	g.ctx.Set(key, value)
+}
 
 // Shared test types and functions
 type Book struct {
@@ -40,7 +82,9 @@ func (r CreateBookRequest) RequestLoad(ctx contracts.RequestContext) (param cont
 		return param, gerrors.Errorf("failed to load request: %v", loadErr)
 	}
 	out.User, _ = auth.GetUser(ctx.Context()) // ignoring error because some tests won't need r.User
-	ctx.(*ginadapter.GinRequestContext).Set(out.ContextKey(), out)
+	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		ctxSetter.Set(out.ContextKey(), out)
+	}
 	return out, nil
 }
 
@@ -122,7 +166,7 @@ func (s *_bookService) listBooks(ctx context.Context) (out []Book, err ierrors.E
 	var from, to int = int(param.Offset), int(param.Limit + param.Offset)
 	out = collections.ListMap(s.data.Values().Slice(from, to), collections.ListMapToNoPtrFunc[Book])
 	if ginCtx, ok := ctx.(*gin.Context); ok {
-		param.DefaultMetadata(ginadapter.NewRequestContext(ginCtx)).WithTotal(int64(s.data.Values().Size()))
+		param.DefaultMetadata(&ginContextAdapter{ginCtx}).WithTotal(int64(s.data.Values().Size()))
 	}
 	return
 }

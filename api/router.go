@@ -75,6 +75,7 @@ type RouterConfig struct {
 	// Middleware settings
 	EnableRecovery   bool
 	EnableLogging    bool
+	LogConfig        *RequestLogConfig
 	CustomMiddleware []MiddlewareFunc
 
 	// Static file settings

@@ -5,7 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/api"
-	"github.com/kod2ulz/gostart/api/ginadapter"
+	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/logr"
 )
 
 // GinRouter implements the api.Router interface using Gin
@@ -14,9 +15,9 @@ type GinRouter struct {
 	group  *gin.RouterGroup
 }
 
-// GinRequestContext implements both contracts.RequestContext and api.RequestContext
-type GinRequestContext struct {
-	*ginadapter.GinRequestContext
+// RequestContext implements both contracts.RequestContext and api.RequestContext
+type RequestContext struct {
+	*GinRequestContext
 }
 
 // NewGinRouter creates a new Gin-based router
@@ -29,10 +30,38 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 		engine.Use(gin.Recovery())
 	}
 
+	// Apply automatic logging middleware if enabled
+	if config.EnableLogging {
+		logConfig := config.LogConfig
+		if logConfig == nil {
+			logConfig = api.DefaultRequestLogConfig()
+		}
+
+		// Check config for logapi flag (defaulting to true)
+		if shouldEnableLogging() {
+			logger := logr.Log()
+			loggingMiddleware := api.LoggingMiddleware(logger, logConfig)
+
+			engine.Use(func(c *gin.Context) {
+				ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
+				if cont, err := loggingMiddleware(ctx); !cont || err != nil {
+					if err != nil {
+						c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
+							"error": err.Error(),
+						})
+					}
+					c.Abort()
+					return
+				}
+				c.Next()
+			})
+		}
+	}
+
 	// Apply custom middleware
 	for _, mw := range config.CustomMiddleware {
 		engine.Use(func(c *gin.Context) {
-			ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
+			ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
 			if cont, err := mw(ctx); !cont || err != nil {
 				if err != nil {
 					c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
@@ -104,7 +133,7 @@ func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
 func (r *GinRouter) Use(middleware ...api.MiddlewareFunc) api.Router {
 	for _, mw := range middleware {
 		r.currentGroup().Use(func(c *gin.Context) {
-			ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
+			ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
 			if cont, err := mw(ctx); !cont || err != nil {
 				if err != nil {
 					c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
@@ -151,70 +180,81 @@ func (r *GinRouter) currentGroup() *gin.RouterGroup {
 
 func (r *GinRouter) wrapHandler(handler api.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
+		ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
 		handler(ctx)
 	}
 }
 
 // RequestContext implementations
-func (ctx *GinRequestContext) Next() {
-	ctx.GinContext.Next()
+func (ctx *RequestContext) Next() {
+	ctx.ctx.Next()
 }
 
-func (ctx *GinRequestContext) Abort() {
-	ctx.GinContext.Abort()
+func (ctx *RequestContext) Abort() {
+	ctx.ctx.Abort()
 }
 
-func (ctx *GinRequestContext) AbortWithStatus(code int) {
-	ctx.GinContext.AbortWithStatus(code)
+func (ctx *RequestContext) AbortWithStatus(code int) {
+	ctx.ctx.AbortWithStatus(code)
 }
 
-func (ctx *GinRequestContext) AbortWithStatusJSON(code int, obj any) {
-	ctx.GinContext.AbortWithStatusJSON(code, obj)
+func (ctx *RequestContext) AbortWithStatusJSON(code int, obj any) {
+	ctx.ctx.AbortWithStatusJSON(code, obj)
 }
 
-func (ctx *GinRequestContext) JSON(code int, obj any) {
-	ctx.GinContext.JSON(code, obj)
+func (ctx *RequestContext) JSON(code int, obj any) {
+	ctx.ctx.JSON(code, obj)
 }
 
-func (ctx *GinRequestContext) HTML(code int, name string, obj any) {
-	ctx.GinContext.HTML(code, name, obj)
+func (ctx *RequestContext) HTML(code int, name string, obj any) {
+	ctx.ctx.HTML(code, name, obj)
 }
 
-func (ctx *GinRequestContext) String(code int, format string, values ...any) {
-	ctx.GinContext.String(code, format, values...)
+func (ctx *RequestContext) String(code int, format string, values ...any) {
+	ctx.ctx.String(code, format, values...)
 }
 
-func (ctx *GinRequestContext) Data(code int, contentType string, data []byte) {
-	ctx.GinContext.Data(code, contentType, data)
+func (ctx *RequestContext) Data(code int, contentType string, data []byte) {
+	ctx.ctx.Data(code, contentType, data)
 }
 
-func (ctx *GinRequestContext) File(filepath string) {
-	ctx.GinContext.File(filepath)
+func (ctx *RequestContext) File(filepath string) {
+	ctx.ctx.File(filepath)
 }
 
-func (ctx *GinRequestContext) SetHeader(key, value string) {
-	ctx.GinContext.Header(key, value)
+func (ctx *RequestContext) SetHeader(key, value string) {
+	ctx.ctx.Header(key, value)
 }
 
-func (ctx *GinRequestContext) Status(code int) {
-	ctx.GinContext.Status(code)
+func (ctx *RequestContext) Status(code int) {
+	ctx.ctx.Status(code)
 }
 
-func (ctx *GinRequestContext) GetHeader(key string) string {
-	return ctx.GinContext.GetHeader(key)
+func (ctx *RequestContext) GetHeader(key string) string {
+	return ctx.ctx.GetHeader(key)
 }
 
-func (ctx *GinRequestContext) SetCookie(cookie *http.Cookie) {
-	http.SetCookie(ctx.GinContext.Writer, cookie)
+func (ctx *RequestContext) SetCookie(cookie *http.Cookie) {
+	http.SetCookie(ctx.ctx.Writer, cookie)
 }
 
-func (ctx *GinRequestContext) Cookie(name string) (string, error) {
-	return ctx.GinContext.Cookie(name)
+func (ctx *RequestContext) Cookie(name string) (string, error) {
+	return ctx.ctx.Cookie(name)
 }
 
-func (ctx *GinRequestContext) ClientIP() string {
-	return ctx.GinContext.ClientIP()
+func (ctx *RequestContext) ClientIP() string {
+	return ctx.ctx.ClientIP()
+}
+
+// shouldEnableLogging checks if logging should be enabled based on config
+func shouldEnableLogging() bool {
+	// Default to true as requested by the user
+	if value := config.Get("logapi"); value.Valid() {
+		if strVal := value.String(); strVal == "false" || strVal == "0" {
+			return false
+		}
+	}
+	return true
 }
 
 // Factory function for creating Gin routers

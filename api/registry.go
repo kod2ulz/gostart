@@ -60,3 +60,13 @@ func ListFrameworks() []string {
 	}
 	return names
 }
+
+// RegisterGinFramework registers the Gin router factory
+// This is a convenience function to avoid import cycles
+func RegisterGinFramework() {
+	RegisterFramework("gin", func(config *RouterConfig) (Router, error) {
+		// Import and create the Gin router
+		return nil, fmt.Errorf("gin framework not available - import github.com/kod2ulz/gostart/api/frameworks/gin to enable")
+	})
+	SetDefaultFramework("gin")
+}

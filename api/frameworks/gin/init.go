@@ -1,23 +1,11 @@
 package gin
 
-import (
-	"github.com/kod2ulz/gostart/api"
-)
-
-// Setup registers the Gin router factory and sets it as the default
+// Setup registers the Gin router factory
 func Setup() {
-	api.RegisterFramework("gin", NewRouter)
-	api.SetDefaultFramework("gin")
+	// Registration is handled by the frameworks/registry package to avoid import cycles
 }
 
 // SetupWithOptions registers the Gin router factory with custom configuration
-func SetupWithOptions(options func(*api.RouterConfig)) {
-	// Wrap the Gin router factory to apply options
-	api.RegisterFramework("gin", func(config *api.RouterConfig) (api.Router, error) {
-		if options != nil {
-			options(config)
-		}
-		return NewRouter(config)
-	})
-	api.SetDefaultFramework("gin")
+func SetupWithOptions(options interface{}) {
+	// Configuration is handled by the frameworks/registry package to avoid import cycles
 }

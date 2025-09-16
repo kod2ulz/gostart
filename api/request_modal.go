@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kod2ulz/gostart/api/ginadapter"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
@@ -20,8 +19,8 @@ var _ contracts.RequestParam = contracts.RequestModal[_t]{}
 type RequestModal[T contracts.RequestParam] struct{}
 
 func (r RequestModal[T]) Validate(ctx contracts.RequestContext) error {
-	if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
-		return utils.Validate.Struct(ginCtx.Value(r.ContextKey()))
+	if ctxSetter, ok := ctx.(interface{ Value(interface{}) interface{} }); ok {
+		return utils.Validate.Struct(ctxSetter.Value(r.ContextKey()))
 	}
 	return fmt.Errorf("cannot validate: invalid context type")
 }
@@ -30,8 +29,8 @@ func (r RequestModal[T]) RequestLoad(ctx contracts.RequestContext) (param contra
 	t := new(T)
 	if err = r.LoadFromJsonBody(ctx, t); err == nil {
 		// Note: This is a temporary workaround - ideally we should use RequestContext interface
-		if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
-			ginCtx.Set((*t).ContextKey(), t)
+		if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+			ctxSetter.Set((*t).ContextKey(), t)
 		}
 		return *t, err
 	}
@@ -59,8 +58,8 @@ func (r RequestModal[T]) ReferencesContextKey() string {
 }
 
 func (r RequestModal[T]) SetResponseMetadata(ctx contracts.RequestContext, meta *contracts.Metadata) (err error) {
-	if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
-		ginCtx.Set(r.MetadataContextKey(), meta)
+	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		ctxSetter.Set(r.MetadataContextKey(), meta)
 	}
 	return
 }
@@ -73,8 +72,8 @@ func (r RequestModal[T]) SetResponseReference(ctx contracts.RequestContext, key 
 
 	// Get gin context to store values
 	var ginCtx *gin.Context
-	if gc, ok := ctx.(*ginadapter.GinRequestContext); ok {
-		ginCtx = gc.GinContext
+	if gc, ok := ctx.(interface{ GinContext() *gin.Context }); ok {
+		ginCtx = gc.GinContext()
 	} else {
 		return
 	}
