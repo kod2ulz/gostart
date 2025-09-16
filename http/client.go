@@ -21,7 +21,7 @@ func Client[T any](log *logrus.Entry) (out *client[T]) {
 		log:     log,
 		timeout: time.Minute,
 		params:  map[string][]string{},
-		headers: map[string]collections.Set[string]{},
+		headers: make(Headers),
 	}
 	out.headers.Add("Content-Type", "application/json")
 	return
@@ -71,7 +71,7 @@ func (c *client[T]) Header(key, value string) *client[T] {
 }
 
 func (c *client[T]) Headers(headers map[string]string) *client[T] {
-	c.headers.Merge(headers)
+	c.headers.MergeStringMap(headers)
 	return c
 }
 

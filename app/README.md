@@ -8,7 +8,7 @@ The `app` package provides a single entry point, `app.Init()`, which creates a g
 
 - **Configuration Loading:** Initializes the `config` package, including loading `.env` files.
 - **Logger Initialization:** Sets up the global `logr` logger.
-- **HTTP Server:** Configures and runs a `gin-gonic` HTTP router.
+- **HTTP Server:** Configures and runs a framework-agnostic HTTP router through the `api` package.
 - **Service Registration:** Manages service registration and deregistration with Consul.
 - **Graceful Shutdown:** Listens for interrupt signals (`SIGTERM`, `SIGINT`) to shut down the application cleanly.
 
@@ -18,15 +18,20 @@ The typical usage is to call `app.Init()` at the start of your `main()` function
 
 ```go
 func main() {
+    // Initialize your preferred web framework (e.g., Gin)
+    gin.Setup()
+
     // Initialize the application
     app.Init(
         app.WithHeartbeatHandlers(), // Adds /ok and /stats endpoints
     )
 
-    // Register a new API route
-    app.R().GET("/my-route", func(c *gin.Context) {
+    // Register a new API route using the unified router interface
+    app.R().GET("/my-route", func(ctx api.RequestContext) {
         app.Log().Info("Request received!")
-        c.JSON(200, gin.H{"message": "hello"})
+        if apiCtx, ok := ctx.(api.RequestContext); ok {
+            apiCtx.JSON(200, map[string]string{"message": "hello"})
+        }
     })
 
     // Run the application
@@ -39,7 +44,6 @@ func main() {
 The `Init` function accepts `AppIniter` options to customize its behavior:
 
 - `app.WithHeartbeatHandlers()`: Automatically adds `/ok` and `/stats` health check endpoints.
-- `app.WithHandlerOverride(key, handler)`: Overrides one of the default handlers (e.g., `ok`, `stats`).
 - `app.WithStaticFileHandler(webPath, filePath)`: Serves a single static file.
 
 ### Service Registration (Consul)

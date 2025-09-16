@@ -1,6 +1,6 @@
 # API Package
 
-The `api` package provides a highly productive, opinionated toolkit for building robust, consistent, and framework-adaptable JSON APIs in Go, with `gin` as the default web framework.
+The `api` package provides a highly productive, opinionated toolkit for building robust, consistent, and framework-adaptable JSON APIs in Go with pluggable web framework support.
 
 ## Goal
 
@@ -8,84 +8,110 @@ The primary goal of this package is to drastically reduce boilerplate and enforc
 
 ## Core Concepts
 
-### 1. The Generic Request Lifecycle
+### 1. Framework-Agnostic Router Interface
 
-The package automates the entire request lifecycle. When a request hits an endpoint managed by a generic handler, the following steps occur automatically:
+The package provides a unified router interface that supports multiple web frameworks through a pluggable architecture. Currently supports Gin with plans for Echo, Fiber, and standard `net/http`.
 
-1.  **Load Request**: A custom request struct is loaded and populated from the HTTP request (JSON body, URL parameters, headers, etc.).
-2.  **Validate**: The populated struct is validated based on `validate` tags.
-3.  **Execute**: The corresponding service function (business logic) is called, receiving the validated request struct as a parameter.
-4.  **Respond**: The return value or error from the service function is automatically formatted into a standardized JSON response with the correct HTTP status code.
-
-### 2. Decoupled Request Modals
-
-Instead of binding directly to a `gin` context, you define request contracts as structs that implement the `RequestParam` interface, usually by embedding `api.RequestModal[T]`.
-
-This approach, centered on the `RequestLoad` method, decouples your request definition from the web framework. Each request struct knows how to load itself from a generic `context.Context`, making the system adaptable to other frameworks in the future.
-
-**Simple Request:**
 ```go
-import "github.com/kod2ulz/gostart/api"
+// Initialize your preferred framework
+gin.Setup()
 
-type MyRequest struct {
-    Name string `json:"name" validate:"required"`
-    api.RequestModal[MyRequest] // Embed to get default behavior
+// Use the unified router interface
+router := app.R()
+router.GET("/users", api.Handler[UserResponse](userService.ListUsers))
+```
+
+### 2. Simplified Type-Safe Handlers
+
+The package provides generic, type-safe handler functions that eliminate boilerplate code:
+
+- `Handler[T]`: For single object responses
+- `ListHandler[T]`: For list responses with pagination
+- `JSONHandler[T]`: For simple JSON responses without request parameters
+- `StreamHandler[T]`: For streaming responses
+- `FileHandler`: For file responses
+- `DownloadHandler`: For file downloads
+
+```go
+// Simple single object response
+router.GET("/users/:id", api.Handler(func(ctx contracts.RequestContext, param contracts.RequestParam) (User, ierrors.Error) {
+    id := ctx.Param("id")
+    return userService.GetUser(id)
+}))
+
+// List response with pagination
+router.GET("/users", api.ListHandler(func(ctx contracts.RequestContext, param contracts.RequestParam) ([]User, *int64, ierrors.Error) {
+    return userService.ListUsers(param)
+}))
+
+// Simple JSON response without request parameters
+router.GET("/health", api.JSONHandler(func(ctx contracts.RequestContext) (Health, ierrors.Error) {
+    return healthService.Check()
+}))
+```
+
+### 3. Unified Response Envelope
+
+All responses use a standardized JSON structure with consistent formatting:
+
+```json
+{
+  "success": true,
+  "type": "User",
+  "data": { ... },
+  "meta": {
+    "total": 100,
+    "limit": 10,
+    "offset": 0
+  },
+  "time": 1634567890
 }
 ```
 
-**Complex Request with Custom Loading:**
-For complex scenarios, like reading from headers or multiple sources, you can override the `RequestLoad` method.
+The envelope automatically handles:
+- Single objects and lists with pagination
+- Error responses with structured error information
+- Metadata and reference data
+- Consistent timestamps and response types
+
+### 4. Request Parameter Interface
+
+Request parameters implement the `contracts.RequestParam` interface, providing a standardized way to load and validate request data from various sources (JSON body, URL parameters, headers).
 
 ```go
-import (
-    "github.com/gin-gonic/gin"
-    "github.com/kod2ulz/gostart/api"
-)
-
-type TokenRequest struct {
-    Token string `json:"token" validate:"required"`
-    api.RequestModal[TokenRequest]
-}
-
-// Custom loading logic
-func (r TokenRequest) RequestLoad(ctx context.Context) (param api.RequestParam, err error) {
-    var out TokenRequest
-    // Try to load token from "Authorization: Bearer <token>" header first
-    if authHeader := ctx.(*gin.Context).Request.Header.Get("Authorization"); authHeader != "" {
-        // ... parsing logic ...
-        out.Token = parsedToken
-        ctx.(*gin.Context).Set(out.ContextKey(), out)
-        return out, nil
-    }
-    // Fallback to loading from JSON body
-    if err = out.LoadFromJsonBody(ctx, &out); err != nil {
-        return nil, err
-    }
-    ctx.(*gin.Context).Set(out.ContextKey(), out)
-    return out, nil
+type CreateUserRequest struct {
+    Name  string `json:"name" validate:"required"`
+    Email string `json:"email" validate:"required,email"`
+    contracts.RequestModal[CreateUserRequest] // Embed for default behavior
 }
 ```
 
-### 3. Boilerplate-Free Handlers
+### 5. Comprehensive Error Handling
 
-Generic handlers connect a `gin` route to your service method in a single line. They infer the request and response types from your function's signature.
-
-- `RequestHandlerWithResponse[RequestType, ResponseType]`: For single-item responses.
-- `RequestHandlerWithListResponse[RequestType, ResponseType]`: For list/slice responses.
+Built-in error handling that automatically formats errors into consistent responses:
 
 ```go
-// Your service method has a clean, framework-agnostic signature
-func (s *service) CreateUser(ctx context.Context, params CreateUserRequest) (UserResponse, api.Error) {
-    // ... business logic ...
+// Errors are automatically handled and formatted
+if err != nil {
+    return nil, errors.ServiceErrorBadRequest("Invalid user data")
 }
-
-// In your router setup:
-router.POST("/users", api.RequestHandlerWithResponse(s.CreateUser))
 ```
 
-### 4. Standardized Responses & Errors
+### 6. Framework Registration
 
-The package provides `DataResponse`, `ListResponse`, and `ErrorResponse` wrappers to ensure all API outputs share a consistent JSON structure (`success`, `data`, `error`, `meta`, `references`, `time`). The custom `api.Error` interface and helpers (`ValidatorError`, `SQLError`, etc.) make returning detailed, structured errors simple.
+Easy framework registration system that doesn't imply limited support:
+
+```go
+// Register Gin as the framework
+gin.Setup()
+
+// Or with custom configuration
+gin.SetupWithOptions(func(config *api.RouterConfig) {
+    config.AllowOrigins = []string{"*"}
+    config.EnableRecovery = true
+    config.EnableLogging = true
+})
+```
 
 ## Roadmap
 

@@ -39,7 +39,7 @@ func (r CreateBookRequest) RequestLoad(ctx contracts.RequestContext) (param cont
 	if loadErr := out.LoadFromJsonBody(ctx, &out); loadErr != nil {
 		return param, gerrors.Errorf("failed to load request: %v", loadErr)
 	}
-	out.User, _ = api.GetUser(ctx.Context()) // ignoring error because some tests won't need r.User
+	out.User, _ = auth.GetUser(ctx.Context()) // ignoring error because some tests won't need r.User
 	ctx.(*ginadapter.GinRequestContext).Set(out.ContextKey(), out)
 	return out, nil
 }

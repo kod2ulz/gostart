@@ -17,8 +17,9 @@ The core design philosophy is to be "opinionated" where it matters (structure, s
 ## Features
 
 - **Rapid Setup:** Get a production-ready server running in minutes with a single `app.Init()` call.
-- **Robust API Layer:** A clean pattern for defining HTTP handlers, middleware, and request/response models on top of Gin.
+- **Robust API Layer:** A clean pattern for defining HTTP handlers, middleware, and request/response models with framework-agnostic design.
 - **Pluggable Authentication:** Comes with helpers for JWT and PASETO tokens, with integrations for providers like AWS Cognito.
+- **Framework Agnostic:** Support for multiple web frameworks (Gin, Echo, etc.) through a unified router interface.
 - **Structured Logging:** Centralized and configurable logging using Logrus, with built-in adapters for components like `pgx`.
 - **Database & Cache Ready:** Includes helpers and interfaces for PostgreSQL (via pgx v5) and Redis.
 - **Message Queuing:** Integrated RabbitMQ publisher and worker system for background jobs.
@@ -32,26 +33,33 @@ Here's how to bootstrap a new application using GoStart.
 package main
 
 import (
-	"github.com/gin-gonic/gin"
+	"net/http"
+
 	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/api/frameworks/gin"
 	"github.com/kod2ulz/gostart/app"
 )
 
 func main() {
-	// 1. Initialize the application
+	// 1. Initialize Gin framework
+	gin.Setup()
+
+	// 2. Initialize the application
 	// This sets up the logger, router, and graceful shutdown handling.
 	a := app.Init()
-	ctx, log := a.Ctx(), a.Log()
+	log := a.Log()
 
 	log.Info("Application starting up...")
 
-	// 2. Define a route using the underlying Gin router
-	a.R().GET("/hello", func(c *gin.Context) {
-		// Use the api.Respond helper for consistent JSON responses
-		api.Respond(c).Success("world")
+	// 3. Define a route using the unified router interface
+	a.R().GET("/hello", func(ctx api.RequestContext) {
+		// Use the unified response handling
+		if apiCtx, ok := ctx.(api.RequestContext); ok {
+			apiCtx.JSON(http.StatusOK, map[string]string{"message": "hello world"})
+		}
 	})
 
-	// 3. Run the application
+	// 4. Run the application
 	// This starts the HTTP server and blocks until shutdown.
 	a.Run()
 }
@@ -76,9 +84,10 @@ For more detailed, real-world examples of how to use specific packages, please s
 
 The library is organized into logical packages. For a detailed breakdown, see the [Introduction to GoStart](./docs/01-introduction.md).
 
-- `/app`: Core application, configuration, and router.
-- `/api`: API request/response handling.
-- `/auth`: Authentication and session management.
+- `/app`: Core application bootstrap and configuration.
+- `/api`: Framework-agnostic API request/response handling and router interfaces.
+- `/auth`: Authentication, session management, and authorization middleware.
+- `/http`: HTTP client utilities for making external API calls.
 - `/storage`: Caching (Redis) and persistence helpers.
 - `/mq`: Message queue integration (RabbitMQ).
 - `/logr`: Structured logging configuration.

@@ -138,13 +138,6 @@ func (a *ap) shutdown() {
 	a.log.Info("shutting down")
 }
 
-func WithHandlerOverride(key string, handler any) AppIniter {
-	return func(a *ap) error {
-		// Handler overrides are no longer supported in the new architecture
-		// Use the router directly for custom handlers
-		return nil
-	}
-}
 
 func WithStaticFileHandler(webPath, filePath string) AppIniter {
 	return func(a *ap) error {

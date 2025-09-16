@@ -10,9 +10,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/auth"
 	"github.com/kod2ulz/gostart/contracts"
+	httpclient "github.com/kod2ulz/gostart/http"
 	"github.com/kod2ulz/gostart/utils"
 )
 
@@ -24,7 +24,7 @@ var _ = Describe("Request Handler", func() {
 
 	When("posting data with authenticated user", func() {
 		var user auth.UserData
-		headers := api.Headers{}
+		headers := httpclient.Headers{}
 		userStore := auth.InMemoryUserStore()
 		sessionService := auth.SessionService(nil, userStore)
 		router = utils.Test.GinRouter(func(e *gin.Engine) {
