@@ -2,11 +2,17 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/api"
+	gin_framework "github.com/kod2ulz/gostart/api/frameworks/gin"
 	"github.com/kod2ulz/gostart/auth"
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/contracts"
@@ -69,7 +75,7 @@ type Book struct {
 
 type CreateBookRequest struct {
 	ID     *uuid.UUID `json:"id,omitempty"`
-	User   auth.User   `json:"-"`
+	User   auth.User  `json:"-"`
 	Name   string     `json:"name"   validate:"required"`
 	Author string     `json:"author" validate:"required"`
 	Pages  int        `json:"pages"  validate:"required,gt=200"`
@@ -113,11 +119,42 @@ func (s *_bookService) clear() {
 	}
 }
 
-func (s *_bookService) setRoutes(router *gin.RouterGroup, middleware ...gin.HandlerFunc) {
-	router.Use(middleware...).
-		POST("", api.ParamHandlerWithResponse[CreateBookRequest](s.createBook)).
-		GET("", api.ParamHandlerWithListResponse[ListBooksRequest](s.listBooks)).
-		GET("/:id", api.ParamHandlerWithResponse[DetailedBookRequest](s.getBookByID))
+// wrapHandler converts an api.HandlerFunc to gin.HandlerFunc for testing
+func wrapHandler(handler api.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := &gin_framework.RequestContext{
+			GinRequestContext: gin_framework.NewRequestContext(c).(*gin_framework.GinRequestContext),
+		}
+		handler(ctx)
+	}
+}
+
+func (s *_bookService) setRoutes(router api.Router, middleware ...gin.HandlerFunc) {
+	// Create handlers using the JSONHandler from api package
+	createHandler := api.JSONHandler[Book](s.createBook)
+	listHandler := api.JSONHandler[[]Book](s.listBooks)
+	getHandler := api.JSONHandler[Book](s.getBookByID)
+
+	// Use the router interface to add routes
+	router.POST("", createHandler)
+	router.GET("", listHandler)
+	router.GET("/:id", getHandler)
+}
+
+// SetRoutesWithGin provides compatibility for tests that need to use gin.Engine directly
+func (s *_bookService) SetRoutesWithGin(group *gin.RouterGroup, middleware ...gin.HandlerFunc) {
+	// Create handlers using the JSONHandler from api package
+	createHandler := api.JSONHandler[Book](s.createBook)
+	listHandler := api.JSONHandler[[]Book](s.listBooks)
+	getHandler := api.JSONHandler[Book](s.getBookByID)
+
+	// Add middleware to the group
+	group.Use(middleware...)
+
+	// Add routes directly to the gin group
+	group.POST("", wrapHandler(createHandler))
+	group.GET("", wrapHandler(listHandler))
+	group.GET("/:id", wrapHandler(getHandler))
 }
 
 func (s *_bookService) seed(size int, user auth.User) (out []*Book, err error) {
@@ -142,11 +179,11 @@ func (s *_bookService) seed(size int, user auth.User) (out []*Book, err error) {
 	return
 }
 
-func (s *_bookService) createBook(ctx context.Context) (out Book, err ierrors.Error) {
+func (s *_bookService) createBook(ctx contracts.RequestContext) (out Book, err ierrors.Error) {
 	var id uuid.UUID
 	var param CreateBookRequest
 	var modal api.RequestModal[CreateBookRequest]
-	if loadError := modal.FromContext(ctx, &param); loadError != nil {
+	if loadError := modal.FromContext(ctx.Context(), &param); loadError != nil {
 		return out, gerrors.RequestLoadError[CreateBookRequest](loadError)
 	} else if id = uuid.New(); param.ID != nil {
 		id = *param.ID
@@ -157,16 +194,18 @@ func (s *_bookService) createBook(ctx context.Context) (out Book, err ierrors.Er
 
 type ListBooksRequest = api.ListRequest
 
-func (s *_bookService) listBooks(ctx context.Context) (out []Book, err ierrors.Error) {
+func (s *_bookService) listBooks(ctx contracts.RequestContext) (out []Book, err ierrors.Error) {
 	var param ListBooksRequest
 	var modal api.RequestModal[api.ListRequest]
-	if loadError := modal.FromContext(ctx, &param); loadError != nil {
+	if loadError := modal.FromContext(ctx.Context(), &param); loadError != nil {
 		return out, gerrors.RequestLoadError[ListBooksRequest](loadError)
 	}
 	var from, to int = int(param.Offset), int(param.Limit + param.Offset)
 	out = collections.ListMap(s.data.Values().Slice(from, to), collections.ListMapToNoPtrFunc[Book])
-	if ginCtx, ok := ctx.(*gin.Context); ok {
-		param.DefaultMetadata(&ginContextAdapter{ginCtx})//.WithTotal(int64(s.data.Values().Size()))
+
+	// Use the ginContextAdapter if we need to set metadata
+	if apiCtx, ok := ctx.(interface{ SetContextValue(string, any) error }); ok {
+		_ = apiCtx.SetContextValue("response_metadata", param.Metadata())
 	}
 	return
 }
@@ -176,14 +215,103 @@ type DetailedBookRequest struct {
 	User auth.User
 }
 
-func (s *_bookService) getBookByID(ctx context.Context) (out Book, err ierrors.Error) {
+func (s *_bookService) getBookByID(ctx contracts.RequestContext) (out Book, err ierrors.Error) {
 	var param DetailedBookRequest
 	var modal api.RequestModal[api.ListRequestWithID[uuid.UUID]]
-	if loadError := modal.FromContext(ctx, &param.ListRequestWithID); loadError != nil {
+	if loadError := modal.FromContext(ctx.Context(), &param.ListRequestWithID); loadError != nil {
 		return out, gerrors.RequestLoadError[DetailedBookRequest](loadError)
 	} else if book, ok := s.data[param.ID]; !ok {
 		return out, gerrors.NotFoundError[Book](param)
 	} else {
 		return *book, nil
 	}
+}
+
+// TestErrorHandling demonstrates the centralized error handling system
+func TestErrorHandling(t *testing.T) {
+	// Setup gin in test mode
+	gin.SetMode(gin.TestMode)
+
+	// Create a test gin router
+	router := gin.New()
+
+	// Create a book service
+	service := bookService()
+
+	// Setup the book service routes using our compatibility function
+	service.SetRoutesWithGin(router.Group("/books"))
+
+	// Test 1: Validation Error - Create book with missing required fields
+	t.Run("ValidationError", func(t *testing.T) {
+		// Create request with invalid data (missing name)
+		reqBody := `{"author": "Test Author", "pages": 250}`
+
+		req, _ := http.NewRequest("POST", "/books", strings.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		// Debug: print the actual response
+		t.Logf("Response status: %d", w.Code)
+		t.Logf("Response body: %s", w.Body.String())
+
+		// Check response
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", w.Code)
+		}
+
+		// Parse response to verify error structure
+		var response map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &response)
+
+		if success, ok := response["success"].(bool); !ok || success {
+			t.Error("Expected success to be false")
+		}
+
+		if errorInfo, ok := response["error"].(map[string]interface{}); ok {
+			if code, ok := errorInfo["code"].(string); !ok || code != "ValidationError" {
+				t.Errorf("Expected error code ValidationError, got %v", code)
+			}
+		}
+	})
+
+	// Test 2: Not Found Error
+	t.Run("NotFoundError", func(t *testing.T) {
+		// Try to get a book that doesn't exist
+		req, _ := http.NewRequest("GET", "/books/00000000-0000-0000-0000-000000000000", nil)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		// Check response
+		if w.Code != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", w.Code)
+		}
+	})
+
+	// Test 3: Successful Creation
+	t.Run("Success", func(t *testing.T) {
+		// Create valid book
+		reqBody := `{"name": "Test Book", "author": "Test Author", "pages": 250}`
+
+		req, _ := http.NewRequest("POST", "/books", strings.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		// Check response
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		// Parse response to verify success structure
+		var response map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &response)
+
+		if success, ok := response["success"].(bool); !ok || !success {
+			t.Error("Expected success to be true")
+		}
+	})
 }

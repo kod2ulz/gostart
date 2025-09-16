@@ -28,7 +28,7 @@ var _ = Describe("Request Handler", func() {
 		userStore := auth.InMemoryUserStore()
 		sessionService := auth.SessionService(nil, userStore)
 		router = utils.Test.GinRouter(func(e *gin.Engine) {
-			books.setRoutes(e.Group("/books"))
+			books.SetRoutesWithGin(e.Group("/books"))
 		})
 
 		BeforeEach(func(ctx context.Context) {

@@ -75,7 +75,7 @@ var _ = Describe("RequestModal", func() {
 
 			BeforeEach(func() {
 				router = utils.Test.GinRouter(func(e *gin.Engine) {
-					books.setRoutes(e.Group("/books"))
+					books.SetRoutesWithGin(e.Group("/books"))
 				})
 				recorder = httptest.NewRecorder()
 			})

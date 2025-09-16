@@ -33,7 +33,9 @@ import (
 
 // LoadRequestParam loads request parameters from context
 func LoadRequestParam(ctx contracts.RequestContext) (contracts.RequestParam, error) {
-	if loader, ok := ctx.(interface{ LoadRequestParam() (contracts.RequestParam, error) }); ok {
+	if loader, ok := ctx.(interface {
+		LoadRequestParam() (contracts.RequestParam, error)
+	}); ok {
 		return loader.LoadRequestParam()
 	}
 	return nil, fmt.Errorf("failed to load request parameters")
@@ -120,41 +122,22 @@ func RawHandler(handler func(contracts.RequestContext)) func(contracts.RequestCo
 	return handler
 }
 
-// HandleError processes API errors and returns appropriate responses
+// HandleError processes API errors using centralized error handling from errors package
 func HandleError(ctx contracts.RequestContext, err ierrors.Error) {
 	if err == nil {
 		return
 	}
 
-	// Handle validation errors using the errors package
+	// Use centralized error handling from errors package
+	errorCode, errorMessage, httpCode, fields := errors.HandleAPIError(err)
+
+	// Handle validation errors specifically to use ValidationError response
 	if errors.IsValidationError(err) {
-		_, errorMessage, _, fields := errors.HandleValidationError(err)
 		ValidationError(ctx, errorMessage, fields)
 		return
 	}
 
-	// Handle other API errors - try to get error details from response or use defaults
-	var errorCode string = "INTERNAL_ERROR"
-	var errorMessage string = "Internal server error"
-	var httpCode int = http.StatusInternalServerError
-
-	if response := err.Response(); response != nil {
-		// Try to extract error details from response
-		if resp, ok := response.(map[string]any); ok {
-			if code, ok := resp["code"].(string); ok {
-				errorCode = code
-			}
-			if msg, ok := resp["message"].(string); ok {
-				errorMessage = msg
-			}
-		}
-	}
-
-	// Use the error's HTTP status code if available
-	if err.HttpCode() > 0 {
-		httpCode = err.HttpCode()
-	}
-
+	// Use standard error response for other error types
 	ErrorResponse(ctx, errorCode, errorMessage, httpCode)
 }
 
