@@ -4,23 +4,23 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/api/ginadapter"
-	"github.com/kod2ulz/gostart/router"
 )
 
-// GinRouter implements the app.Router interface using Gin
+// GinRouter implements the api.Router interface using Gin
 type GinRouter struct {
 	engine *gin.Engine
 	group  *gin.RouterGroup
 }
 
-// GinRequestContext implements both contracts.RequestContext and app.RequestContext
+// GinRequestContext implements both contracts.RequestContext and api.RequestContext
 type GinRequestContext struct {
 	*ginadapter.GinRequestContext
 }
 
 // NewGinRouter creates a new Gin-based router
-func NewGinRouter(config *router.RouterConfig) (router.Router, error) {
+func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 
@@ -29,7 +29,7 @@ func NewGinRouter(config *router.RouterConfig) (router.Router, error) {
 		engine.Use(gin.Recovery())
 	}
 
-// Apply custom middleware
+	// Apply custom middleware
 	for _, mw := range config.CustomMiddleware {
 		engine.Use(func(c *gin.Context) {
 			ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
@@ -57,43 +57,43 @@ func NewGinRouter(config *router.RouterConfig) (router.Router, error) {
 }
 
 // HTTP Methods
-func (r *GinRouter) GET(path string, handler router.RouterHandlerFunc) router.Router {
+func (r *GinRouter) GET(path string, handler api.HandlerFunc) api.Router {
 	r.currentGroup().GET(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) POST(path string, handler router.RouterHandlerFunc) router.Router {
+func (r *GinRouter) POST(path string, handler api.HandlerFunc) api.Router {
 	r.currentGroup().POST(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) PUT(path string, handler router.RouterHandlerFunc) router.Router {
+func (r *GinRouter) PUT(path string, handler api.HandlerFunc) api.Router {
 	r.currentGroup().PUT(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) DELETE(path string, handler router.RouterHandlerFunc) router.Router {
+func (r *GinRouter) DELETE(path string, handler api.HandlerFunc) api.Router {
 	r.currentGroup().DELETE(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) PATCH(path string, handler router.RouterHandlerFunc) router.Router {
+func (r *GinRouter) PATCH(path string, handler api.HandlerFunc) api.Router {
 	r.currentGroup().PATCH(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) OPTIONS(path string, handler router.RouterHandlerFunc) router.Router {
+func (r *GinRouter) OPTIONS(path string, handler api.HandlerFunc) api.Router {
 	r.currentGroup().OPTIONS(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) HEAD(path string, handler router.RouterHandlerFunc) router.Router {
+func (r *GinRouter) HEAD(path string, handler api.HandlerFunc) api.Router {
 	r.currentGroup().HEAD(path, r.wrapHandler(handler))
 	return r
 }
 
 // Grouping
-func (r *GinRouter) Group(path string, fn func(router.Router)) router.Router {
+func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
 	group := r.engine.Group(path)
 	subRouter := &GinRouter{engine: r.engine, group: group}
 	fn(subRouter)
@@ -101,7 +101,7 @@ func (r *GinRouter) Group(path string, fn func(router.Router)) router.Router {
 }
 
 // Middleware
-func (r *GinRouter) Use(middleware ...router.MiddlewareFunc) router.Router {
+func (r *GinRouter) Use(middleware ...api.MiddlewareFunc) api.Router {
 	for _, mw := range middleware {
 		r.currentGroup().Use(func(c *gin.Context) {
 			ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
@@ -121,18 +121,18 @@ func (r *GinRouter) Use(middleware ...router.MiddlewareFunc) router.Router {
 }
 
 // Static files
-func (r *GinRouter) StaticFile(path, filePath string) router.Router {
+func (r *GinRouter) StaticFile(path, filePath string) api.Router {
 	r.engine.StaticFile(path, filePath)
 	return r
 }
 
-func (r *GinRouter) Static(prefix, root string) router.Router {
+func (r *GinRouter) Static(prefix, root string) api.Router {
 	r.engine.Static(prefix, root)
 	return r
 }
 
 // Raw access
-func (r *GinRouter) Router() any {
+func (r *GinRouter) Underlying() any {
 	return r.engine
 }
 
@@ -149,7 +149,7 @@ func (r *GinRouter) currentGroup() *gin.RouterGroup {
 	return &r.engine.RouterGroup
 }
 
-func (r *GinRouter) wrapHandler(handler router.RouterHandlerFunc) gin.HandlerFunc {
+func (r *GinRouter) wrapHandler(handler api.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
 		handler(ctx)
@@ -169,19 +169,19 @@ func (ctx *GinRequestContext) AbortWithStatus(code int) {
 	ctx.GinContext.AbortWithStatus(code)
 }
 
-func (ctx *GinRequestContext) AbortWithStatusJSON(code int, obj interface{}) {
+func (ctx *GinRequestContext) AbortWithStatusJSON(code int, obj any) {
 	ctx.GinContext.AbortWithStatusJSON(code, obj)
 }
 
-func (ctx *GinRequestContext) JSON(code int, obj interface{}) {
+func (ctx *GinRequestContext) JSON(code int, obj any) {
 	ctx.GinContext.JSON(code, obj)
 }
 
-func (ctx *GinRequestContext) HTML(code int, name string, obj interface{}) {
+func (ctx *GinRequestContext) HTML(code int, name string, obj any) {
 	ctx.GinContext.HTML(code, name, obj)
 }
 
-func (ctx *GinRequestContext) String(code int, format string, values ...interface{}) {
+func (ctx *GinRequestContext) String(code int, format string, values ...any) {
 	ctx.GinContext.String(code, format, values...)
 }
 

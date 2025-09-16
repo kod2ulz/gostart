@@ -11,11 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
-	"github.com/kod2ulz/gostart/frameworks"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/kod2ulz/gostart/router"
 )
 
 var (
@@ -24,7 +23,7 @@ var (
 )
 
 type ap struct {
-	router router.Router
+	router api.Router
 	log    *logr.Logger
 	start  time.Time
 	conf   *conf
@@ -81,11 +80,11 @@ func (a *ap) Ctx() context.Context {
 	return a.ctx
 }
 
-func (a *ap) Router() router.Router {
+func (a *ap) Router() api.Router {
 	return a.router
 }
 
-func (a *ap) R() router.Router {
+func (a *ap) R() api.Router {
 	return a.router
 }
 
@@ -169,7 +168,7 @@ func WithHeartbeatHandlers() AppIniter {
 
 func (a *ap) initAPI(opts ...AppIniter) {
 	// Create router using the new abstraction
-	routerConfig := &router.RouterConfig{
+	routerConfig := &api.RouterConfig{
 		AllowOrigins:     a.conf.Http.AllowOrigins,
 		AllowMethods:     a.conf.Http.AllowMethods,
 		AllowHeaders:     a.conf.Http.AllowHeaders,
@@ -181,7 +180,7 @@ func (a *ap) initAPI(opts ...AppIniter) {
 	}
 
 	var err error
-	a.router, err = frameworks.CreateRouter(routerConfig)
+	a.router, err = api.CreateRouter(routerConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -195,18 +194,18 @@ func (a *ap) initAPI(opts ...AppIniter) {
 	if a.heartbeatHandlers {
 		// Use new router interface with wrapped handlers
 		a.router.GET("/", func(ctx contracts.RequestContext) {
-			// For contracts.RequestContext, we need to use the app.RequestContext wrapper
-			if appCtx, ok := ctx.(RequestContext); ok {
+			// For contracts.RequestContext, we need to use the api.RequestContext wrapper
+			if appCtx, ok := ctx.(api.RequestContext); ok {
 				appCtx.JSON(http.StatusOK, "OK")
 			}
 		})
 		a.router.GET("/ok", func(ctx contracts.RequestContext) {
-			if appCtx, ok := ctx.(RequestContext); ok {
+			if appCtx, ok := ctx.(api.RequestContext); ok {
 				appCtx.JSON(http.StatusOK, "OK")
 			}
 		})
 		a.router.GET("/stats", func(ctx contracts.RequestContext) {
-			if appCtx, ok := ctx.(RequestContext); ok {
+			if appCtx, ok := ctx.(api.RequestContext); ok {
 				appCtx.JSON(http.StatusOK, map[string]interface{}{
 					"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
 					"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),

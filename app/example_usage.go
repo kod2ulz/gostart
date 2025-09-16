@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/kod2ulz/gostart/frameworks/gin"
-	"github.com/kod2ulz/gostart/router"
+	"github.com/kod2ulz/gostart/api/frameworks/gin"
+	"github.com/kod2ulz/gostart/api"
 )
 
 // Example usage of the new architecture
@@ -20,7 +20,7 @@ func ExampleBasicInitialization() {
 // Custom initialization with options
 func ExampleCustomInitialization() {
 	// Initialize Gin with custom router configuration
-	gin.SetupWithOptions(func(config *router.RouterConfig) {
+	gin.SetupWithOptions(func(config *api.RouterConfig) {
 		config.AllowOrigins = []string{"*"}
 		config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE"}
 		config.EnableRecovery = true
@@ -44,8 +44,8 @@ func ExampleFrameworkAgnosticInitialization() {
 
 // With custom middleware
 func ExampleWithMiddleware() {
-	gin.SetupWithOptions(func(config *router.RouterConfig) {
-		config.CustomMiddleware = []router.MiddlewareFunc{
+	gin.SetupWithOptions(func(config *api.RouterConfig) {
+		config.CustomMiddleware = []api.MiddlewareFunc{
 			// Add custom middleware here
 		}
 	})

@@ -1,7 +1,6 @@
-package app
+package api
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/kod2ulz/gostart/contracts"
@@ -10,13 +9,13 @@ import (
 // Router defines a framework-agnostic router interface
 type Router interface {
 	// HTTP Methods
-	GET(path string, handler RouterHandlerFunc) Router
-	POST(path string, handler RouterHandlerFunc) Router
-	PUT(path string, handler RouterHandlerFunc) Router
-	DELETE(path string, handler RouterHandlerFunc) Router
-	PATCH(path string, handler RouterHandlerFunc) Router
-	OPTIONS(path string, handler RouterHandlerFunc) Router
-	HEAD(path string, handler RouterHandlerFunc) Router
+	GET(path string, handler HandlerFunc) Router
+	POST(path string, handler HandlerFunc) Router
+	PUT(path string, handler HandlerFunc) Router
+	DELETE(path string, handler HandlerFunc) Router
+	PATCH(path string, handler HandlerFunc) Router
+	OPTIONS(path string, handler HandlerFunc) Router
+	HEAD(path string, handler HandlerFunc) Router
 
 	// Grouping
 	Group(path string, fn func(Router)) Router
@@ -29,14 +28,14 @@ type Router interface {
 	Static(prefix, root string) Router
 
 	// Raw access to underlying router
-	Router() any
+	Underlying() any
 
 	// Run the server
 	Run(addr string) error
 }
 
 // HandlerFunc represents a framework-agnostic handler function
-type RouterHandlerFunc func(contracts.RequestContext)
+type HandlerFunc func(contracts.RequestContext)
 
 // MiddlewareFunc represents a framework-agnostic middleware function
 type MiddlewareFunc func(contracts.RequestContext) (bool, error)
@@ -49,10 +48,10 @@ type RequestContext interface {
 	Next()
 	Abort()
 	AbortWithStatus(code int)
-	AbortWithStatusJSON(code int, obj interface{})
-	JSON(code int, obj interface{})
-	HTML(code int, name string, obj interface{})
-	String(code int, format string, values ...interface{})
+	AbortWithStatusJSON(code int, obj any)
+	JSON(code int, obj any)
+	HTML(code int, name string, obj any)
+	String(code int, format string, values ...any)
 	Data(code int, contentType string, data []byte)
 	File(filepath string)
 	SetHeader(key, value string)
@@ -62,9 +61,6 @@ type RequestContext interface {
 	Cookie(name string) (string, error)
 	ClientIP() string
 }
-
-// RouterFactory creates a new router instance
-type RouterFactory func(config *RouterConfig) (Router, error)
 
 // RouterConfig holds router configuration
 type RouterConfig struct {
@@ -85,18 +81,5 @@ type RouterConfig struct {
 	StaticPaths map[string]string
 }
 
-// DefaultRouterFactory is the default router factory used by the app
-var DefaultRouterFactory RouterFactory
-
-// SetRouterFactory sets the router factory to use for creating routers
-func SetRouterFactory(factory RouterFactory) {
-	DefaultRouterFactory = factory
-}
-
-// CreateRouter creates a new router using the default factory
-func CreateRouter(config *RouterConfig) (Router, error) {
-	if DefaultRouterFactory == nil {
-		return nil, fmt.Errorf("no router factory set. Call SetRouterFactory() first")
-	}
-	return DefaultRouterFactory(config)
-}
+// RouterFactory creates a new router instance
+type RouterFactory func(config *RouterConfig) (Router, error)
