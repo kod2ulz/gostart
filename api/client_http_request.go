@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/kod2ulz/gostart/collections"
+	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/utils"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 

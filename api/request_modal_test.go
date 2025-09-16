@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/utils"
 )
 
@@ -103,12 +103,12 @@ var _ = Describe("RequestModal", func() {
 				Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())
 				Expect(res).ToNot(BeNil())
 				Expect(res.Error().Message).ToNot(BeEmpty())
-				Expect(res.Error().Code).To(Equal(api.ErrorCodeValidatorError))
+				Expect(res.Error().Code).To(Equal(errors.ErrorCodeValidatorError))
 				Expect(len(res.Error().Fields)).To(Equal(2))
 			})
 		})
 
-		
+
 	})
 
 })

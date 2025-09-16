@@ -6,34 +6,37 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
+	"github.com/kod2ulz/gostart/api/ginadapter"
+	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/ierrors"
 )
 
-type RoutineWithResponseFunc[T any] func(context.Context) (T, Error)
+type RoutineWithResponseFunc[T any] func(context.Context) (T, ierrors.Error)
 
-type RoutineWithListResponseFunc[T any] func(context.Context) ([]T, Error)
+type RoutineWithListResponseFunc[T any] func(context.Context) ([]T, ierrors.Error)
 
 func BasicHandler[T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
 	return serviceHandler(serviceFunc, func(ctx *gin.Context, out T) {
-		ctx.JSON(http.StatusOK, DataResponse(out))
+		ctx.JSON(http.StatusOK, contracts.DataResponse(out))
 	})
 }
 
-func HandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
+func HandlerWithParam[P contracts.RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
 	return genericHandlerWithParam[P](serviceFunc)
 }
 
-func ParamHandlerWithResponse[P RequestParam, T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
+func ParamHandlerWithResponse[P contracts.RequestParam, T any](serviceFunc RoutineWithResponseFunc[T]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, out T) {
 		refs := map[string]any{}
 		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
 			refs, _ = val.(map[string]any)
 		}
-		ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
+		ctx.JSON(http.StatusOK, contracts.DataResponse(out).WithReferences(refs))
 	})
 }
 
-func ParamHandlerWithResponseFinalser[P RequestParam, T any](serviceFunc RoutineWithResponseFunc[T], finaliser func (*gin.Context, T) gin.HandlerFunc) gin.HandlerFunc {
+func ParamHandlerWithResponseFinalser[P contracts.RequestParam, T any](serviceFunc RoutineWithResponseFunc[T], finaliser func (*gin.Context, T) gin.HandlerFunc) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, out T) {
 		refs := map[string]any{}
 		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
@@ -42,12 +45,12 @@ func ParamHandlerWithResponseFinalser[P RequestParam, T any](serviceFunc Routine
 		if finaliser != nil {
 			finaliser(ctx, out)
 		} else {
-			ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
+			ctx.JSON(http.StatusOK, contracts.DataResponse(out).WithReferences(refs))
 		}
 	})
 }
 
-func ParamHandlerWithFileResponse[P RequestParam](serviceFunc RoutineWithResponseFunc[FileResponse]) gin.HandlerFunc {
+func ParamHandlerWithFileResponse[P contracts.RequestParam](serviceFunc RoutineWithResponseFunc[contracts.FileResponse]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, fileRequestHandler[P])
 }
 
@@ -57,20 +60,20 @@ func ParamHandlerWithFileResponse[P RequestParam](serviceFunc RoutineWithRespons
 // 	})
 // }
 
-func ParamHandlerWithListResponse[P RequestParam, T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
+func ParamHandlerWithListResponse[P contracts.RequestParam, T any](serviceFunc RoutineWithListResponseFunc[T]) gin.HandlerFunc {
 	return serviceHandlerWithParam(serviceFunc, func(ctx *gin.Context, param P, res []T) {
-		meta, refs := &Metadata{}, map[string]any{}
+		meta, refs := &contracts.Metadata{}, map[string]any{}
 		if val, ok := ctx.Get(param.MetadataContextKey()); ok {
-			meta, _ = val.(*Metadata)
+			meta, _ = val.(*contracts.Metadata)
 		}
 		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
 			refs, _ = val.(map[string]any)
 		}
-		ctx.JSON(http.StatusOK, ListResponse(res, *meta).WithReferences(refs))
+		ctx.JSON(http.StatusOK, contracts.ListResponse(res, *meta).WithReferences(refs))
 	})
 }
 
-func serviceHandler[T any](serviceFunc func(context.Context) (T, Error), resultHandler func(*gin.Context, T)) gin.HandlerFunc {
+func serviceHandler[T any](serviceFunc func(context.Context) (T, ierrors.Error), resultHandler func(*gin.Context, T)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if out, err := serviceFunc(ctx); err != nil {
 			ctx.JSON(http.StatusInternalServerError, ctx.Error(err))
@@ -80,12 +83,12 @@ func serviceHandler[T any](serviceFunc func(context.Context) (T, Error), resultH
 	}
 }
 
-func serviceHandlerWithParam[P RequestParam, T any](serviceFunc func(context.Context) (T, Error), successHandler func(*gin.Context, P, T)) gin.HandlerFunc {
+func serviceHandlerWithParam[P contracts.RequestParam, T any](serviceFunc func(context.Context) (T, ierrors.Error), successHandler func(*gin.Context, P, T)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var err Error
+		var err ierrors.Error
 		var param P
 		if param, err = loadParamFromRequest[P](ctx); err != nil {
-			ctx.JSON(err.HttpCode(), ErrorResponse[P](err))
+			ctx.JSON(err.HttpCode(), contracts.ErrorResponse[P](err))
 			return
 		}
 		ctx.Set(param.ContextKey(), param)
@@ -97,26 +100,26 @@ func serviceHandlerWithParam[P RequestParam, T any](serviceFunc func(context.Con
 	}
 }
 
-func loadParamFromRequest[P RequestParam](ctx *gin.Context) (param P, err Error) {
+func loadParamFromRequest[P contracts.RequestParam](ctx *gin.Context) (param P, err ierrors.Error) {
 	var e error
-	var p RequestParam
-	if p, e = (*new(P)).RequestLoad(ctx); e != nil {
-		return param, RequestLoadError[P](errors.Wrapf(e, "failed to load %T from request", param))
+	var p contracts.RequestParam
+	if p, e = (*new(P)).RequestLoad(ginadapter.NewRequestContext(ctx)); e != nil {
+		return param, errors.RequestLoadError[P](errors.Wrapf(e, "failed to load %T from request", param))
 	}
 	ctx.Set(p.ContextKey(), p)
-	if e = p.Validate(ctx); e != nil {
-		return param, ValidatorError[P](errors.Wrapf(e, "validation failed for %T", param))
+	if e = p.Validate(ginadapter.NewRequestContext(ctx)); e != nil {
+		return param, errors.ValidatorError[P](errors.Wrapf(e, "validation failed for %T", param))
 	}
 	param = p.(P)
 	return
 }
 
-func genericHandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
+func genericHandlerWithParam[P contracts.RequestParam](serviceFunc gin.HandlerFunc) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var err Error
+		var err ierrors.Error
 		var param P
 		if param, err = loadParamFromRequest[P](ctx); err != nil {
-			ctx.JSON(err.HttpCode(), ErrorResponse[P](err))
+			ctx.JSON(err.HttpCode(), contracts.ErrorResponse[P](err))
 			return
 		}
 		ctx.Set(param.ContextKey(), param)
@@ -124,7 +127,7 @@ func genericHandlerWithParam[P RequestParam](serviceFunc gin.HandlerFunc) gin.Ha
 	}
 }
 
-func fileRequestHandler[P RequestParam](ctx *gin.Context, param P, out FileResponse) {
+func fileRequestHandler[P contracts.RequestParam](ctx *gin.Context, param P, out contracts.FileResponse) {
 	refs := map[string]any{}
 	if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
 		if refs, ok = val.(map[string]any); ok {
@@ -135,8 +138,8 @@ func fileRequestHandler[P RequestParam](ctx *gin.Context, param P, out FileRespo
 			}
 		}
 	}
-	ctx.Header("Content-Type", out.contentType())
-	ctx.Header("Content-Disposition", "attachment; filename="+out.filename(ctx))
+	ctx.Header("Content-Type", out.GetContentType())
+	ctx.Header("Content-Disposition", "attachment; filename="+out.GetFilename(ginadapter.NewRequestContext(ctx)))
 	if len(out.Data) > 0 {
 		ctx.Header("Accept-Length", fmt.Sprint(len(out.Data)))
 	}
@@ -148,16 +151,16 @@ func fileRequestHandler[P RequestParam](ctx *gin.Context, param P, out FileRespo
 
 /*   --  support for request unpacked from context --- */
 
-type RequestConsumerWithResponseFunc[R RequestParam, T any] func(context.Context, R) (T, Error)
+type RequestConsumerWithResponseFunc[R contracts.RequestParam, T any] func(context.Context, R) (T, ierrors.Error)
 
-type RequestConsumerWithListResponseFunc[R RequestParam, T any] func(context.Context, R) ([]T, Error)
+type RequestConsumerWithListResponseFunc[R contracts.RequestParam, T any] func(context.Context, R) ([]T, ierrors.Error)
 
-func requestHandlerWithParam[R RequestParam, T any](serviceFunc func(context.Context, R) (T, Error), onSuccess func(*gin.Context, R, T)) gin.HandlerFunc {
+func requestHandlerWithParam[R contracts.RequestParam, T any](serviceFunc func(context.Context, R) (T, ierrors.Error), onSuccess func(*gin.Context, R, T)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var err Error
+		var err ierrors.Error
 		var param R
 		if param, err = loadParamFromRequest[R](ctx); err != nil {
-			ctx.JSON(err.HttpCode(), ErrorResponse[R](err))
+			ctx.JSON(err.HttpCode(), contracts.ErrorResponse[R](err))
 			return
 		}
 		ctx.Set(param.ContextKey(), param)
@@ -169,17 +172,17 @@ func requestHandlerWithParam[R RequestParam, T any](serviceFunc func(context.Con
 	}
 }
 
-func RequestHandlerWithResponse[R RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T]) gin.HandlerFunc {
+func RequestHandlerWithResponse[R contracts.RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T]) gin.HandlerFunc {
 	return requestHandlerWithParam(serviceFunc, func(ctx *gin.Context, param R, out T) {
 		refs := map[string]any{}
 		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
 			refs, _ = val.(map[string]any)
 		}
-		ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
+		ctx.JSON(http.StatusOK, contracts.DataResponse(out).WithReferences(refs))
 	})
 }
 
-func RequestHandlerWithResponseFinalizer[R RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T], finaliser func (*gin.Context, T)) gin.HandlerFunc {
+func RequestHandlerWithResponseFinalizer[R contracts.RequestParam, T any](serviceFunc RequestConsumerWithResponseFunc[R, T], finaliser func (*gin.Context, T)) gin.HandlerFunc {
 	return requestHandlerWithParam(serviceFunc, func(ctx *gin.Context, param R, out T) {
 		refs := map[string]any{}
 		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
@@ -188,24 +191,24 @@ func RequestHandlerWithResponseFinalizer[R RequestParam, T any](serviceFunc Requ
 		if finaliser != nil {
 			finaliser(ctx, out)
 		} else {
-			ctx.JSON(http.StatusOK, DataResponse(out).WithReferences(refs))
+			ctx.JSON(http.StatusOK, contracts.DataResponse(out).WithReferences(refs))
 		}
 	})
 }
 
-func RequestHandlerWithFileResponse[R RequestParam](serviceFunc RequestConsumerWithResponseFunc[R, FileResponse]) gin.HandlerFunc {
+func RequestHandlerWithFileResponse[R contracts.RequestParam](serviceFunc RequestConsumerWithResponseFunc[R, contracts.FileResponse]) gin.HandlerFunc {
 	return requestHandlerWithParam(serviceFunc, fileRequestHandler[R])
 }
 
-func RequestHandlerWithListResponse[R RequestParam, T any](serviceFunc RequestConsumerWithListResponseFunc[R, T]) gin.HandlerFunc {
+func RequestHandlerWithListResponse[R contracts.RequestParam, T any](serviceFunc RequestConsumerWithListResponseFunc[R, T]) gin.HandlerFunc {
 	return requestHandlerWithParam(serviceFunc, func(ctx *gin.Context, param R, res []T) {
-		meta, refs := &Metadata{}, map[string]any{}
+		meta, refs := &contracts.Metadata{}, map[string]any{}
 		if val, ok := ctx.Get(param.MetadataContextKey()); ok {
-			meta, _ = val.(*Metadata)
+			meta, _ = val.(*contracts.Metadata)
 		}
 		if val, ok := ctx.Get(param.ReferencesContextKey()); ok {
 			refs, _ = val.(map[string]any)
 		}
-		ctx.JSON(http.StatusOK, ListResponse(res, *meta).WithReferences(refs))
+		ctx.JSON(http.StatusOK, contracts.ListResponse(res, *meta).WithReferences(refs))
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kod2ulz/gostart/auth"
 	"github.com/kod2ulz/gostart/logr"
 
 	"github.com/gin-gonic/gin"
@@ -43,7 +44,7 @@ func JSONLogMiddleware(log *logr.Logger) gin.HandlerFunc {
 		}
 
 		if user, ok := c.Get("auth.User"); ok {
-			args = append(args, "user_id", user.(User).ID())
+			args = append(args, "user_id", user.(auth.User).ID())
 		}
 
 		entry := log.With(args...)

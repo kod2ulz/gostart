@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/pkg/errors"
+	"github.com/kod2ulz/gostart/errors"
 )
 
 type ResponseHandler[T any] func(resp *http.Response) (T, error)

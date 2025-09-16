@@ -7,7 +7,7 @@ import (
 	json "github.com/json-iterator/go"
 	colz "github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/pkg/errors"
+	"github.com/kod2ulz/gostart/errors"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

@@ -1,13 +1,15 @@
-package api
+package errors
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/kod2ulz/gostart/collections"
+	"github.com/kod2ulz/gostart/ierrors"
 	"github.com/kod2ulz/gostart/object"
-	"github.com/kod2ulz/gostart/utils"
 )
 
 var (
@@ -23,27 +25,15 @@ var (
 	ErrorCodeInvalidOperation        string = "InvalidOperation"
 )
 
-type Error interface {
-	error
-	HttpCode() int
-	WithErrorCode(code string) (out Error)
-	WithHttpStatusCode(code int) (out Error)
-	WithErrorCodeAndHttpStatusCode(errorCode string, statusCode int) (out Error)
-	WithMessage(message string, opts ...any) (out Error)
-	WithError(err error) (out Error)
-	WithCause(err Error) (out Error)
-	Response() interface{}
-}
-
 type ErrorModel[T any] struct {
 	Type    string            `json:"type"`
 	Message string            `json:"message"`
 	Code    string            `json:"code"`
 	Http    int               `json:"status"`
-	Param   RequestParam      `json:"params,omitempty"`
+	Param   any      `json:"params,omitempty"`
 	Errors  []string          `json:"data,omitempty"`
 	Fields  map[string]string `json:"fields,omitempty"`
-	Cause   Error             `json:"cause,omitempty"`
+	Cause   ierrors.Error             `json:"cause,omitempty"`
 }
 
 func (e *ErrorModel[T]) HttpCode() int {
@@ -54,26 +44,26 @@ func (e *ErrorModel[T]) Error() string {
 	return e.Message
 }
 
-func (e *ErrorModel[T]) WithErrorCode(errorCode string) (out Error) {
+func (e *ErrorModel[T]) WithErrorCode(errorCode string) (out ierrors.Error) {
 	e.Code = errorCode
 	return e
 }
 
-func (e *ErrorModel[T]) WithHttpStatusCode(statusCode int) (out Error) {
+func (e *ErrorModel[T]) WithHttpStatusCode(statusCode int) (out ierrors.Error) {
 	e.Http = statusCode
 	return e
 }
 
-func (e *ErrorModel[T]) WithErrorCodeAndHttpStatusCode(errorCode string, statusCode int) (out Error) {
+func (e *ErrorModel[T]) WithErrorCodeAndHttpStatusCode(errorCode string, statusCode int) (out ierrors.Error) {
 	return e.WithErrorCode(errorCode).WithHttpStatusCode(statusCode)
 }
 
-func (e *ErrorModel[T]) WithMessage(message string, opts ...any) (out Error) {
+func (e *ErrorModel[T]) WithMessage(message string, opts ...any) (out ierrors.Error) {
 	e.Message = fmt.Sprintf(message, opts...)
 	return e
 }
 
-func (e *ErrorModel[T]) WithError(err error) (out Error) {
+func (e *ErrorModel[T]) WithError(err error) (out ierrors.Error) {
 	if len(e.Errors) == 0 {
 		e.Errors = []string{}
 	}
@@ -81,13 +71,13 @@ func (e *ErrorModel[T]) WithError(err error) (out Error) {
 	return e
 }
 
-func (e *ErrorModel[T]) WithCause(err Error) (out Error) {
+func (e *ErrorModel[T]) WithCause(err ierrors.Error) (out ierrors.Error) {
 	e.Cause = err
 	return e
 }
 
 func (e *ErrorModel[T]) Response() (out interface{}) {
-	return ErrorResponse[T](e)
+	return nil
 }
 
 func _initError[T any](httpCode int, statusCode string, err error) (out ErrorModel[T]) {
@@ -113,21 +103,21 @@ func _initError[T any](httpCode int, statusCode string, err error) (out ErrorMod
 	return
 }
 
-func ServerError(err error) (out Error) {
+func ServerError(err error) (out ierrors.Error) {
 	return GeneralError[any](err)
 }
 
-func ServiceError(err error) (out Error) {
-	return GeneralError[User](err).
+func ServiceError(err error) (out ierrors.Error) {
+	return GeneralError[any](err).
 		WithErrorCodeAndHttpStatusCode(ErrorCodeServiceError, http.StatusUnauthorized)
 }
 
-func ServiceErrorUnauthorised(err error) (out Error) {
-	return GeneralError[User](err).
+func ServiceErrorUnauthorised(err error) (out ierrors.Error) {
+	return GeneralError[any](err).
 		WithErrorCodeAndHttpStatusCode(ErrorCodeUnauthorized, http.StatusUnauthorized)
 }
 
-func GeneralError[T any](err error) (out Error) {
+func GeneralError[T any](err error) (out ierrors.Error) {
 	er := _initError[T](http.StatusInternalServerError, ErrorCodeServerError, err)
 	if err == nil || !strings.Contains(err.Error(), ". ") {
 		return &er
@@ -138,7 +128,7 @@ func GeneralError[T any](err error) (out Error) {
 	return &er
 }
 
-func NotFoundError[T any, P RequestParam](param P) (out Error) {
+func NotFoundError[T any, P any](param P) (out ierrors.Error) {
 	er := _initError[T](http.StatusNotFound, ErrorCodeNotFoundError, nil)
 	er.Param = param
 	if er.Message == "" {
@@ -147,11 +137,11 @@ func NotFoundError[T any, P RequestParam](param P) (out Error) {
 	return &er
 }
 
-func RequestLoadError[T any](err error) (out Error) {
+func RequestLoadError[T any](err error) (out ierrors.Error) {
 	return GeneralError[T](err).WithErrorCodeAndHttpStatusCode(ErrorCodeValidatorError, http.StatusBadRequest)
 }
 
-func ValidatorError[T any](err error) (out Error) {
+func ValidatorError[T any](err error) (out ierrors.Error) {
 	er := _initError[T](http.StatusBadRequest, ErrorCodeValidatorError, err)
 	if err == nil || !strings.Contains(err.Error(), "Key:") {
 		return &er
@@ -163,10 +153,10 @@ func ValidatorError[T any](err error) (out Error) {
 	er.Errors, er.Fields = make([]string, 0), map[string]string{}
 	for _, msg := range errs {
 		if !strings.Contains(msg, "Error:") {
-			er.Errors = append(er.Errors, strings.Trim(msg, "\n :"))
+			er.Errors = append(er.Errors, strings.Trim(msg, "\n : "))
 		} else {
 			fv := strings.Split(msg, " Error:")
-			er.Fields[strings.Trim(fv[0], " '")] = strings.Trim(fv[1], " \n")
+			er.Fields[strings.Trim(fv[0], " ' ")] = strings.Trim(fv[1], " \n ")
 		}
 	}
 	if len(er.Errors) == 1 {
@@ -176,16 +166,28 @@ func ValidatorError[T any](err error) (out Error) {
 	return &er
 }
 
-func SQLError[T any](err error) (out Error) {
+func SQLError[T any](err error) (out ierrors.Error) {
 	return GeneralError[T](err).WithErrorCode(ErrorCodeSQLError)
 }
 
-func SqlQueryError[P RequestParam, T any](param P, out T, err error) (T, Error) {
+func SqlQueryError[P any, T any](param P, out T, err error) (T, ierrors.Error) {
 	if err != nil {
-		if utils.Error.SqlNoRows(err) {
+		if SqlNoRows(err) {
 			return out, NotFoundError[T](param)
 		}
 		return out, SQLError[T](err)
 	}
 	return out, nil
+}
+
+func Wrapf(err error, format string, args ...interface{}) ierrors.Error {
+	return GeneralError[any](fmt.Errorf(format, args...)).WithCause(GeneralError[any](err))
+}
+
+func Errorf(format string, args ...interface{}) ierrors.Error {
+	return GeneralError[any](fmt.Errorf(format, args...))
+}
+
+func SqlNoRows(err error) bool {
+	return err != nil && errors.Is(err, sql.ErrNoRows) || strings.HasSuffix(err.Error(), "no rows in result set")
 }

@@ -9,9 +9,10 @@ import (
 	"time"
 
 	json "github.com/json-iterator/go"
-	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/ierrors"
 	"github.com/kod2ulz/gostart/collections"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -97,24 +98,24 @@ func (c *client[T]) Params(params map[string][]string) *client[T] {
 	return c
 }
 
-func (c *client[T]) Get(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Get(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodGet, path)
 }
 
-func (c *client[T]) Post(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Post(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodPost, path)
 }
 
-func (c *client[T]) Put(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Put(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodPut, path)
 }
 
-func (c *client[T]) Delete(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Delete(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodDelete, path)
 }
 
-func (c *client[T]) Request(ctx context.Context, method, path string) (out api.Response[T]) {
-	var err api.Error
+func (c *client[T]) Request(ctx context.Context, method, path string) (out contracts.Response[T]) {
+	var err ierrors.Error
 	var requestErr, responseErr error
 	var request *http.Request
 	var response *http.Response
@@ -122,15 +123,15 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 	_url, parseErr := url.Parse(c.url(path))
 	defer c.logOutcome(request, response, err)
 	if parseErr != nil {
-		err = api.RequestLoadError[T](parseErr).WithMessage("failed to parse url")
-		return api.ErrorResponse[T](err)
+		err = errors.RequestLoadError[T](parseErr).WithMessage("failed to parse url")
+		return contracts.ErrorResponse[T](err)
 	}
 	c.setOverrides(ctx)
 	setUrlQueryParams(_url, c.params)
 	request, requestErr = newHttpRequest(_url, method, c.body)
 	if requestErr != nil {
-		err = api.RequestLoadError[T](parseErr).WithMessage("failed to create http request")
-		return api.ErrorResponse[T](err)
+		err = errors.RequestLoadError[T](parseErr).WithMessage("failed to create http request")
+		return contracts.ErrorResponse[T](err)
 	}
 	c.headers.Set(request)
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
@@ -138,8 +139,8 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 	var httpClient http.Client = *http.DefaultClient
 	response, responseErr = httpClient.Do(request.WithContext(reqCtx))
 	if responseErr != nil {
-		err = api.ServerError(errors.Wrap(responseErr, "request failed"))
-		return api.ErrorResponse[T](err)
+		err = errors.ServerError(errors.Wrapf(responseErr, "request failed"))
+		return contracts.ErrorResponse[T](err)
 	}
 	defer response.Body.Close()
 	var outExpected bool = c.out != nil
@@ -171,7 +172,7 @@ func (c *client[T]) setOverrides(ctx context.Context) {
 	c.MergeHeaders(h)
 }
 
-func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Error) {
+func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err ierrors.Error) {
 	fields := logrus.Fields{
 		"success": false,
 		"latency": time.Since(c.start).Milliseconds(),
@@ -182,8 +183,8 @@ func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Er
 		fields["url"] = req.URL.String()
 	}
 
-	if !c.headers.Empty() && c.headers.HasKey(api.RequestID) {
-		fields["request_id"] = c.headers[api.RequestID]
+	if !c.headers.Empty() && c.headers.HasKey("X-Request-ID") {
+		fields["request_id"] = c.headers["X-Request-ID"]
 	}
 	if !c.params.Empty() {
 		fields["params"] = c.params
@@ -192,37 +193,38 @@ func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Er
 	if res != nil {
 		fields["success"] = res.StatusCode < 400
 		fields["response"] = logrus.Fields{
-			"id":   res.Header.Get(api.RequestID),
+			"id":   res.Header.Get("X-Request-ID"),
 			"code": res.StatusCode,
 			"size": res.ContentLength,
 		}
 	}
 	if err == nil {
 		c.log.WithFields(fields).Info()
-	} else if er, ok := err.(*api.ErrorModel[T]); ok {
-		fields["httpCode"] = er.Http
-		c.log.WithFields(fields).WithError(err).Error(er.Code)
+	} else if err != nil {
+		fields["httpCode"] = err.HttpCode()
+		c.log.WithFields(fields).WithError(err).Error(err.Error())
 	}
 }
 
-func (c *client[T]) getResponse(res *http.Response) (out api.Response[T]) {
+func (c *client[T]) getResponse(res *http.Response) (out contracts.Response[T]) {
 	if res.ContentLength == 0 {
 		out = out.WithCode(res.StatusCode)
 		return
 	}
 	data, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
-		out = api.ErrorResponse[T](api.GeneralError[T](errors.Wrap(readErr, "failed to read json body into []byte")).WithErrorCode(api.ErrorCodeResponseProcessingError))
+		err := errors.GeneralError[T](errors.Wrapf(readErr, "failed to read json body into []byte")).WithErrorCode(errors.ErrorCodeResponseProcessingError)
+		out = contracts.ErrorResponse[T](err)
 		out = out.WithCode(res.StatusCode)
 		return
 	}
 
 	// A temporary struct to help unmarshal the error field into a concrete type
 	type tempResponse struct {
-		Success bool               `json:"success"`
-		Error   *api.ErrorModel[T] `json:"error"`
-		Data    interface{}        `json:"data"`
-		Meta    *api.Metadata      `json:"meta"`
+		Success bool                 `json:"success"`
+		Error   *errors.ErrorModel[T] `json:"error"`
+		Data    interface{}          `json:"data"`
+		Meta    *contracts.Metadata  `json:"meta"`
 	}
 
 	var temp tempResponse
@@ -230,9 +232,10 @@ func (c *client[T]) getResponse(res *http.Response) (out api.Response[T]) {
 		// If unmarshalling into the temp struct fails, it might be a raw data response
 		var t T
 		if unmarshalErr2 := json.Unmarshal(data, &t); unmarshalErr2 == nil {
-			out = api.DataResponse(t)
+			out = contracts.DataResponse(t)
 		} else {
-			out = api.ErrorResponse[T](api.GeneralError[T](errors.New("failed to parse response body")))
+			err := errors.GeneralError[T](errors.Errorf("failed to parse response body"))
+			out = contracts.ErrorResponse[T](err)
 		}
 	} else {
 		out.Success = temp.Success

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/pkg/errors"
+	"github.com/kod2ulz/gostart/errors"
 )
 
 func LogError(log *logr.Logger, err error, message string, args ...interface{}) {

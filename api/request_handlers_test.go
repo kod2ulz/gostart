@@ -11,7 +11,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kod2ulz/gostart/api"
-	"github.com/kod2ulz/gostart/services/auth"
+	"github.com/kod2ulz/gostart/auth"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/utils"
 )
 
@@ -27,7 +28,7 @@ var _ = Describe("Request Handler", func() {
 		userStore := auth.InMemoryUserStore()
 		sessionService := auth.SessionService(nil, userStore)
 		router = utils.Test.GinRouter(func(e *gin.Engine) {
-			books.setRoutes(e.Group("/books"), sessionService.Auther())
+			books.setRoutes(e.Group("/books"))
 		})
 
 		BeforeEach(func(ctx context.Context) {
@@ -41,7 +42,7 @@ var _ = Describe("Request Handler", func() {
 		AfterEach(func() { books.clear() })
 
 		It("can load post data from request using custom defined request loader", func() {
-			var res api.Response[Book]
+			var res contracts.Response[Book]
 			payload := utils.Test.JsonDataOf("name", "Book 5", "author", "CreateBot2", "pages", 600)
 			router.ServeHTTP(recorder, utils.Test.Request(http.MethodPost, "/books", payload, headers))
 			Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -55,7 +56,7 @@ var _ = Describe("Request Handler", func() {
 		})
 
 		It("can read back list data formatted as Response[T]", func() {
-			var res api.Response[[]Book]
+			var res contracts.Response[[]Book]
 			_, createErr := books.seed(45, &user)
 			Expect(createErr).To(BeNil())
 			router.ServeHTTP(recorder, utils.Test.Request(http.MethodGet, "/books", nil, headers))
@@ -74,7 +75,7 @@ var _ = Describe("Request Handler", func() {
 			newBooks, _ := books.seed(1, &user)
 			Expect(newBooks).ToNot(BeEmpty())
 			bookID, createdBook := newBooks[0].ID.String(), *newBooks[0]
-			var res api.Response[Book] //= api.EmptyResponse[Book]()
+			var res contracts.Response[Book] //= api.EmptyResponse[Book]()
 			router.ServeHTTP(recorder, utils.Test.Request(http.MethodGet, "/books/"+bookID, []byte{}, headers))
 			Expect(recorder.Code).To(Equal(http.StatusOK))
 			Expect(json.NewDecoder(recorder.Body).Decode(&res)).To(BeNil())

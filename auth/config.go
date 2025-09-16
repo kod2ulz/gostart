@@ -7,6 +7,8 @@ import (
 	"github.com/kod2ulz/gostart/config"
 )
 
+const cognitoDriver = "cognito"
+
 type Config struct {
 	Driver             string
 	UserPool           string

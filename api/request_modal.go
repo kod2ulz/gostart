@@ -6,32 +6,40 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kod2ulz/gostart/api/ginadapter"
 	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/utils"
-	"github.com/pkg/errors"
 )
 
 type _t struct{ RequestModal[_t] }
 
-var _ RequestParam = RequestModal[_t]{}
+var _ contracts.RequestParam = contracts.RequestModal[_t]{}
 
-type RequestModal[T RequestParam] struct{}
+type RequestModal[T contracts.RequestParam] struct{}
 
-func (r RequestModal[T]) Validate(ctx context.Context) error {
-	return utils.Validate.Struct(ctx.Value(r.ContextKey()))
+func (r RequestModal[T]) Validate(ctx contracts.RequestContext) error {
+	if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
+		return utils.Validate.Struct(ginCtx.Value(r.ContextKey()))
+	}
+	return fmt.Errorf("cannot validate: invalid context type")
 }
 
-func (r RequestModal[T]) RequestLoad(ctx context.Context) (param RequestParam, err error) {
+func (r RequestModal[T]) RequestLoad(ctx contracts.RequestContext) (param contracts.RequestParam, err error) {
 	t := new(T)
 	if err = r.LoadFromJsonBody(ctx, t); err == nil {
-		ctx.(*gin.Context).Set((*t).ContextKey(), t)
+		// Note: This is a temporary workaround - ideally we should use RequestContext interface
+		if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
+			ginCtx.Set((*t).ContextKey(), t)
+		}
 		return *t, err
 	}
-	return nil, err
+	return nil, errors.Wrapf(err, "failed to load request %T", t)
 }
 
-func (r RequestModal[T]) LoadFromJsonBody(ctx context.Context, out interface{}) (err error) {
-	if err = ctx.(*gin.Context).ShouldBindJSON(out); err != nil {
+func (r RequestModal[T]) LoadFromJsonBody(ctx contracts.RequestContext, out interface{}) (err error) {
+	if err = ctx.ShouldBindJSON(out); err != nil {
 		return errors.Wrapf(err, "failed to load json body into %T from request", out)
 	}
 	return
@@ -50,42 +58,54 @@ func (r RequestModal[T]) ReferencesContextKey() string {
 	return fmt.Sprintf("ref.%s", r.ContextKey())
 }
 
-func (r RequestModal[T]) SetResponseMetadata(ctx context.Context, meta *Metadata) (err error) {
-	ctx.(*gin.Context).Set(r.MetadataContextKey(), meta)
+func (r RequestModal[T]) SetResponseMetadata(ctx contracts.RequestContext, meta *contracts.Metadata) (err error) {
+	if ginCtx, ok := ctx.(*ginadapter.GinRequestContext); ok {
+		ginCtx.Set(r.MetadataContextKey(), meta)
+	}
 	return
 }
 
-func (r RequestModal[T]) SetResponseReference(ctx context.Context, key string, value any) (err error) {
+func (r RequestModal[T]) SetResponseReference(ctx contracts.RequestContext, key string, value any) (err error) {
 	var ref map[string]any
 	if value == nil {
 		return
-	} else if val := ctx.Value(r.ReferencesContextKey()); val != nil {
+	}
+
+	// Get gin context to store values
+	var ginCtx *gin.Context
+	if gc, ok := ctx.(*ginadapter.GinRequestContext); ok {
+		ginCtx = gc.GinContext
+	} else {
+		return
+	}
+
+	if val := ginCtx.Value(r.ReferencesContextKey()); val != nil {
 		ref = val.(map[string]any)
 	} else {
 		ref = make(map[string]any)
 	}
 	ref[key] = value
-	ctx.(*gin.Context).Set(r.ReferencesContextKey(), ref)
+	ginCtx.Set(r.ReferencesContextKey(), ref)
 	return
 }
 
-func (p RequestModal[T]) ContextLoad(ctx context.Context) (out RequestParam, err error) {
+func (p RequestModal[T]) ContextLoad(ctx context.Context) (out contracts.RequestParam, err error) {
 	val := ctx.Value(p.ContextKey())
 	if val == nil {
 		return out, errors.Errorf("value of %T with key %s was %v in context", p, p.ContextKey(), val)
 	}
-	return val.(RequestParam), nil
+	return val.(contracts.RequestParam), nil
 }
 
-func (p RequestModal[T]) LoadFromContext(ctx context.Context, out RequestParam) (err error) {
-	var param RequestParam
+func (p RequestModal[T]) LoadFromContext(ctx context.Context, out contracts.RequestParam) (err error) {
+	var param contracts.RequestParam
 	if out == nil {
-		return errors.Errorf("out is nil")
+		return fmt.Errorf("out is nil")
 	} else if param, err = (*new(T)).ContextLoad(ctx); err != nil {
 		return errors.Wrapf(err, "Failed to load %T from context", out)
 	} else if param == nil {
-		if param = ctx.Value(p.ContextKey()).(RequestParam); param == nil {
-			return errors.Errorf("Got %v when loading %T from context", out, out)
+		if param = ctx.Value(p.ContextKey()).(contracts.RequestParam); param == nil {
+			return fmt.Errorf("Got %v when loading %T from context", out, out)
 		}
 	}
 	utils.StructCopy(param, out)
@@ -94,13 +114,13 @@ func (p RequestModal[T]) LoadFromContext(ctx context.Context, out RequestParam) 
 
 func (p RequestModal[T]) FromContext(ctx context.Context, out *T) (err error) {
 	if out == nil {
-		return errors.Errorf("out is nil")
+		return fmt.Errorf("out is nil")
 	} else if val := ctx.Value(p.ContextKey()); val == nil {
-		return errors.Errorf("value of %T with key %s was %v in context", *out, p.ContextKey(), val)
+		return fmt.Errorf("value of %T with key %s was %v in context", *out, p.ContextKey(), val)
 	} else if param, ok := val.(T); ok {
 		*out = param
 	} else {
-		return errors.Errorf("failed to cast %T to %T ", val, *out)
+		return fmt.Errorf("failed to cast %T to %T ", val, *out)
 	}
 	return
 }

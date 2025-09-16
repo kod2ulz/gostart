@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/pkg/errors"
+	"github.com/kod2ulz/gostart/errors"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

@@ -1,13 +1,17 @@
 package api
 
-import "context"
+import (
+	"context"
+
+	"github.com/kod2ulz/gostart/ierrors"
+)
 
 type SessionService[IdentityResponse, TokenResponse any] interface {
-	Verify(context.Context) (IdentityResponse, Error)
-	Login(context.Context) (TokenResponse, Error)
-	Refresh(context.Context) (TokenResponse, Error)
+	Verify(context.Context) (IdentityResponse, ierrors.Error)
+	Login(context.Context) (TokenResponse, ierrors.Error)
+	Refresh(context.Context) (TokenResponse, ierrors.Error)
 }
 
 type RegistrationService[IdentityResponse any] interface {
-	Signup(context.Context) (IdentityResponse, Error)
+	Signup(context.Context) (IdentityResponse, ierrors.Error)
 }
