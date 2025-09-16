@@ -184,3 +184,49 @@ func (r Response[T]) ParseDataTo(target interface{}) error {
 	}
 	return json.Unmarshal(data, target)
 }
+
+// ResponseContract provides methods for setting response metadata and references
+type ResponseContract interface {
+	// SetResponseMetadata stores metadata in context for response generation
+	SetResponseMetadata(ctx RequestContext, meta *Metadata) error
+
+	// SetResponseReference stores a reference in context for response generation
+	SetResponseReference(ctx RequestContext, key string, value any) error
+}
+
+// ResponseModal provides default implementation for ResponseContract
+type ResponseModal struct{}
+
+// Ensure ResponseModal implements ResponseContract
+var _ ResponseContract = ResponseModal{}
+
+// SetResponseMetadata stores metadata in context
+func (r ResponseModal) SetResponseMetadata(ctx RequestContext, meta *Metadata) error {
+	if impl, ok := ctx.(*contextImpl); ok {
+		impl.Set("response_metadata", meta)
+	}
+	return nil
+}
+
+// SetResponseReference stores a reference in context
+func (r ResponseModal) SetResponseReference(ctx RequestContext, key string, value any) error {
+	var refs map[string]any
+	if value == nil {
+		return nil
+	}
+
+	if impl, ok := ctx.(*contextImpl); ok {
+		if val := impl.Value("response_references"); val != nil {
+			if existingRefs, ok := val.(map[string]any); ok {
+				refs = existingRefs
+			} else {
+				refs = make(map[string]any)
+			}
+		} else {
+			refs = make(map[string]any)
+		}
+		refs[key] = value
+		impl.Set("response_references", refs)
+	}
+	return nil
+}

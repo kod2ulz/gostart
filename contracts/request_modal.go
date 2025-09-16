@@ -9,7 +9,11 @@ import (
 	"github.com/kod2ulz/gostart/utils"
 )
 
-// RequestModal provides default implementation for RequestParam interface
+// RequestModal provides a minimal, framework-agnostic default implementation for RequestParam interface.
+// It provides basic functionality for request parameter loading and validation using reflection and struct tags.
+// This is intended as a base implementation that can be extended by framework-specific implementations.
+//
+// Use this when you need a basic RequestParam implementation without framework-specific features.
 type RequestModal[T RequestParam] struct{}
 
 // Ensure RequestModal implements RequestParam
@@ -49,42 +53,6 @@ func (r RequestModal[T]) ContextKey() string {
 	return fmt.Sprintf("%T", *new(T))
 }
 
-// MetadataContextKey returns the metadata context key
-func (r RequestModal[T]) MetadataContextKey() string {
-	return fmt.Sprintf("meta.%s", r.ContextKey())
-}
-
-// ReferencesContextKey returns the references context key
-func (r RequestModal[T]) ReferencesContextKey() string {
-	return fmt.Sprintf("ref.%s", r.ContextKey())
-}
-
-// SetResponseMetadata stores metadata in context
-func (r RequestModal[T]) SetResponseMetadata(ctx RequestContext, meta *Metadata) error {
-	if impl, ok := ctx.(*contextImpl); ok {
-		impl.Set(r.MetadataContextKey(), meta)
-	}
-	return nil
-}
-
-// SetResponseReference stores a reference in context
-func (r RequestModal[T]) SetResponseReference(ctx RequestContext, key string, value any) error {
-	var refs map[string]any
-	if value == nil {
-		return nil
-	}
-
-	if impl, ok := ctx.(*contextImpl); ok {
-		if val := impl.Value(r.ReferencesContextKey()); val != nil {
-			refs = val.(map[string]any)
-		} else {
-			refs = make(map[string]any)
-		}
-		refs[key] = value
-		impl.Set(r.ReferencesContextKey(), refs)
-	}
-	return nil
-}
 
 // ContextLoad retrieves parameter from standard Go context
 func (r RequestModal[T]) ContextLoad(ctx context.Context) (RequestParam, error) {

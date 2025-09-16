@@ -5,18 +5,31 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/utils"
 )
 
+// RequestModal provides a comprehensive, framework-enhanced implementation for RequestParam interface.
+// It extends contracts.RequestModal with framework-specific features and response handling capabilities.
+// This is the recommended implementation for most use cases as it provides both request processing
+// and response metadata handling in a single, convenient package.
+//
+// Features:
+// - Framework-specific request loading (JSON body, query params, path params, headers)
+// - Enhanced validation with context-aware error handling
+// - Response metadata and reference management
+// - Gin-specific optimizations and utilities
+//
+// Use this when building API handlers that need full request/response lifecycle support.
 type _t struct{ RequestModal[_t] }
 
-var _ contracts.RequestParam = contracts.RequestModal[_t]{}
+var _ contracts.RequestParam = RequestModal[_t]{}
 
-type RequestModal[T contracts.RequestParam] struct{}
+type RequestModal[T contracts.RequestParam] struct {
+	contracts.RequestModal[T]
+}
 
 func (r RequestModal[T]) Validate(ctx contracts.RequestContext) error {
 	if ctxSetter, ok := ctx.(interface{ Value(interface{}) interface{} }); ok {
@@ -49,44 +62,7 @@ func (r RequestModal[T]) ContextKey() string {
 	return fmt.Sprintf("%T", t)
 }
 
-func (r RequestModal[T]) MetadataContextKey() string {
-	return fmt.Sprintf("meta.%s", r.ContextKey())
-}
 
-func (r RequestModal[T]) ReferencesContextKey() string {
-	return fmt.Sprintf("ref.%s", r.ContextKey())
-}
-
-func (r RequestModal[T]) SetResponseMetadata(ctx contracts.RequestContext, meta *contracts.Metadata) (err error) {
-	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
-		ctxSetter.Set(r.MetadataContextKey(), meta)
-	}
-	return
-}
-
-func (r RequestModal[T]) SetResponseReference(ctx contracts.RequestContext, key string, value any) (err error) {
-	var ref map[string]any
-	if value == nil {
-		return
-	}
-
-	// Get gin context to store values
-	var ginCtx *gin.Context
-	if gc, ok := ctx.(interface{ GinContext() *gin.Context }); ok {
-		ginCtx = gc.GinContext()
-	} else {
-		return
-	}
-
-	if val := ginCtx.Value(r.ReferencesContextKey()); val != nil {
-		ref = val.(map[string]any)
-	} else {
-		ref = make(map[string]any)
-	}
-	ref[key] = value
-	ginCtx.Set(r.ReferencesContextKey(), ref)
-	return
-}
 
 func (p RequestModal[T]) ContextLoad(ctx context.Context) (out contracts.RequestParam, err error) {
 	val := ctx.Value(p.ContextKey())
@@ -128,68 +104,58 @@ func (p RequestModal[T]) InContext(ctx context.Context, in T) context.Context {
 	return context.WithValue(ctx, in.ContextKey(), in)
 }
 
-func (p RequestModal[T]) Query(ctx context.Context, name string, _default ...string) (out config.Value) {
-	if v := ctx.(*gin.Context).Query(name); v != "" {
-		return config.Value(v)
+func (p RequestModal[T]) Query(ctx contracts.RequestContext, name string, _default ...string) (out config.Value) {
+	if v := ctx.Query(name); v.Valid() {
+		return config.Value(v.String())
 	} else if len(_default) > 0 {
 		return config.Value(_default[0])
 	}
-	return
+	return ""
 }
 
-func (p RequestModal[T]) Path(ctx context.Context, name string, _default ...string) (out config.Value) {
-	if v := ctx.(*gin.Context).Param(name); v != "" {
-		return config.Value(v)
+func (p RequestModal[T]) Path(ctx contracts.RequestContext, name string, _default ...string) (out config.Value) {
+	if v := ctx.Param(name); v.Valid() {
+		return config.Value(v.String())
 	} else if len(_default) > 0 {
 		return config.Value(_default[0])
 	}
-	return
+	return ""
 }
 
 func (p RequestModal[T]) Debug(o any) {
 	fmt.Printf("%T.debug(): %+v\n", p, o)
 }
 
-func (p RequestModal[T]) Headers(ctx context.Context, names ...string) (out map[string]string) {
+func (p RequestModal[T]) Headers(ctx contracts.RequestContext, names ...string) (out map[string]string) {
 	out = make(map[string]string)
 	if len(names) == 0 {
 		return
 	}
-	var getHeaderValue func(string) string = func(s string) string {
-		if val := ctx.Value(s); val != nil {
-			return fmt.Sprint(val)
-		}
-		return ""
-	}
-	if ct, ok := ctx.(*gin.Context); ok {
-		getHeaderValue = func(s string) string {
-			return ct.Request.Header.Get(s)
-		}
-	}
 	for _, header := range names {
 		if header := strings.Trim(header, " "); header == "" {
 			continue
-		} else if val := getHeaderValue(header); val != "" {
-			out[header] = fmt.Sprint(val)
+		} else if val := ctx.Header(header); val != "" {
+			out[header] = val
 		}
 	}
 	return
 }
 
-func (p RequestModal[T]) Authorization(ctx context.Context) (out string) {
-	return ctx.(*gin.Context).Request.Header.Get("Authorization")
+func (p RequestModal[T]) Authorization(ctx contracts.RequestContext) (out string) {
+	return ctx.Header("Authorization")
 }
 
-func (p RequestModal[T]) WithHeaderValues(ctx context.Context, headers ...string) context.Context {
+func (p RequestModal[T]) WithHeaderValues(ctx contracts.RequestContext, headers ...string) context.Context {
 	if len(headers) == 0 {
-		return ctx
+		return ctx.Context()
 	}
 	headerValues := p.Headers(ctx, headers...)
 	if len(headerValues) == 0 {
-		return ctx
+		return ctx.Context()
 	}
+	stdCtx := ctx.Context()
 	for k, v := range headerValues {
-		ctx = context.WithValue(ctx, k, v)
+		stdCtx = context.WithValue(stdCtx, k, v)
 	}
-	return ctx
+	return stdCtx
 }

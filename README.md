@@ -17,10 +17,13 @@ The core design philosophy is to be "opinionated" where it matters (structure, s
 ## Features
 
 - **Rapid Setup:** Get a production-ready server running in minutes with a single `app.Init()` call.
-- **Robust API Layer:** A clean pattern for defining HTTP handlers, middleware, and request/response models with framework-agnostic design.
+- **Unified Response Envelope:** Consistent API response format with support for single objects, lists, pagination, and reference data.
+- **Framework-Agnostic Design:** Clean separation between business logic and web framework through unified interfaces.
+- **Generic Handlers:** Type-safe handler functions with automatic request parameter loading and validation.
 - **Pluggable Authentication:** Comes with helpers for JWT and PASETO tokens, with integrations for providers like AWS Cognito.
-- **Framework Agnostic:** Support for multiple web frameworks (Gin, Echo, etc.) through a unified router interface.
-- **Structured Logging:** Centralized and configurable logging using Logrus, with built-in adapters for components like `pgx`.
+- **Multiple Framework Support:** Built-in support for Gin with extensible architecture for Echo, net/http, and other frameworks.
+- **Automatic Request Processing:** Declarative request parameter definitions with automatic binding and validation.
+- **Structured Logging:** Centralized and configurable logging with automatic request logging middleware.
 - **Database & Cache Ready:** Includes helpers and interfaces for PostgreSQL (via pgx v5) and Redis.
 - **Message Queuing:** Integrated RabbitMQ publisher and worker system for background jobs.
 - **Rich Utilities:** A large collection of helpers for configuration, error handling, concurrent data structures, and more.
@@ -33,6 +36,7 @@ Here's how to bootstrap a new application using GoStart.
 package main
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/kod2ulz/gostart/api"
@@ -40,8 +44,19 @@ import (
 	"github.com/kod2ulz/gostart/app"
 )
 
+// Define a simple request parameter
+type HelloRequest struct {
+	api.RequestModal[HelloRequest]
+	Name string `query:"name" validate:"required"`
+}
+
+// Define a simple response type
+type HelloResponse struct {
+	Message string `json:"message"`
+}
+
 func main() {
-	// 1. Initialize Gin framework
+	// 1. Initialize Gin framework (optional, for framework-specific setup)
 	gin.Setup()
 
 	// 2. Initialize the application
@@ -52,12 +67,11 @@ func main() {
 	log.Info("Application starting up...")
 
 	// 3. Define a route using the unified router interface
-	a.R().GET("/hello", func(ctx api.RequestContext) {
-		// Use the unified response handling
-		if apiCtx, ok := ctx.(api.RequestContext); ok {
-			apiCtx.JSON(http.StatusOK, map[string]string{"message": "hello world"})
-		}
-	})
+	a.R().GET("/hello", api.Handler[HelloRequest, HelloResponse](func(ctx context.Context, req HelloRequest) (HelloResponse, error) {
+		return HelloResponse{
+			Message: "Hello, " + req.Name + "!",
+		}, nil
+	}))
 
 	// 4. Run the application
 	// This starts the HTTP server and blocks until shutdown.
@@ -85,7 +99,9 @@ For more detailed, real-world examples of how to use specific packages, please s
 The library is organized into logical packages. For a detailed breakdown, see the [Introduction to GoStart](./docs/01-introduction.md).
 
 - `/app`: Core application bootstrap and configuration.
-- `/api`: Framework-agnostic API request/response handling and router interfaces.
+- `/api`: Framework-agnostic API layer with unified response envelopes and generic handlers.
+- `/api/frameworks`: Framework-specific implementations (Gin, Echo, etc.).
+- `/contracts`: Core interfaces defining the framework-agnostic contracts.
 - `/auth`: Authentication, session management, and authorization middleware.
 - `/http`: HTTP client utilities for making external API calls.
 - `/storage`: Caching (Redis) and persistence helpers.
@@ -99,11 +115,12 @@ The library is organized into logical packages. For a detailed breakdown, see th
 
 We have an exciting vision for the future of GoStart:
 
-- [ ] **Pluggable Web Frameworks:** Allow developers to choose their favorite framework (Echo, Fiber, etc.) instead of being locked into Gin.
+- [x] **Framework-Agnostic Design:** Unified interfaces allowing developers to choose their favorite framework (Gin, Echo, net/http, etc.).
 - [ ] **Advanced Configuration:** Support for YAML, JSON, and HashiCorp Vault, with a built-in caching layer.
 - [ ] **Advanced Logging:** Add configurable output drivers for sending logs to files, Logstash, Loki, or Sentry.
 - [ ] **Automatic OpenAPI Generation:** Automatically generate API documentation from your route definitions.
 - [ ] **Enhanced Metrics:** Integrate with Prometheus for more detailed application monitoring.
+- [ ] **Additional Framework Implementations:** Add built-in support for Echo, Fiber, and other popular frameworks.
 
 ## Documentation
 

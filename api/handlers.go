@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/ierrors"
 )
 
@@ -125,9 +126,10 @@ func HandleError(ctx contracts.RequestContext, err ierrors.Error) {
 		return
 	}
 
-	// Handle validation errors
-	if validationErr, ok := err.(interface{ Message() string; Fields() map[string]string }); ok {
-		ValidationError(ctx, validationErr.Message(), validationErr.Fields())
+	// Handle validation errors using the errors package
+	if errors.IsValidationError(err) {
+		_, errorMessage, _, fields := errors.HandleValidationError(err)
+		ValidationError(ctx, errorMessage, fields)
 		return
 	}
 

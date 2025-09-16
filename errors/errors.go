@@ -191,3 +191,74 @@ func Errorf(format string, args ...interface{}) ierrors.Error {
 func SqlNoRows(err error) bool {
 	return err != nil && errors.Is(err, sql.ErrNoRows) || strings.HasSuffix(err.Error(), "no rows in result set")
 }
+
+// ValidationErrorInfo represents validation error details
+type ValidationErrorInfo struct {
+	Message string            `json:"message"`
+	Fields  map[string]string `json:"fields,omitempty"`
+}
+
+// IsValidationError checks if an error is a validation error
+func IsValidationError(err ierrors.Error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check if the error response contains validation error code
+	if response := err.Response(); response != nil {
+		if resp, ok := response.(map[string]any); ok {
+			if code, ok := resp["code"].(string); ok {
+				return code == ErrorCodeValidatorError
+			}
+		}
+	}
+
+	return false
+}
+
+// GetValidationErrorInfo extracts validation error information from an error
+func GetValidationErrorInfo(err ierrors.Error) *ValidationErrorInfo {
+	if !IsValidationError(err) {
+		return nil
+	}
+
+	// Try to extract field information from error details
+	info := &ValidationErrorInfo{
+		Message: err.Error(),
+	}
+
+	// Check if the error response contains field details
+	if response := err.Response(); response != nil {
+		if resp, ok := response.(map[string]any); ok {
+			if msg, ok := resp["message"].(string); ok {
+				info.Message = msg
+			}
+			if fields, ok := resp["fields"].(map[string]any); ok {
+				fieldMap := make(map[string]string)
+				for k, v := range fields {
+					if str, ok := v.(string); ok {
+						fieldMap[k] = str
+					}
+				}
+				info.Fields = fieldMap
+			}
+		}
+	}
+
+	return info
+}
+
+// HandleValidationError processes a validation error and returns structured information
+func HandleValidationError(err ierrors.Error) (errorCode string, errorMessage string, httpCode int, fields map[string]string) {
+	errorCode = ErrorCodeValidatorError
+	httpCode = http.StatusBadRequest
+
+	if info := GetValidationErrorInfo(err); info != nil {
+		errorMessage = info.Message
+		fields = info.Fields
+	} else {
+		errorMessage = err.Error()
+	}
+
+	return errorCode, errorMessage, httpCode, fields
+}

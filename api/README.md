@@ -10,7 +10,7 @@ The primary goal of this package is to drastically reduce boilerplate and enforc
 
 ### 1. Framework-Agnostic Router Interface
 
-The package provides a unified router interface that supports multiple web frameworks through a pluggable architecture. Currently supports Gin with plans for Echo, Fiber, and standard `net/http`.
+The package provides a unified router interface that supports multiple web frameworks through a pluggable architecture. Currently supports Gin with extensible architecture for Echo, Fiber, and standard `net/http`.
 
 ```go
 // Initialize your preferred framework
@@ -18,35 +18,31 @@ gin.Setup()
 
 // Use the unified router interface
 router := app.R()
-router.GET("/users", api.Handler[UserResponse](userService.ListUsers))
+router.GET("/users", api.Handler[ListRequest, UserResponse](userService.ListUsers))
 ```
 
 ### 2. Simplified Type-Safe Handlers
 
 The package provides generic, type-safe handler functions that eliminate boilerplate code:
 
-- `Handler[T]`: For single object responses
-- `ListHandler[T]`: For list responses with pagination
-- `JSONHandler[T]`: For simple JSON responses without request parameters
-- `StreamHandler[T]`: For streaming responses
-- `FileHandler`: For file responses
-- `DownloadHandler`: For file downloads
+- `Handler[P, T]`: For single object responses with request parameters
+- `ListHandler[P, T]`: For list responses with pagination
+- `FileHandler[P]`: For file responses
 
 ```go
-// Simple single object response
-router.GET("/users/:id", api.Handler(func(ctx contracts.RequestContext, param contracts.RequestParam) (User, ierrors.Error) {
-    id := ctx.Param("id")
-    return userService.GetUser(id)
+// Single object response with typed parameters
+router.GET("/users/:id", api.Handler[GetUserRequest, User](func(ctx context.Context, req GetUserRequest) (User, error) {
+    return userService.GetUser(req.ID)
 }))
 
 // List response with pagination
-router.GET("/users", api.ListHandler(func(ctx contracts.RequestContext, param contracts.RequestParam) ([]User, *int64, ierrors.Error) {
-    return userService.ListUsers(param)
+router.GET("/users", api.ListHandler[ListUsersRequest, User](func(ctx context.Context, req ListUsersRequest) ([]User, *int64, error) {
+    return userService.ListUsers(req)
 }))
 
-// Simple JSON response without request parameters
-router.GET("/health", api.JSONHandler(func(ctx contracts.RequestContext) (Health, ierrors.Error) {
-    return healthService.Check()
+// File response
+router.GET("/files/:id", api.FileHandler[GetFileRequest](func(ctx context.Context, req GetFileRequest) (FileResponse, error) {
+    return fileService.GetFile(req.ID)
 }))
 ```
 
@@ -59,6 +55,10 @@ All responses use a standardized JSON structure with consistent formatting:
   "success": true,
   "type": "User",
   "data": { ... },
+  "references": {
+    "countries": [...],
+    "roles": [...]
+  },
   "meta": {
     "total": 100,
     "limit": 10,
@@ -70,8 +70,9 @@ All responses use a standardized JSON structure with consistent formatting:
 
 The envelope automatically handles:
 - Single objects and lists with pagination
+- Reference data at the same level as data (not in meta)
 - Error responses with structured error information
-- Metadata and reference data
+- Metadata for pagination and custom data
 - Consistent timestamps and response types
 
 ### 4. Request Parameter Interface
@@ -80,9 +81,20 @@ Request parameters implement the `contracts.RequestParam` interface, providing a
 
 ```go
 type CreateUserRequest struct {
+    api.RequestModal[CreateUserRequest] // Embed for default behavior
     Name  string `json:"name" validate:"required"`
     Email string `json:"email" validate:"required,email"`
-    contracts.RequestModal[CreateUserRequest] // Embed for default behavior
+}
+
+type GetUserRequest struct {
+    api.RequestModal[GetUserRequest]
+    ID string `param:"id" validate:"required,uuid"`
+}
+
+type ListUsersRequest struct {
+    api.ListRequest // Embed for pagination support
+    Search string `query:"search"`
+    Active bool `query:"active"`
 }
 ```
 
@@ -117,6 +129,7 @@ gin.SetupWithOptions(func(config *api.RouterConfig) {
 
 Future enhancements for this package include:
 
-- **Enhanced Error Parsing**: Deeper inspection of database and validator errors to provide even more specific and helpful error messages (e.g., "user with this email already exists" from a SQL unique constraint violation).
-- **Framework Agnosticism**: The long-term vision is to leverage the `RequestParam` interface to allow the request/response lifecycle to be used with other web frameworks like Fiber, Echo, or the standard `net/http` library.
-- **Automated API Documentation**: Structure the API definitions in a way that enables the automatic generation of OpenAPI (Swagger) specifications.
+- [x] **Framework Agnosticism**: Complete framework-agnostic design allowing use with Gin, Echo, Fiber, or standard `net/http`.
+- [ ] **Enhanced Error Parsing**: Deeper inspection of database and validator errors to provide even more specific and helpful error messages (e.g., "user with this email already exists" from a SQL unique constraint violation).
+- [ ] **Automated API Documentation**: Structure the API definitions in a way that enables the automatic generation of OpenAPI (Swagger) specifications.
+- [ ] **Additional Framework Implementations**: Built-in support for Echo, Fiber, and other popular frameworks.

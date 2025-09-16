@@ -18,18 +18,6 @@ type RequestParam interface {
 	// ContextKey returns the key used to store this parameter in context
 	ContextKey() string
 
-	// MetadataContextKey returns the key used to store response metadata
-	MetadataContextKey() string
-
-	// ReferencesContextKey returns the key used to store response references
-	ReferencesContextKey() string
-
-	// SetResponseMetadata stores metadata in the context for response generation
-	SetResponseMetadata(ctx RequestContext, meta *Metadata) error
-
-	// SetResponseReference stores a reference in the context for response generation
-	SetResponseReference(ctx RequestContext, key string, value any) error
-
 	// ContextLoad retrieves the parameter from a standard Go context
 	ContextLoad(ctx context.Context) (RequestParam, error)
 }

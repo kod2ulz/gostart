@@ -166,7 +166,7 @@ func (s *_bookService) listBooks(ctx context.Context) (out []Book, err ierrors.E
 	var from, to int = int(param.Offset), int(param.Limit + param.Offset)
 	out = collections.ListMap(s.data.Values().Slice(from, to), collections.ListMapToNoPtrFunc[Book])
 	if ginCtx, ok := ctx.(*gin.Context); ok {
-		param.DefaultMetadata(&ginContextAdapter{ginCtx}).WithTotal(int64(s.data.Values().Size()))
+		param.DefaultMetadata(&ginContextAdapter{ginCtx})//.WithTotal(int64(s.data.Values().Size()))
 	}
 	return
 }

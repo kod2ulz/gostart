@@ -11,21 +11,20 @@ import (
 
 // ResponseEnvelope represents the standardized response format
 type ResponseEnvelope struct {
-	Success bool        `json:"success"`
-	Type    string      `json:"type"`
-	Data    any         `json:"data,omitempty"`
-	Meta    *Meta       `json:"meta,omitempty"`
-	Time    int64       `json:"time"`
-	Error   *ErrorInfo  `json:"error,omitempty"`
+	Success    bool        `json:"success"`
+	Type       string      `json:"type"`
+	Data       any         `json:"data,omitempty"`
+	References any         `json:"references,omitempty"`
+	Meta       *Meta       `json:"meta,omitempty"`
+	Time       int64       `json:"time"`
+	Error      *ErrorInfo  `json:"error,omitempty"`
 }
 
-// Meta contains pagination and reference metadata
+// Meta contains pagination metadata
 type Meta struct {
-	Total      *int64            `json:"total,omitempty"`
-	Limit      *int              `json:"limit,omitempty"`
-	Offset     *int              `json:"offset,omitempty"`
-	References map[string]any    `json:"references,omitempty"`
-	Custom     map[string]any    `json:"custom,omitempty"`
+	Total  *int64 `json:"total,omitempty"`
+	Limit  *int   `json:"limit,omitempty"`
+	Offset *int   `json:"offset,omitempty"`
 }
 
 // ErrorInfo contains error details
@@ -51,9 +50,12 @@ func SuccessResponse(ctx contracts.RequestContext, data any) error {
 			Time:    time.Now().Unix(),
 		}
 
-		// Extract metadata from context if available
+		// Extract metadata and references from context if available
 		if meta := getResponseMetadata(ctx); meta != nil {
 			envelope.Meta = meta
+		}
+		if refs := getResponseReferences(ctx); refs != nil {
+			envelope.References = refs
 		}
 
 		ctx.JSON(http.StatusOK, envelope)
@@ -96,12 +98,21 @@ func ListResponse(ctx contracts.RequestContext, data any, total *int64, limit, o
 			if envelope.Meta == nil {
 				envelope.Meta = &Meta{}
 			}
-			if meta.References != nil {
-				envelope.Meta.References = meta.References
+			// Copy pagination fields
+			if meta.Total != nil {
+				envelope.Meta.Total = meta.Total
 			}
-			if meta.Custom != nil {
-				envelope.Meta.Custom = meta.Custom
+			if meta.Limit != nil {
+				envelope.Meta.Limit = meta.Limit
 			}
+			if meta.Offset != nil {
+				envelope.Meta.Offset = meta.Offset
+			}
+		}
+
+		// Extract references from context
+		if refs := getResponseReferences(ctx); refs != nil {
+			envelope.References = refs
 		}
 
 		ctx.JSON(http.StatusOK, envelope)
@@ -175,31 +186,18 @@ func SetResponseMetadata(ctx contracts.RequestContext, meta *Meta) error {
 	return nil
 }
 
-// SetResponseReference sets a reference in the response metadata
+// SetResponseReference sets a reference in the response
 func SetResponseReference(ctx contracts.RequestContext, key string, value any) error {
-	meta := getResponseMetadata(ctx)
-	if meta == nil {
-		meta = &Meta{}
+	refs := getResponseReferences(ctx)
+	if refs == nil {
+		refs = make(map[string]any)
 	}
-	if meta.References == nil {
-		meta.References = make(map[string]any)
+	if refsMap, ok := refs.(map[string]any); ok {
+		refsMap[key] = value
 	}
-	meta.References[key] = value
-	return SetResponseMetadata(ctx, meta)
+	return setResponseReferences(ctx, refs)
 }
 
-// SetResponseCustom sets custom metadata
-func SetResponseCustom(ctx contracts.RequestContext, key string, value any) error {
-	meta := getResponseMetadata(ctx)
-	if meta == nil {
-		meta = &Meta{}
-	}
-	if meta.Custom == nil {
-		meta.Custom = make(map[string]any)
-	}
-	meta.Custom[key] = value
-	return SetResponseMetadata(ctx, meta)
-}
 
 // getResponseMetadata extracts metadata from context
 func getResponseMetadata(ctx contracts.RequestContext) *Meta {
@@ -207,6 +205,22 @@ func getResponseMetadata(ctx contracts.RequestContext) *Meta {
 		if meta, ok := getCtx.ContextValue("response_metadata").(*Meta); ok {
 			return meta
 		}
+	}
+	return nil
+}
+
+// getResponseReferences extracts references from context
+func getResponseReferences(ctx contracts.RequestContext) any {
+	if getCtx, ok := ctx.(interface{ ContextValue(string) any }); ok {
+		return getCtx.ContextValue("response_references")
+	}
+	return nil
+}
+
+// setResponseReferences stores references in context
+func setResponseReferences(ctx contracts.RequestContext, refs any) error {
+	if setCtx, ok := ctx.(interface{ SetContextValue(string, any) error }); ok {
+		return setCtx.SetContextValue("response_references", refs)
 	}
 	return nil
 }

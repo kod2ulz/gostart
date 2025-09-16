@@ -13,23 +13,22 @@ import (
 type ListRequest struct {
 	Limit  int32 `validate:"required,gte=1"`
 	Offset int32 `validate:"omitempty,gte=0"`
-	contracts.RequestModal[ListRequest]
+	RequestModal[ListRequest]
 }
 
-func (r ListRequest) Metadata() (out *contracts.Metadata) {
-	out = &contracts.Metadata{
-		// Current: int64(r.Offset),
-		Limit: int64(r.Limit), Offset: int64(r.Offset),
-	}
-	if out.Offset > 0 && out.Limit > 0 {
-		out.Page = (out.Offset / out.Limit) + 1
+func (r ListRequest) Metadata() (out *Meta) {
+	limit := int(r.Limit)
+	offset := int(r.Offset)
+	out = &Meta{
+		Limit:  &limit,
+		Offset: &offset,
 	}
 	return
 }
 
-func (r ListRequest) DefaultMetadata(ctx contracts.RequestContext) (out *contracts.Metadata) {
+func (r ListRequest) DefaultMetadata(ctx contracts.RequestContext) (out *Meta) {
 	out = r.Metadata()
-	r.SetResponseMetadata(ctx, out)
+	SetResponseMetadata(ctx, out)
 	return
 }
 
@@ -60,7 +59,7 @@ type ListRequestIdType interface {
 type ListRequestWithID[ID ListRequestIdType] struct {
 	ID ID `validate:"required"`
 	ListRequest
-	contracts.RequestModal[ListRequestWithID[ID]]
+	RequestModal[ListRequestWithID[ID]]
 }
 
 func (r *ListRequestWithID[ID]) setId(id interface{}) {
