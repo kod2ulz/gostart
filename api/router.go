@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
 )
 
@@ -84,3 +85,28 @@ type RouterConfig struct {
 
 // RouterFactory creates a new router instance
 type RouterFactory func(config *RouterConfig) (Router, error)
+
+// DefaultRouterConfig creates a router configuration from environment variables
+func DefaultRouterConfig() *RouterConfig {
+	env := config.Env.Helper("ROUTER").OrDefault("HTTP_SERVER")
+
+	return &RouterConfig{
+		// CORS settings from environment
+		AllowOrigins:     env.Get("ALLOW_ORIGINS", "*").StringList(","),
+		AllowMethods:     env.Get("ALLOW_METHODS", "GET,POST,PUT,HEAD,OPTIONS").StringList(","),
+		AllowHeaders:     env.Get("ALLOW_HEADERS", "Origin,Content-Length,Accept-Encoding,Authorization,Accept-Language,Content-Type").StringList(","),
+		ExposeHeaders:    env.Get("EXPOSE_HEADERS", "Content-Length,Host,Content-Type,Connection").StringList(","),
+		AllowCredentials: env.Get("ALLOW_CREDENTIALS", "true").Bool(),
+		MaxAge:           int(env.Get("MAX_AGE", "12h").Duration().Seconds()),
+
+		// Middleware settings
+		EnableRecovery:   env.Get("ENABLE_RECOVERY", "true").Bool(),
+		EnableLogging:    env.Get("ENABLE_LOGGING", "true").Bool(),
+		LogConfig:        DefaultRequestLogConfig(),
+		CustomMiddleware: []MiddlewareFunc{},
+
+		// Static file settings
+		StaticPaths: make(map[string]string),
+	}
+}
+

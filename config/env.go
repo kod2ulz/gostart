@@ -42,6 +42,11 @@ func (EnvSource) GetHost() string {
 	return os.Getenv("HOST")
 }
 
+func (s EnvSource) GetVersion() Value {
+	env := s.Helper()
+	return env.Get("VERSION", env.Get("APP", "VERSION"))
+}
+
 type _env struct {
 	prx string
 }

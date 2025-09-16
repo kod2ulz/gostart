@@ -17,6 +17,24 @@ The `app` package provides a single entry point, `app.Init()`, which creates a g
 The typical usage is to call `app.Init()` at the start of your `main()` function, and then `Run()` to start the application and block until a shutdown signal is received.
 
 ```go
+import (
+    "context"
+
+    "github.com/kod2ulz/gostart/api"
+    "github.com/kod2ulz/gostart/api/frameworks/gin"
+    "github.com/kod2ulz/gostart/app"
+)
+
+// Define request and response types
+type HelloRequest struct {
+    api.RequestModal[HelloRequest]
+    Name string `query:"name" validate:"required"`
+}
+
+type HelloResponse struct {
+    Message string `json:"message"`
+}
+
 func main() {
     // Initialize your preferred web framework (e.g., Gin)
     gin.Setup()
@@ -27,12 +45,12 @@ func main() {
     )
 
     // Register a new API route using the unified router interface
-    app.R().GET("/my-route", func(ctx api.RequestContext) {
-        app.Log().Info("Request received!")
-        if apiCtx, ok := ctx.(api.RequestContext); ok {
-            apiCtx.JSON(200, map[string]string{"message": "hello"})
-        }
-    })
+    app.R().GET("/hello", api.Handler[HelloRequest, HelloResponse](func(ctx context.Context, req HelloRequest) (HelloResponse, error) {
+        app.Log().Info("Request received!", "name", req.Name)
+        return HelloResponse{
+            Message: "Hello, " + req.Name + "!",
+        }, nil
+    }))
 
     // Run the application
     app.Run()

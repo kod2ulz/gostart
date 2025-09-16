@@ -160,18 +160,8 @@ func WithHeartbeatHandlers() AppIniter {
 }
 
 func (a *ap) initAPI(opts ...AppIniter) {
-	// Create router using the new abstraction
-	routerConfig := &api.RouterConfig{
-		AllowOrigins:     a.conf.Http.AllowOrigins,
-		AllowMethods:     a.conf.Http.AllowMethods,
-		AllowHeaders:     a.conf.Http.AllowHeaders,
-		ExposeHeaders:    a.conf.Http.ExposeHeaders,
-		AllowCredentials: a.conf.Http.AllowCredentials,
-		MaxAge:           int(a.conf.Http.MaxAge),
-		EnableRecovery:   true,
-		EnableLogging:    true,
-	}
-
+	// Create router using unified configuration from environment
+	routerConfig := api.DefaultRouterConfig()
 	var err error
 	a.router, err = api.CreateRouter(routerConfig)
 	if err != nil {
