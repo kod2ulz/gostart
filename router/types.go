@@ -1,7 +1,6 @@
-package app
+package router
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/kod2ulz/gostart/contracts"
@@ -35,7 +34,7 @@ type Router interface {
 	Run(addr string) error
 }
 
-// HandlerFunc represents a framework-agnostic handler function
+// RouterHandlerFunc represents a framework-agnostic handler function
 type RouterHandlerFunc func(contracts.RequestContext)
 
 // MiddlewareFunc represents a framework-agnostic middleware function
@@ -63,9 +62,6 @@ type RequestContext interface {
 	ClientIP() string
 }
 
-// RouterFactory creates a new router instance
-type RouterFactory func(config *RouterConfig) (Router, error)
-
 // RouterConfig holds router configuration
 type RouterConfig struct {
 	// CORS settings
@@ -85,18 +81,5 @@ type RouterConfig struct {
 	StaticPaths map[string]string
 }
 
-// DefaultRouterFactory is the default router factory used by the app
-var DefaultRouterFactory RouterFactory
-
-// SetRouterFactory sets the router factory to use for creating routers
-func SetRouterFactory(factory RouterFactory) {
-	DefaultRouterFactory = factory
-}
-
-// CreateRouter creates a new router using the default factory
-func CreateRouter(config *RouterConfig) (Router, error) {
-	if DefaultRouterFactory == nil {
-		return nil, fmt.Errorf("no router factory set. Call SetRouterFactory() first")
-	}
-	return DefaultRouterFactory(config)
-}
+// RouterFactory creates a new router instance
+type RouterFactory func(config *RouterConfig) (Router, error)

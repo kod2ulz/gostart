@@ -1,13 +1,14 @@
-package app
+package gin
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/api/ginadapter"
+	"github.com/kod2ulz/gostart/router"
 )
 
-// GinRouter implements the Router interface using Gin
+// GinRouter implements the app.Router interface using Gin
 type GinRouter struct {
 	engine *gin.Engine
 	group  *gin.RouterGroup
@@ -19,7 +20,7 @@ type GinRequestContext struct {
 }
 
 // NewGinRouter creates a new Gin-based router
-func NewGinRouter(config *RouterConfig) (Router, error) {
+func NewGinRouter(config *router.RouterConfig) (router.Router, error) {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 
@@ -28,7 +29,7 @@ func NewGinRouter(config *RouterConfig) (Router, error) {
 		engine.Use(gin.Recovery())
 	}
 
-	// Apply custom middleware
+// Apply custom middleware
 	for _, mw := range config.CustomMiddleware {
 		engine.Use(func(c *gin.Context) {
 			ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
@@ -56,43 +57,43 @@ func NewGinRouter(config *RouterConfig) (Router, error) {
 }
 
 // HTTP Methods
-func (r *GinRouter) GET(path string, handler RouterHandlerFunc) Router {
+func (r *GinRouter) GET(path string, handler router.RouterHandlerFunc) router.Router {
 	r.currentGroup().GET(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) POST(path string, handler RouterHandlerFunc) Router {
+func (r *GinRouter) POST(path string, handler router.RouterHandlerFunc) router.Router {
 	r.currentGroup().POST(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) PUT(path string, handler RouterHandlerFunc) Router {
+func (r *GinRouter) PUT(path string, handler router.RouterHandlerFunc) router.Router {
 	r.currentGroup().PUT(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) DELETE(path string, handler RouterHandlerFunc) Router {
+func (r *GinRouter) DELETE(path string, handler router.RouterHandlerFunc) router.Router {
 	r.currentGroup().DELETE(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) PATCH(path string, handler RouterHandlerFunc) Router {
+func (r *GinRouter) PATCH(path string, handler router.RouterHandlerFunc) router.Router {
 	r.currentGroup().PATCH(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) OPTIONS(path string, handler RouterHandlerFunc) Router {
+func (r *GinRouter) OPTIONS(path string, handler router.RouterHandlerFunc) router.Router {
 	r.currentGroup().OPTIONS(path, r.wrapHandler(handler))
 	return r
 }
 
-func (r *GinRouter) HEAD(path string, handler RouterHandlerFunc) Router {
+func (r *GinRouter) HEAD(path string, handler router.RouterHandlerFunc) router.Router {
 	r.currentGroup().HEAD(path, r.wrapHandler(handler))
 	return r
 }
 
 // Grouping
-func (r *GinRouter) Group(path string, fn func(Router)) Router {
+func (r *GinRouter) Group(path string, fn func(router.Router)) router.Router {
 	group := r.engine.Group(path)
 	subRouter := &GinRouter{engine: r.engine, group: group}
 	fn(subRouter)
@@ -100,7 +101,7 @@ func (r *GinRouter) Group(path string, fn func(Router)) Router {
 }
 
 // Middleware
-func (r *GinRouter) Use(middleware ...MiddlewareFunc) Router {
+func (r *GinRouter) Use(middleware ...router.MiddlewareFunc) router.Router {
 	for _, mw := range middleware {
 		r.currentGroup().Use(func(c *gin.Context) {
 			ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
@@ -120,12 +121,12 @@ func (r *GinRouter) Use(middleware ...MiddlewareFunc) Router {
 }
 
 // Static files
-func (r *GinRouter) StaticFile(path, filePath string) Router {
+func (r *GinRouter) StaticFile(path, filePath string) router.Router {
 	r.engine.StaticFile(path, filePath)
 	return r
 }
 
-func (r *GinRouter) Static(prefix, root string) Router {
+func (r *GinRouter) Static(prefix, root string) router.Router {
 	r.engine.Static(prefix, root)
 	return r
 }
@@ -148,7 +149,7 @@ func (r *GinRouter) currentGroup() *gin.RouterGroup {
 	return &r.engine.RouterGroup
 }
 
-func (r *GinRouter) wrapHandler(handler RouterHandlerFunc) gin.HandlerFunc {
+func (r *GinRouter) wrapHandler(handler router.RouterHandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := &GinRequestContext{GinRequestContext: ginadapter.NewRequestContext(c).(*ginadapter.GinRequestContext)}
 		handler(ctx)
@@ -215,3 +216,6 @@ func (ctx *GinRequestContext) Cookie(name string) (string, error) {
 func (ctx *GinRequestContext) ClientIP() string {
 	return ctx.GinContext.ClientIP()
 }
+
+// Factory function for creating Gin routers
+var NewRouter = NewGinRouter

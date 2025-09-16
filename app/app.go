@@ -13,9 +13,9 @@ import (
 
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/frameworks"
 	"github.com/kod2ulz/gostart/logr"
-
-	"github.com/gin-gonic/gin"
+	"github.com/kod2ulz/gostart/router"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 )
 
 type ap struct {
-	router Router
+	router router.Router
 	log    *logr.Logger
 	start  time.Time
 	conf   *conf
@@ -36,7 +36,6 @@ type ap struct {
 	cancel context.CancelFunc
 
 	heartbeatHandlers bool
-	handlers map[string]gin.HandlerFunc
 }
 
 type AppIniter func(*ap) error
@@ -82,11 +81,11 @@ func (a *ap) Ctx() context.Context {
 	return a.ctx
 }
 
-func (a *ap) Router() Router {
+func (a *ap) Router() router.Router {
 	return a.router
 }
 
-func (a *ap) R() Router {
+func (a *ap) R() router.Router {
 	return a.router
 }
 
@@ -140,9 +139,10 @@ func (a *ap) shutdown() {
 	a.log.Info("shutting down")
 }
 
-func WithHandlerOverride(key string, handler gin.HandlerFunc) AppIniter {
+func WithHandlerOverride(key string, handler interface{}) AppIniter {
 	return func(a *ap) error {
-		a.handlers[key] = handler
+		// Handler overrides are no longer supported in the new architecture
+		// Use the router directly for custom handlers
 		return nil
 	}
 }
@@ -169,7 +169,7 @@ func WithHeartbeatHandlers() AppIniter {
 
 func (a *ap) initAPI(opts ...AppIniter) {
 	// Create router using the new abstraction
-	routerConfig := &RouterConfig{
+	routerConfig := &router.RouterConfig{
 		AllowOrigins:     a.conf.Http.AllowOrigins,
 		AllowMethods:     a.conf.Http.AllowMethods,
 		AllowHeaders:     a.conf.Http.AllowHeaders,
@@ -181,23 +181,12 @@ func (a *ap) initAPI(opts ...AppIniter) {
 	}
 
 	var err error
-	a.router, err = NewGinRouter(routerConfig)
+	a.router, err = frameworks.CreateRouter(routerConfig)
 	if err != nil {
 		panic(err)
 	}
 
-	// Convert legacy handlers to new format
-	a.handlers = map[string]gin.HandlerFunc{
-		"ok": func(c *gin.Context) {
-			c.JSON(http.StatusOK, "OK")
-		},
-		"stats": func(c *gin.Context) {
-			c.JSON(http.StatusOK, map[string]interface{}{
-				"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
-				"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),
-			})
-		},
-	}
+	// Legacy handlers are no longer used in the new architecture
 
 	for i := range opts {
 		opts[i](a)
