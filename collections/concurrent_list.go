@@ -87,10 +87,16 @@ func (l *concurrentList[T]) Iterate(fn func(int, T) error) (err error) {
 	return l.data.Iterate(fn)
 }
 
-func (l *concurrentList[T]) Filter(filterFn func(i int, val T) bool) (out List[T]) {
+func (l *concurrentList[T]) Filter(filterFn func(val T) bool) (out List[T]) {
 	l.mx.RLock()
 	defer l.mx.RUnlock()
 	return l.data.Filter(filterFn)
+}
+
+func (l *concurrentList[T]) Find(filterFn func(i int, val T) bool) (out List[T]) {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
+	return l.data.Find(filterFn)
 }
 
 func (l *concurrentList[T]) ForEach(fn func(i int, val T) T) (out []T) {

@@ -36,7 +36,7 @@ var criteria_test_cases = []struct {
 	},
 	{
 		conditions: []query.Condition{query.Or(query.Equal("fname", "john"), query.In("name", "jane", "ruth"))},
-		expected:   fmt.Sprintf("(%s) %s (%s %s ($%d,$%d))", arg("fname", 1), query.WhereOr, "name", query.CompareIn, 2, 3),
+		expected:   fmt.Sprintf("(%s) %s (%s %s ($%d, $%d))", arg("fname", 1), query.WhereOr, "name", query.CompareIn, 2, 3),
 		args:       []any{"john", "jane", "ruth"},
 	},
 	{

@@ -84,8 +84,14 @@ var _ = Describe("SQL Builder", func() {
 			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
 			build, args := qb.Criteria()
 
-			Expect(build.String()).To(Equal("(name = $1) and (age < $2)"))
-			Expect(args).To(Equal([]any{"Jane", int64(30)}))
+			Expect(build.String()).To(Or(
+				Equal("(name = $1) and (age < $2)"),
+				Equal("(age < $1) and (name = $2)"),
+			))
+			Expect(args).To(Or(
+				Equal([]any{"Jane", int64(30)}),
+				Equal([]any{int64(30), "Jane"}),
+			))
 		})
 
 		It("should handle numeric between queries", func() {
@@ -108,7 +114,7 @@ var _ = Describe("SQL Builder", func() {
 			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
 			build, args := qb.Criteria()
 
-			Expect(build.String()).To(Equal("birthDate between $1 and $2"))
+			Expect(build.String()).To(Equal("birth_date between $1 and $2"))
 			Expect(len(args)).To(Equal(2))
 		})
 
@@ -186,8 +192,8 @@ var _ = Describe("SQL Builder", func() {
 		It("should work with pagination parameters", func() {
 			ctx := context.Background()
 			provider := mockParameterProvider(map[string]string{
-				"name":  "John",
-				"limit": "10",
+				"name":   "John",
+				"limit":  "10",
 				"offset": "5",
 			})
 

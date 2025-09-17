@@ -74,7 +74,7 @@ func NewDefinitions(fields ...FieldDefinition) FieldDefinitions {
 // Add appends one or more FieldDefinition to the map.
 func (defs FieldDefinitions) Add(fields ...FieldDefinition) FieldDefinitions {
 	for _, field := range fields {
-		defs[field.Name] = field
+		defs[strcase.ToSnake(field.Name)] = field
 	}
 	return defs
 }

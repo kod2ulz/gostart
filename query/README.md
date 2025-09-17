@@ -116,6 +116,7 @@ The query library supports intelligent field name resolution with these rules:
 3. **JSONB Fields**: For dotted field names like `person.first_name`, each part gets separator variations applied separately:
    - `person.first_name` matches `person.firstName`, `person.first-name`, etc.
    - Results in SQL: `person ->> 'first_name'`
+4. **Database Source of Truth**: Database field names are always lowercase snake_case, variations are generated from there
 
 #### Examples:
 - Field definition: `first_name` matches parameters: `first_name`, `firstName`, `first-name`
@@ -136,6 +137,12 @@ The query library supports intelligent field name resolution with these rules:
 - `username~=john` → `username ILIKE 'john%'` (ends with)
 - `username=john` → `username = 'john'` (exact match)
 - `username_in=john,jane,bob` → `username IN ('john', 'jane', 'bob')`
+
+### OR Operations
+- **Within-field OR**: `username=john|jane|bob` → `username IN ('john', 'jane', 'bob')`
+- **Across-field OR**: `*role=admin&accountId=123` → `(account_id = 123 OR role = 'admin')`
+- **Multiple star fields**: `*role=admin&*accountId=123` → `(role = 'admin' OR account_id = 123)`
+- **Single star field**: `*role=admin` → (ignored, no conditions added - OR only makes sense with multiple fields)
 
 ### Range Operations
 - `age_bt=25:35` → `age BETWEEN 25 AND 35`
@@ -440,6 +447,11 @@ Values are converted according to field type definitions:
 - [x] Parameter override functionality
 - [x] Comprehensive test coverage
 - [x] Migration documentation
+- [x] Tilde wildcard syntax for LIKE operations
+- [x] Case-insensitive field name resolution with separator variations
+- [x] Dual sort parameter format support (legacy and new)
+- [x] OR operator functionality (within-field and across-field)
+- [x] Pipe-separated value processing for IN operations
 
 ### Planned Features 📋
 - [ ] Advanced join support

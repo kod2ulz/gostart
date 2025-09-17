@@ -24,6 +24,7 @@ const (
 	CompareBetween            CompareOperator = "bt"
 	CompareExists             CompareOperator = "exz"
 	CompareRaw                CompareOperator = "-"
+	CompareOr                 CompareOperator = "or"
 )
 
 func (op CompareOperator) Eval(path []string, argCount int) string {
@@ -48,7 +49,7 @@ func (op CompareOperator) Eval(path []string, argCount int) string {
 		for i := 0; i < argCount; i++ {
 			args[i] = ARG_PLACEHOLDER
 		}
-		return field + " in (" + strings.Join(args, ",") + ")"
+		return field + " in (" + strings.Join(args, ", ") + ")"
 	case CompareAny:
 		args := make([]string, argCount)
 		for i := 0; i < argCount; i++ {
@@ -107,7 +108,7 @@ var (
 
 type Condition func(*WhereCriteria)
 
-func doLeafCompare(op CompareOperator, path []string, value interface{}) Condition {
+func doLeafCompare(op CompareOperator, path []string, value any) Condition {
 	return func(cr *WhereCriteria) {
 		wc := &WhereCriteria{
 			operator: op,
@@ -152,25 +153,25 @@ func doNode(constraint Constraint, conditions ...Condition) Condition {
 
 func Null(fields ...string) Condition    { return Condition(doLeafNullCompare(true, fields...)) }
 func NotNull(fields ...string) Condition { return Condition(doLeafNullCompare(false, fields...)) }
-func Equal(field string, value interface{}) Condition {
+func Equal(field string, value any) Condition {
 	return Condition(doLeafCompare(CompareEqual, []string{field}, value))
 }
-func Like(field string, value interface{}) Condition {
+func Like(field string, value any) Condition {
 	return Condition(doLeafCompare(CompareLike, []string{field}, value))
 }
-func NotEqual(field string, value interface{}) Condition {
+func NotEqual(field string, value any) Condition {
 	return Condition(doLeafCompare(CompareNotEqual, []string{field}, value))
 }
-func LessThan(field string, value interface{}) Condition {
+func LessThan(field string, value any) Condition {
 	return Condition(doLeafCompare(CompareLessThan, []string{field}, value))
 }
-func GreaterThan(field string, value interface{}) Condition {
+func GreaterThan(field string, value any) Condition {
 	return Condition(doLeafCompare(CompareGreaterThan, []string{field}, value))
 }
-func LessThanOrEqual(field string, value interface{}) Condition {
+func LessThanOrEqual(field string, value any) Condition {
 	return Condition(doLeafCompare(CompareLessThanOrEqual, []string{field}, value))
 }
-func GreaterThanOrEqual(field string, value interface{}) Condition {
+func GreaterThanOrEqual(field string, value any) Condition {
 	return Condition(doLeafCompare(CompareGreaterThanOrEqual, []string{field}, value))
 }
 func In[T any](field string, values ...T) Condition {
@@ -193,15 +194,55 @@ func UrlFieldParams(p URLSearchParam) Condition {
 	conditions := make([]Condition, 0)
 	for _, cond := range p.GetConditions() {
 		conditions = append(conditions, doLeafCompare(cond.Operator, cond.DBPath, cond.Value))
+		// if cond.Operator == CompareOr {
+		// 	// Handle OR conditions
+		// 	conditions = append(conditions, createOrCondition(cond.DBPath, cond.Value))
+		// } else {
+		// 	conditions = append(conditions, doLeafCompare(cond.Operator, cond.DBPath, cond.Value))
+		// }
 	}
 	return And(conditions...)
+}
+
+func createOrCondition(path []string, value any) Condition {
+	return func(cr *WhereCriteria) {
+		if orData, ok := value.(map[string]any); ok {
+			// Handle within-field OR (originalOperator + values)
+			if originalOp, ok := orData["originalOperator"].(CompareOperator); ok {
+				if values, ok := orData["values"].([]any); ok {
+					// Create multiple conditions for OR
+					orConditions := make([]Condition, 0, len(values))
+					for _, val := range values {
+						orConditions = append(orConditions, doLeafCompare(originalOp, path, val))
+					}
+					// Use the Or function to combine them
+					orCondition := Or(orConditions...)
+					orCondition(cr)
+				}
+			}
+			// Handle across-field OR (conditions)
+			if conditions, ok := orData["conditions"].([]ParsedCondition); ok {
+				// Create conditions for each across-field OR condition
+				orConditions := make([]Condition, 0, len(conditions))
+				for _, cond := range conditions {
+					orConditions = append(orConditions, doLeafCompare(cond.Operator, cond.DBPath, cond.Value))
+				}
+				// Use the Or function to combine them
+				orCondition := Or(orConditions...)
+				orCondition(cr)
+			}
+		} else {
+			// Fallback to regular comparison - should not happen with CompareOr
+			doLeafCompare(CompareEqual, path, value)(cr)
+		}
+	}
 }
 
 type WhereCriteria struct {
 	constraint Constraint
 	operator   CompareOperator
 	path       []string
-	value      interface{}
+	value      any
 	null       bool
 	leaf       bool
 
@@ -218,12 +259,12 @@ func (wc *WhereCriteria) Append(cs Constraint, cr *WhereCriteria) {
 	wc.criteria[cs] = append(wc.criteria[cs], cr)
 }
 
-func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interface{}) {
+func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []any) {
 	if !wc.leaf {
 		if len(wc.criteria) == 0 {
 			return
 		}
-		args = make([]interface{}, 0)
+		args = make([]any, 0)
 		queries0 := make([]string, 0)
 		for _, cs := range []Constraint{WhereOr, WhereAnd} {
 			if _, ok := wc.criteria[cs]; !ok {
@@ -286,7 +327,7 @@ func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interf
 	case CompareIn, CompareBetween:
 		utils.StructCopy(wc.value, &args)
 	default:
-		args = []interface{}{wc.value}
+		args = []any{wc.value}
 	}
 	sb.WriteString(wc.operator.Eval(wc.path, len(args)))
 	return
