@@ -123,14 +123,14 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out contr
 	_url, parseErr := url.Parse(c.url(path))
 	defer c.logOutcome(request, response, err)
 	if parseErr != nil {
-		err = errors.RequestLoadError[T](parseErr).WithMessage("failed to parse url")
+		err = errors.RequestLoadFailed[T](parseErr).WithMessage("failed to parse url")
 		return contracts.ErrorResponse[T](err)
 	}
 	c.setOverrides(ctx)
 	setUrlQueryParams(_url, c.params)
 	request, requestErr = newHttpRequest(_url, method, c.body)
 	if requestErr != nil {
-		err = errors.RequestLoadError[T](parseErr).WithMessage("failed to create http request")
+		err = errors.RequestLoadFailed[T](parseErr).WithMessage("failed to create http request")
 		return contracts.ErrorResponse[T](err)
 	}
 	c.headers.Set(request)
@@ -139,7 +139,7 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out contr
 	var httpClient http.Client = *http.DefaultClient
 	response, responseErr = httpClient.Do(request.WithContext(reqCtx))
 	if responseErr != nil {
-		err = errors.ServerError(errors.Wrapf(responseErr, "request failed"))
+		err = errors.ServiceFailure(errors.Wrapf(responseErr, "request failed"))
 		return contracts.ErrorResponse[T](err)
 	}
 	defer response.Body.Close()
@@ -213,7 +213,7 @@ func (c *client[T]) getResponse(res *http.Response) (out contracts.Response[T]) 
 	}
 	data, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
-		err := errors.GeneralError[T](errors.Wrapf(readErr, "failed to read json body into []byte")).WithErrorCode(errors.ErrorCodeResponseProcessingError)
+		err := errors.GeneralFailure[T](errors.Wrapf(readErr, "failed to read json body into []byte")).WithErrorCode(errors.ErrorCodeResponseProcessingError)
 		out = contracts.ErrorResponse[T](err)
 		out = out.WithCode(res.StatusCode)
 		return
@@ -234,7 +234,7 @@ func (c *client[T]) getResponse(res *http.Response) (out contracts.Response[T]) 
 		if unmarshalErr2 := json.Unmarshal(data, &t); unmarshalErr2 == nil {
 			out = contracts.DataResponse(t)
 		} else {
-			err := errors.GeneralError[T](errors.Errorf("failed to parse response body"))
+			err := errors.GeneralFailure[T](errors.Errorf("failed to parse response body"))
 			out = contracts.ErrorResponse[T](err)
 		}
 	} else {

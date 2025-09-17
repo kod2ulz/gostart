@@ -38,11 +38,13 @@ var _ = Describe("API Handler Patterns", func() {
 		It("should handle single entity creation using JSONHandler[T]", func() {
 			// Setup route using the new JSONHandler pattern
 			router.POST("/users", gin_framework.WrapHandler(api.JSONHandler[User](func(ctx contracts.RequestContext) (User, ierrors.Error) {
-				// Load request from context
+				// Load request from HTTP
 				var req CreateUserRequest
 				var modal api.RequestModal[CreateUserRequest]
-				if loadError := modal.FromContext(ctx.Context(), &req); loadError != nil {
-					return User{}, errors.RequestLoadError[CreateUserRequest](loadError)
+				if loaded, loadError := modal.RequestLoad(ctx); loadError != nil {
+					return User{}, errors.RequestLoadFailed[CreateUserRequest](loadError)
+				} else {
+					req = loaded.(CreateUserRequest)
 				}
 
 				// Business logic for creating user
@@ -74,18 +76,10 @@ var _ = Describe("API Handler Patterns", func() {
 		})
 
 		It("should handle list response using JSONHandler[T] with pagination", func() {
-			// Setup route using the new JSONHandler pattern for lists
+			// Setup route using the JSONHandler pattern for lists
 			router.GET("/users", gin_framework.WrapHandler(api.JSONHandler[[]User](func(ctx contracts.RequestContext) ([]User, ierrors.Error) {
-				// Load request parameters from context
-				var req ListUsersRequest
-				var modal api.RequestModal[ListUsersRequest]
-				if loadError := modal.FromContext(ctx.Context(), &req); loadError != nil {
-					return nil, errors.RequestLoadError[ListUsersRequest](loadError)
-				}
-
-				// Business logic for listing users
-				users, _, err := testUserService.ListUsers(&req)
-				return users, err
+				// Business logic for listing users - load request from context
+				return testUserService.ListUsersDirect(ctx)
 			})))
 
 			// Seed some test data
@@ -117,7 +111,7 @@ var _ = Describe("API Handler Patterns", func() {
 				// Extract ID from context (path parameter)
 				id := ctx.Param("id").String()
 				if id == "" {
-					return User{}, errors.GeneralError[any](fmt.Errorf("missing user ID")).WithErrorCodeAndHttpStatusCode("BAD_REQUEST", http.StatusBadRequest)
+					return User{}, errors.GeneralFailure[any](fmt.Errorf("missing user ID")).WithErrorCodeAndHttpStatusCode("BAD_REQUEST", http.StatusBadRequest)
 				}
 
 				// Business logic for getting user by ID
@@ -154,11 +148,13 @@ var _ = Describe("API Handler Patterns", func() {
 
 		It("should handle validation errors properly", func() {
 			router.POST("/users", gin_framework.WrapHandler(api.JSONHandler[User](func(ctx contracts.RequestContext) (User, ierrors.Error) {
-				// Load request from context
+				// Load request from HTTP
 				var req CreateUserRequest
 				var modal api.RequestModal[CreateUserRequest]
-				if loadError := modal.FromContext(ctx.Context(), &req); loadError != nil {
-					return User{}, errors.RequestLoadError[CreateUserRequest](loadError)
+				if loaded, loadError := modal.RequestLoad(ctx); loadError != nil {
+					return User{}, errors.RequestLoadFailed[CreateUserRequest](loadError)
+				} else {
+					req = loaded.(CreateUserRequest)
 				}
 
 				// Business logic for creating user
@@ -192,7 +188,7 @@ var _ = Describe("API Handler Patterns", func() {
 				// Simulate MQ message processing
 				userReq, ok := msg.(*CreateUserRequest)
 				if !ok {
-					return nil, errors.GeneralError[CreateUserRequest](fmt.Errorf("invalid message type")).WithErrorCodeAndHttpStatusCode("BAD_REQUEST", http.StatusBadRequest)
+					return nil, errors.GeneralFailure[CreateUserRequest](fmt.Errorf("invalid message type")).WithErrorCodeAndHttpStatusCode("BAD_REQUEST", http.StatusBadRequest)
 				}
 
 				// Use the same service method
@@ -248,7 +244,7 @@ type CreateUserRequest struct {
 func (r CreateUserRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.RequestParam, err error) {
 	var out CreateUserRequest
 	if loadErr := out.LoadFromJsonBody(ctx, &out); loadErr != nil {
-		return param, errors.RequestLoadError[any](loadErr)
+		return param, errors.RequestLoadFailed[any](loadErr)
 	}
 	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
 		ctxSetter.Set(out.ContextKey(), out)
@@ -256,22 +252,8 @@ func (r CreateUserRequest) RequestLoad(ctx contracts.RequestContext) (param cont
 	return out, nil
 }
 
-type ListUsersRequest struct {
-	Limit  int `json:"limit" validate:"min=1,max=100" example:"20"`
-	Offset int `json:"offset" validate:"min=0" example:"0"`
-	api.RequestModal[ListUsersRequest]
-}
-
-func (r ListUsersRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.RequestParam, err error) {
-	var out ListUsersRequest
-	if loadErr := out.LoadFromJsonBody(ctx, &out); loadErr != nil {
-		return param, errors.RequestLoadError[any](loadErr)
-	}
-	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
-		ctxSetter.Set(out.ContextKey(), out)
-	}
-	return out, nil
-}
+// Use the standard api.ListRequest for pagination
+type ListUsersRequest = api.ListRequest
 
 type UserCreatedEvent struct {
 	UserID    string    `json:"userId"`
@@ -302,7 +284,7 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (User, ierrors.Error) {
 	// Check if email already exists
 	for _, user := range s.users {
 		if user.Email == req.Email {
-			return User{}, errors.GeneralError[CreateUserRequest](fmt.Errorf("email already exists")).WithErrorCodeAndHttpStatusCode("CONFLICT", http.StatusConflict)
+			return User{}, errors.GeneralFailure[CreateUserRequest](fmt.Errorf("email already exists")).WithErrorCodeAndHttpStatusCode("CONFLICT", http.StatusConflict)
 		}
 	}
 
@@ -322,24 +304,38 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (User, ierrors.Error) {
 func (s *UserService) GetUser(id string) (User, ierrors.Error) {
 	user, exists := s.users[id]
 	if !exists {
-		return User{}, errors.NotFoundError[string, string]("user not found")
+		return User{}, errors.NotFound[string, string]("user not found")
 	}
 	return user, nil
 }
 
-func (s *UserService) ListUsers(req *ListUsersRequest) ([]User, *int64, ierrors.Error) {
+func (s *UserService) ListUsers(ctx contracts.RequestContext, param contracts.RequestParam) ([]User, *int64, ierrors.Error) {
 	users := make([]User, 0, len(s.users))
 	for _, user := range s.users {
 		users = append(users, user)
 	}
 
-	// Apply pagination
-	start := req.Offset
+	// Extract pagination from param using interface checks
+	var start, end int
+
+	// Check if param has GetOffset method
+	if listParam, ok := param.(interface{ GetOffset() int }); ok {
+		start = listParam.GetOffset()
+	} else {
+		start = 0
+	}
+
+	// Check if param has GetLimit method
+	if listParam, ok := param.(interface{ GetLimit() int }); ok {
+		end = start + listParam.GetLimit()
+	} else {
+		end = len(users)
+	}
+
+	// Apply bounds
 	if start > len(users) {
 		start = len(users)
 	}
-
-	end := start + req.Limit
 	if end > len(users) {
 		end = len(users)
 	}
@@ -348,6 +344,37 @@ func (s *UserService) ListUsers(req *ListUsersRequest) ([]User, *int64, ierrors.
 	total := int64(len(users))
 
 	return paginatedUsers, &total, nil
+}
+
+// ListUsersDirect loads request from context directly (for JSONHandler pattern)
+func (s *UserService) ListUsersDirect(ctx contracts.RequestContext) ([]User, ierrors.Error) {
+	var param api.ListRequest
+
+	// For GET requests, we need to load the request first using ListRequest's own RequestLoad method
+	if loaded, loadError := param.RequestLoad(ctx); loadError != nil {
+		return nil, errors.RequestLoadFailed[api.ListRequest](loadError)
+	} else {
+		param = loaded.(api.ListRequest)
+	}
+
+	users := make([]User, 0, len(s.users))
+	for _, user := range s.users {
+		users = append(users, user)
+	}
+
+	// Apply pagination using the loaded param
+	start := param.GetOffset()
+	end := start + param.GetLimit()
+
+	// Apply bounds
+	if start > len(users) {
+		start = len(users)
+	}
+	if end > len(users) {
+		end = len(users)
+	}
+
+	return users[start:end], nil
 }
 
 func (s *UserService) seedUsers(count int) {

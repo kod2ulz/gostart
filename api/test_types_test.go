@@ -87,6 +87,12 @@ func (r CreateBookRequest) RequestLoad(ctx contracts.RequestContext) (param cont
 	if loadErr := out.LoadFromJsonBody(ctx, &out); loadErr != nil {
 		return param, gerrors.Errorf("failed to load request: %v", loadErr)
 	}
+
+	// Validate the loaded request directly using utils.Validate
+	if validateErr := utils.Validate.Struct(out); validateErr != nil {
+		return param, gerrors.ValidationFailed[CreateBookRequest](validateErr)
+	}
+
 	out.User, _ = auth.GetUser(ctx.Context()) // ignoring error because some tests won't need r.User
 	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
 		ctxSetter.Set(out.ContextKey(), out)
@@ -182,10 +188,15 @@ func (s *_bookService) seed(size int, user auth.User) (out []*Book, err error) {
 func (s *_bookService) createBook(ctx contracts.RequestContext) (out Book, err ierrors.Error) {
 	var id uuid.UUID
 	var param CreateBookRequest
-	var modal api.RequestModal[CreateBookRequest]
-	if loadError := modal.FromContext(ctx.Context(), &param); loadError != nil {
-		return out, gerrors.RequestLoadError[CreateBookRequest](loadError)
-	} else if id = uuid.New(); param.ID != nil {
+
+	// Use the specific CreateBookRequest.RequestLoad method which includes validation
+	if loaded, loadError := param.RequestLoad(ctx); loadError != nil {
+		return out, gerrors.RequestLoadFailed[CreateBookRequest](loadError)
+	} else {
+		param = loaded.(CreateBookRequest)
+	}
+
+	if id = uuid.New(); param.ID != nil {
 		id = *param.ID
 	}
 	s.data[id] = param.book(id)
@@ -198,7 +209,7 @@ func (s *_bookService) listBooks(ctx contracts.RequestContext) (out []Book, err 
 	var param ListBooksRequest
 	var modal api.RequestModal[api.ListRequest]
 	if loadError := modal.FromContext(ctx.Context(), &param); loadError != nil {
-		return out, gerrors.RequestLoadError[ListBooksRequest](loadError)
+		return out, gerrors.RequestLoadFailed[ListBooksRequest](loadError)
 	}
 	var from, to int = int(param.Offset), int(param.Limit + param.Offset)
 	out = collections.ListMap(s.data.Values().Slice(from, to), collections.ListMapToNoPtrFunc[Book])
@@ -219,9 +230,9 @@ func (s *_bookService) getBookByID(ctx contracts.RequestContext) (out Book, err 
 	var param DetailedBookRequest
 	var modal api.RequestModal[api.ListRequestWithID[uuid.UUID]]
 	if loadError := modal.FromContext(ctx.Context(), &param.ListRequestWithID); loadError != nil {
-		return out, gerrors.RequestLoadError[DetailedBookRequest](loadError)
+		return out, gerrors.RequestLoadFailed[DetailedBookRequest](loadError)
 	} else if book, ok := s.data[param.ID]; !ok {
-		return out, gerrors.NotFoundError[Book](param)
+		return out, gerrors.NotFound[Book](param)
 	} else {
 		return *book, nil
 	}

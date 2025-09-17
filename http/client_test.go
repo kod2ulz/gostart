@@ -94,7 +94,7 @@ var _ = Describe("Http Client", func() {
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				// The client expects the full api.Response structure
-				json.NewEncoder(w).Encode(contracts.ErrorResponse[TestData](errors.GeneralError[TestData](errors.Errorf("invalid input")).WithErrorCode("INVALID_INPUT")))
+				json.NewEncoder(w).Encode(contracts.ErrorResponse[TestData](errors.GeneralFailure[TestData](errors.Errorf("invalid input")).WithErrorCode("INVALID_INPUT")))
 			}))
 
 			res := gostartHttp.Client[TestData](logger).BaseUrl(server.URL).Get(ctx, "/bad-request")

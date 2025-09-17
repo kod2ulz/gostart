@@ -22,19 +22,19 @@ func GenericHandler[P Param, R any](log *logrus.Entry, method string, url ...str
 
 	return func(ctx context.Context) (out R, apiErr ierrors.Error) {
 		if len(url) == 0 {
-			return out, errors.RequestLoadError[P](errors.Errorf("invalid url"))
+			return out, errors.RequestLoadFailed[P](errors.Errorf("invalid url"))
 		} else if param, err = (*new(P)).ContextLoad(ctx); err != nil {
-			return out, errors.RequestLoadError[P](errors.Wrapf(err, "Failed to load %T from context", param))
+			return out, errors.RequestLoadFailed[P](errors.Wrapf(err, "Failed to load %T from context", param))
 		} else if param == nil {
 			var ok bool
 			if param, ok = ctx.Value((*new(P)).ContextKey()).(P); !ok {
-				return out, errors.RequestLoadError[P](errors.Errorf("Got %v when loading %T from context", param, param))
+				return out, errors.RequestLoadFailed[P](errors.Errorf("Got %v when loading %T from context", param, param))
 			}
 		}
 		if res = Client[R](log).Body(&param).Request(ctx, method, strings.Join(url, "/")); res.HasError() {
 			return out, res.Error
 		} else if err = res.ParseDataTo(&out); err != nil {
-			return out, errors.GeneralError[R](errors.Wrapf(err, "failed to parse %T to %T", res.Data, out)).
+			return out, errors.GeneralFailure[R](errors.Wrapf(err, "failed to parse %T to %T", res.Data, out)).
 				WithError(errors.Errorf("encountered error generating verification response")).
 				WithErrorCode(errors.ErrorCodeServiceError)
 		}

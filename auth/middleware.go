@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/contracts"
@@ -60,7 +61,7 @@ func loadParamFromRequest[P contracts.RequestParam](ctx *gin.Context) (param P, 
 	var p contracts.RequestParam
 	adapterCtx := &ginContextAdapter{ctx}
 	if p, e = (*new(P)).RequestLoad(adapterCtx); e != nil {
-		return param, errors.RequestLoadError[P](errors.Wrapf(e, "failed to load %T from request", param))
+		return param, errors.RequestLoadFailed[P](errors.Wrapf(e, "failed to load %T from request", param))
 	}
 	ctx.Set(p.ContextKey(), p)
 	if e = p.Validate(adapterCtx); e != nil {
@@ -82,7 +83,7 @@ func WithUser[TokenRequest contracts.RequestParam, UserResponse SessionUser[uuid
 		if req, loadError = loadParamFromRequest[TokenRequest](c); loadError != nil {
 			c.AbortWithStatusJSON(loadError.HttpCode(), contracts.ErrorResponse[TokenRequest](loadError))
 		} else if validationError := req.Validate(ctx); validationError != nil {
-			e := errors.ServiceErrorUnauthorised(validationError)
+			e := errors.ServiceUnauthorised(validationError)
 			c.AbortWithStatusJSON(e.HttpCode(), contracts.ErrorResponse[UserResponse](e))
 		} else if user, err := svc.Verify(c); err != nil {
 			c.AbortWithStatusJSON(err.HttpCode(), contracts.ErrorResponse[UserResponse](err))

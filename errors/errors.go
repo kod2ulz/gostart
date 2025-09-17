@@ -105,21 +105,17 @@ func _initError[T any](httpCode int, statusCode string, err error) (out ErrorMod
 	return
 }
 
-func ServerError(err error) (out ierrors.Error) {
-	return GeneralError[any](err)
-}
-
-func ServiceError(err error) (out ierrors.Error) {
-	return GeneralError[any](err).
+func ServiceFailure(err error) (out ierrors.Error) {
+	return GeneralFailure[any](err).
 		WithErrorCodeAndHttpStatusCode(ErrorCodeServiceError, http.StatusUnauthorized)
 }
 
-func ServiceErrorUnauthorised(err error) (out ierrors.Error) {
-	return GeneralError[any](err).
+func ServiceUnauthorised(err error) (out ierrors.Error) {
+	return GeneralFailure[any](err).
 		WithErrorCodeAndHttpStatusCode(ErrorCodeUnauthorized, http.StatusUnauthorized)
 }
 
-func GeneralError[T any](err error) (out ierrors.Error) {
+func GeneralFailure[T any](err error) (out ierrors.Error) {
 	er := _initError[T](http.StatusInternalServerError, ErrorCodeServerError, err)
 	if err == nil || !strings.Contains(err.Error(), ". ") {
 		return &er
@@ -130,7 +126,7 @@ func GeneralError[T any](err error) (out ierrors.Error) {
 	return &er
 }
 
-func NotFoundError[T any, P any](param P) (out ierrors.Error) {
+func NotFound[T any, P any](param P) (out ierrors.Error) {
 	er := _initError[T](http.StatusNotFound, ErrorCodeNotFoundError, nil)
 	er.Param = param
 	if er.Message == "" {
@@ -139,7 +135,7 @@ func NotFoundError[T any, P any](param P) (out ierrors.Error) {
 	return &er
 }
 
-func RequestLoadError[T any](err error) (out ierrors.Error) {
+func RequestLoadFailed[T any](err error) (out ierrors.Error) {
 	// Enhanced request loading error parsing
 	errMsg := err.Error()
 	errorModel := _initError[T](http.StatusBadRequest, ErrorCodeRequestLoadError, err)
@@ -186,7 +182,7 @@ func ValidatorError[T any](err error) (out ierrors.Error) {
 	}
 
 	// Fallback to basic validation error
-	return GeneralError[T](err).WithErrorCodeAndHttpStatusCode(ErrorCodeValidatorError, http.StatusBadRequest)
+	return GeneralFailure[T](err).WithErrorCodeAndHttpStatusCode(ErrorCodeValidatorError, http.StatusBadRequest)
 }
 
 // ValidationFailed[T any] provides enhanced validation error parsing for go-playground/validator errors
@@ -210,15 +206,15 @@ func ValidationFailed[T any](err error) (out ierrors.Error) {
 	}
 
 	// Fallback to basic validation error
-	return GeneralError[T](err).WithErrorCodeAndHttpStatusCode(ErrorCodeValidatorError, http.StatusBadRequest)
+	return GeneralFailure[T](err).WithErrorCodeAndHttpStatusCode(ErrorCodeValidatorError, http.StatusBadRequest)
 }
 
 // wrapAsIError wraps a standard error as ierrors.Error for parsing
 func wrapAsIError(err error) ierrors.Error {
-	return GeneralError[any](err)
+	return GeneralFailure[any](err)
 }
 
-func SQLError[T any](err error) (out ierrors.Error) {
+func DatabaseFailure[T any](err error) (out ierrors.Error) {
 	// Use enhanced SQL error parsing
 	if sqlInfo := ParseSQLError(err); sqlInfo != nil {
 		// Map SQL error codes to HTTP status codes
@@ -248,28 +244,32 @@ func SQLError[T any](err error) (out ierrors.Error) {
 	}
 
 	// Fallback to generic SQL error
-	return GeneralError[T](err).WithErrorCode(ErrorCodeSQLError)
+	return GeneralFailure[T](err).WithErrorCode(ErrorCodeSQLError)
 }
 
-func SqlQueryError[P any, T any](param P, out T, err error) (T, ierrors.Error) {
+func DatabaseOperationFailed[P any, T any](param P, out T, err error) (T, ierrors.Error) {
 	if err != nil {
-		if SqlNoRows(err) {
-			return out, NotFoundError[T](param)
+		if DbNoRows(err) {
+			return out, NotFound[T](param)
 		}
-		return out, SQLError[T](err) // This now uses enhanced parsing
+		return out, DatabaseFailure[T](err) // This now uses enhanced parsing
 	}
 	return out, nil
 }
 
 func Wrapf(err error, format string, args ...interface{}) ierrors.Error {
-	return GeneralError[any](fmt.Errorf(format, args...)).WithCause(GeneralError[any](err))
+	return GeneralFailure[any](fmt.Errorf(format, args...)).WithCause(GeneralFailure[any](err))
 }
 
 func Errorf(format string, args ...interface{}) ierrors.Error {
-	return GeneralError[any](fmt.Errorf(format, args...))
+	return GeneralFailure[any](fmt.Errorf(format, args...))
 }
 
 func SqlNoRows(err error) bool {
+	return DbNoRows(err)
+}
+
+func DbNoRows(err error) bool {
 	return err != nil && errors.Is(err, sql.ErrNoRows) || strings.HasSuffix(err.Error(), "no rows in result set")
 }
 
@@ -759,8 +759,8 @@ func EnhancedSQLError[T any](err error, param T) (out T, apiErr ierrors.Error) {
 	}
 
 	// Check for no rows error first
-	if SqlNoRows(err) {
-		return out, NotFoundError[T](param)
+	if DbNoRows(err) {
+		return out, NotFound[T](param)
 	}
 
 	// Try to parse the SQL error for better error messages
@@ -796,5 +796,5 @@ func EnhancedSQLError[T any](err error, param T) (out T, apiErr ierrors.Error) {
 	}
 
 	// Fallback to generic SQL error
-	return out, SQLError[T](err)
+	return out, DatabaseFailure[T](err)
 }

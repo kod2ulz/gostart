@@ -32,6 +32,14 @@ func (r ListRequest) DefaultMetadata(ctx contracts.RequestContext) (out *Meta) {
 	return
 }
 
+func (r ListRequest) GetLimit() int {
+	return int(r.Limit)
+}
+
+func (r ListRequest) GetOffset() int {
+	return int(r.Offset)
+}
+
 func (r ListRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.RequestParam, err error) {
 	var out ListRequest = ListRequest{}
 	var query = func(param string, _default interface{}) int32 {
@@ -69,7 +77,7 @@ func (r ListRequestWithID[ID]) RequestLoad(ctx contracts.RequestContext) (param 
 	var pathId string
 	var out ListRequestWithID[ID] = ListRequestWithID[ID]{ListRequest: ListRequest{}}
 	if p, e := out.ListRequest.RequestLoad(ctx); e != nil {
-		return param, errors.RequestLoadError[ListRequestWithID[ID]](errors.Wrapf(e, "failed to load %T from request", r))
+		return param, errors.RequestLoadFailed[ListRequestWithID[ID]](errors.Wrapf(e, "failed to load %T from request", r))
 	} else if pathId = string(ctx.Param("id", "")); pathId == "" {
 		return param, errors.Errorf("could not load path parameter value with key:id")
 	} else {

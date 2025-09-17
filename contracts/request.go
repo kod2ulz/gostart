@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/kod2ulz/gostart/ierrors"
 )
@@ -53,22 +54,42 @@ func (v Value) String() string {
 }
 
 func (v Value) Int() int {
-	// Implementation needed - for now return 0
+	if v == "" {
+		return 0
+	}
+	if i, err := strconv.Atoi(string(v)); err == nil {
+		return i
+	}
 	return 0
 }
 
 func (v Value) Int64() int64 {
-	// Implementation needed - for now return 0
+	if v == "" {
+		return 0
+	}
+	if i, err := strconv.ParseInt(string(v), 10, 64); err == nil {
+		return i
+	}
 	return 0
 }
 
 func (v Value) Float64() float64 {
-	// Implementation needed - for now return 0
+	if v == "" {
+		return 0
+	}
+	if f, err := strconv.ParseFloat(string(v), 64); err == nil {
+		return f
+	}
 	return 0
 }
 
 func (v Value) Bool() bool {
-	// Implementation needed - for now return false
+	if v == "" {
+		return false
+	}
+	if b, err := strconv.ParseBool(string(v)); err == nil {
+		return b
+	}
 	return false
 }
 
