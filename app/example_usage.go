@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/kod2ulz/gostart/api/frameworks/gin"
 	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/api/frameworks/gin"
 )
 
 // Example usage of the new architecture

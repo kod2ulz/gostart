@@ -11,7 +11,7 @@ func (l *UuidList) Iterate(fn func(uuid.UUID) error) (err error) {
 	for i := range *l {
 		if err = fn((*l)[i]); err != nil {
 			return
-		} 
+		}
 	}
-	return 
+	return
 }

@@ -3,8 +3,8 @@ package mq
 import (
 	"context"
 
-	"github.com/kod2ulz/gostart/logr"
 	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/logr"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

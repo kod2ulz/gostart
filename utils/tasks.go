@@ -77,11 +77,11 @@ func PointerValue[T any](t *T) (out T) {
 
 type BatchProcessorFunc[T any, E error] func(context.Context, T) E
 
-func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor BatchProcessorFunc[T, E], args...T) (err E) {
+func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor BatchProcessorFunc[T, E], args ...T) (err E) {
 
 	if len(args) == 0 {
-    return
-  }
+		return
+	}
 
 	ctxwc, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -93,7 +93,7 @@ func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor 
 	// Divide Data into batches
 	for i := 0; i < len(args); i += batchSize {
 		wg.Add(1)
-		limit := i+batchSize
+		limit := i + batchSize
 		if limit > len(args) {
 			limit = len(args)
 		}

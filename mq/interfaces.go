@@ -105,13 +105,13 @@ type NewWorkerManager interface {
 
 // WorkerOptions defines worker configuration
 type WorkerOptions struct {
-	QueueOptions       QueueOptions
-	BindingKeys       []string
-	ConsumerTag       string
-	PrefetchCount     int
-	AutoAck           bool
-	Exclusive         bool
-	ErrorHandler      ErrorProcessor
+	QueueOptions  QueueOptions
+	BindingKeys   []string
+	ConsumerTag   string
+	PrefetchCount int
+	AutoAck       bool
+	Exclusive     bool
+	ErrorHandler  ErrorProcessor
 }
 
 // BrokerFactory creates broker-specific connections
@@ -119,16 +119,16 @@ type BrokerFactory func(config BrokerConfig) (Connection, error)
 
 // BrokerConfig represents generic broker configuration
 type BrokerConfig struct {
-	Host            string
-	Port            string
-	VHost           string
-	Username        string
-	Password        string
-	Protocol        string
-	Heartbeat       time.Duration
-	Timeout         time.Duration
-	MaxRetries      int
-	RetryDelay      time.Duration
+	Host              string
+	Port              string
+	VHost             string
+	Username          string
+	Password          string
+	Protocol          string
+	Heartbeat         time.Duration
+	Timeout           time.Duration
+	MaxRetries        int
+	RetryDelay        time.Duration
 	BackoffMultiplier float64
-	AdditionalArgs   map[string]interface{}
+	AdditionalArgs    map[string]interface{}
 }

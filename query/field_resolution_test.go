@@ -111,7 +111,7 @@ var _ = Describe("Field Resolution", func() {
 		ctx := context.Background()
 		provider := mockParameterProvider(map[string]string{
 			"username": "john", // should match
-			"userName":  "jane", // should NOT match (different word casing)
+			"userName": "jane", // should NOT match (different word casing)
 		})
 
 		fmt.Println("=== Loading URL parameters ===")

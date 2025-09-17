@@ -1,4 +1,3 @@
-
 package object_test
 
 import (

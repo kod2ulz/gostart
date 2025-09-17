@@ -221,4 +221,3 @@ func (s *ConsulSource) Deregister(serviceID string) error {
 
 	return nil
 }
-

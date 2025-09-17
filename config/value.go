@@ -24,7 +24,7 @@ func (v Value) Int64() int64 {
 	return int64(v.Int())
 }
 
-func (v Value) Fload32() (float32) {
+func (v Value) Fload32() float32 {
 	v_flt, _ := strconv.ParseFloat(v.String(), 32)
 	return float32(v_flt)
 }

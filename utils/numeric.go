@@ -15,10 +15,10 @@ func init() {
 }
 
 type NumericType interface {
-	int | int8 | int16 | int32 | int64 
+	int | int8 | int16 | int32 | int64
 }
 
-func Max[N NumericType](nums...N) (out N) {
+func Max[N NumericType](nums ...N) (out N) {
 	if len(nums) == 0 {
 		return
 	}
@@ -31,7 +31,7 @@ func Max[N NumericType](nums...N) (out N) {
 	return
 }
 
-func Min[N NumericType](nums...N) (out N) {
+func Min[N NumericType](nums ...N) (out N) {
 	if len(nums) == 0 {
 		return
 	}
@@ -44,9 +44,9 @@ func Min[N NumericType](nums...N) (out N) {
 	return
 }
 
-func Round[N float32|float64] (precision int, n N) N {
+func Round[N float32 | float64](precision int, n N) N {
 	pow := math.Pow10(precision)
-	return N(math.Round(float64(n)*pow)/pow)
+	return N(math.Round(float64(n)*pow) / pow)
 }
 
 func FormatMoney(currency string, amount float64, precision int) string {

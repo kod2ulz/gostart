@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kod2ulz/gostart/logr"
 	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/logr"
 )
 
 func LogError(log *logr.Logger, err error, message string, args ...interface{}) {

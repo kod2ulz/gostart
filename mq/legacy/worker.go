@@ -6,8 +6,8 @@ import (
 	"time"
 
 	json "github.com/json-iterator/go"
-	"github.com/kod2ulz/gostart/logr"
 	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/logr"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -90,7 +90,7 @@ type worker[P, R any] struct {
 }
 
 func (w *worker[P, R]) error(err error, msg string, args ...interface{}) error {
-	w.log.Error(fmt.Sprintf(msg, args...), "queue", w.queue, "keys", w.bindkeys, "exchange", w.exchange.Name(), "error", err,)
+	w.log.Error(fmt.Sprintf(msg, args...), "queue", w.queue, "keys", w.bindkeys, "exchange", w.exchange.Name(), "error", err)
 	return errors.Wrapf(err, msg, args...)
 }
 

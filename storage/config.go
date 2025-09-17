@@ -113,5 +113,5 @@ func (c *Conf) postgresConnectionString() string {
 }
 
 func (c *Conf) redisConnectionString() string {
-    return fmt.Sprintf("%s:%s", c.Host, c.Port)
+	return fmt.Sprintf("%s:%s", c.Host, c.Port)
 }

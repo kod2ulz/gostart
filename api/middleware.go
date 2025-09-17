@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/config"
-	"github.com/kod2ulz/gostart/logr"
 	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/logr"
 )
 
 var (
@@ -16,25 +16,25 @@ var (
 
 // RequestLogConfig holds configuration for request logging
 type RequestLogConfig struct {
-	Enabled           bool
-	RequestIDHeader   string
-	LogUser           bool
-	LogRequestBody    bool
-	LogResponseBody   bool
-	SensitiveHeaders  []string
-	ExcludedPaths     []string
+	Enabled          bool
+	RequestIDHeader  string
+	LogUser          bool
+	LogRequestBody   bool
+	LogResponseBody  bool
+	SensitiveHeaders []string
+	ExcludedPaths    []string
 }
 
 // DefaultRequestLogConfig returns the default logging configuration
 func DefaultRequestLogConfig() *RequestLogConfig {
 	return &RequestLogConfig{
-		Enabled:         true,
+		Enabled:          true,
 		RequestIDHeader:  config.Get("api.request-id.header", "X-Request-Id").String(),
-		LogUser:         true,
-		LogRequestBody:  false,
-		LogResponseBody: false,
+		LogUser:          true,
+		LogRequestBody:   false,
+		LogResponseBody:  false,
 		SensitiveHeaders: []string{"Authorization", "Cookie", "Set-Cookie"},
-		ExcludedPaths:   []string{"/health", "/ok"},
+		ExcludedPaths:    []string{"/health", "/ok"},
 	}
 }
 

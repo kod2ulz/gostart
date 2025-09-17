@@ -87,8 +87,6 @@ type TreeNode[ID comparable, T TreeDataInterface[ID]] struct {
 	childLabel string // New field for configurable child label
 }
 
-
-
 func (t TreeNode[ID, T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.toData())
 }
@@ -175,7 +173,7 @@ func (t *TreeNode[ID, T]) RemoveChild(id ID) (affectedNodes int64) {
 	} else if c, ok := t.children[id]; ok {
 		return c.Remove()
 	}
-	return 
+	return
 }
 
 func (t *TreeNode[ID, T]) addToParent(parentId *ID) (affectedNodes int64) {
@@ -235,7 +233,7 @@ func (t *TreeNode[ID, T]) Add(d T) (affectedNodes int64) {
 		affectedNodes += node.addToParent(d.ParentIdentifier())
 	} else {
 		t.children[d.Identifier()], node.parent = node, t
-		affected ++
+		affected++
 	}
 	return affectedNodes + affected
 }
@@ -353,4 +351,3 @@ func (t TreeNode[ID, T]) Walk(fn func(node *TreeNode[ID, T])) {
 		}
 	}
 }
-

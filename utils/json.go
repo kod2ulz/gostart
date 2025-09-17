@@ -3,9 +3,9 @@ package utils
 import (
 	"fmt"
 
+	json "github.com/json-iterator/go"
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/logr"
-	json "github.com/json-iterator/go"
 )
 
 type jsonUtils struct{}
@@ -38,7 +38,7 @@ func (u jsonUtils) String(log *logr.Logger, obj interface{}) string {
 	return ""
 }
 
-func (u jsonUtils) Decode(log *logr.Logger, data []byte, obj interface{}) (interface{}) {
+func (u jsonUtils) Decode(log *logr.Logger, data []byte, obj interface{}) interface{} {
 	if err := json.Unmarshal(data, &obj); err != nil {
 		log.Error("data un-marshalling failed", "object_type", fmt.Sprintf("%T", obj), "error", err)
 	}

@@ -19,8 +19,8 @@ var _ = Describe("MQ Handlers", func() {
 		buffer      *bytes.Buffer
 		mockManager *MockWorkerManager
 		logger      *logr.Logger
-		ctx          context.Context
-		handler      *mq.UnifiedHandler
+		ctx         context.Context
+		handler     *mq.UnifiedHandler
 	)
 
 	BeforeEach(func() {
@@ -214,14 +214,14 @@ var _ = Describe("MQ Handlers", func() {
 // Mock implementations for testing
 
 type MockWorkerManager struct {
-	expectedError       error
-	lastQueueName       string
-	lastExchange        string
-	lastProcessor       mq.Processor
-	lastWorkerOptions   mq.WorkerOptions
-	expectedPublisher   mq.NewPublisher
+	expectedError         error
+	lastQueueName         string
+	lastExchange          string
+	lastProcessor         mq.Processor
+	lastWorkerOptions     mq.WorkerOptions
+	expectedPublisher     mq.NewPublisher
 	lastPublisherExchange string
-	lastPublisherKey     string
+	lastPublisherKey      string
 }
 
 func (m *MockWorkerManager) CreateWorker(queue, exchange string, processor mq.Processor, opts mq.WorkerOptions) (mq.NewConsumer, error) {

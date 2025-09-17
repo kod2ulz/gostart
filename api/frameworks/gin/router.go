@@ -13,10 +13,10 @@ import (
 
 // GinRouter implements the api.Router interface using Gin
 type GinRouter struct {
-	engine         *gin.Engine
-	group          *gin.RouterGroup
+	engine          *gin.Engine
+	group           *gin.RouterGroup
 	openAPIRegistry *openapi.RouteRegistry
-	openAPIConfig  *openapi.Info
+	openAPIConfig   *openapi.Info
 }
 
 // RequestContext implements both contracts.RequestContext and api.RequestContext
@@ -90,9 +90,9 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 	}
 
 	router := &GinRouter{
-		engine:         engine,
+		engine:          engine,
 		openAPIRegistry: openAPIRegistry,
-		openAPIConfig:  openAPIConfig,
+		openAPIConfig:   openAPIConfig,
 	}
 
 	// Configure static paths

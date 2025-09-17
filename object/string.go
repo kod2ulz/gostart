@@ -22,7 +22,7 @@ func (s String) Split(sep string) (out collections.List[string]) {
 	return strings.Split(string(s), sep)
 }
 
-func (s String) Variations(formats...string) (out collections.List[string]) {
+func (s String) Variations(formats ...string) (out collections.List[string]) {
 	if s == "" || len(formats) == 0 {
 		return collections.List[string]{string(s)}
 	}
@@ -30,7 +30,7 @@ func (s String) Variations(formats...string) (out collections.List[string]) {
 	for i := range formats {
 		out[i] = fmt.Sprintf(formats[i], s)
 	}
-	return 
+	return
 }
 
 func (s String) SubstringBefore(r byte) String {

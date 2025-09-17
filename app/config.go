@@ -23,7 +23,7 @@ func Conf() *conf {
 		HttpAddress: config.Get("APP_HTTP_ADDRESS", "0.0.0.0").String(),
 		Location:    config.Get("APP_TIME_LOCATION", "Africa/Kampala").Location(),
 		Uptime:      UptimeCheckConf(),
-		}
+	}
 	return _config
 }
 
@@ -40,7 +40,6 @@ type conf struct {
 func (c conf) Address() string {
 	return fmt.Sprintf("%s:%d", c.HttpAddress, c.HttpPort)
 }
-
 
 type uptimeCheckConf struct {
 	Interval time.Duration

@@ -61,7 +61,7 @@ type Operation struct {
 // Parameter represents an operation parameter
 type Parameter struct {
 	Name        string `json:"name"`
-	In          string `json:"in"`          // "query", "header", "path", "cookie"
+	In          string `json:"in"` // "query", "header", "path", "cookie"
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required"`
 	Schema      Schema `json:"schema"`

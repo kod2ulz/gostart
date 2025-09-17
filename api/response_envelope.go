@@ -11,13 +11,13 @@ import (
 
 // ResponseEnvelope represents the standardized response format
 type ResponseEnvelope struct {
-	Success    bool        `json:"success"`
-	Type       string      `json:"type"`
-	Data       any         `json:"data,omitempty"`
-	References any         `json:"references,omitempty"`
-	Meta       *Meta       `json:"meta,omitempty"`
-	Time       int64       `json:"time"`
-	Error      *ErrorInfo  `json:"error,omitempty"`
+	Success    bool       `json:"success"`
+	Type       string     `json:"type"`
+	Data       any        `json:"data,omitempty"`
+	References any        `json:"references,omitempty"`
+	Meta       *Meta      `json:"meta,omitempty"`
+	Time       int64      `json:"time"`
+	Error      *ErrorInfo `json:"error,omitempty"`
 }
 
 // Meta contains pagination metadata
@@ -197,7 +197,6 @@ func SetResponseReference(ctx contracts.RequestContext, key string, value any) e
 	}
 	return setResponseReferences(ctx, refs)
 }
-
 
 // getResponseMetadata extracts metadata from context
 func getResponseMetadata(ctx contracts.RequestContext) *Meta {

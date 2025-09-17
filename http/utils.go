@@ -43,6 +43,6 @@ func newHttpRequest(_url *url.URL, method string, body interface{}) (request *ht
 	var payload io.Reader
 	if payload, err = toReader(body); err != nil {
 		return nil, fmt.Errorf("failed to encode body into reader: %w", err)
-	} 
+	}
 	return http.NewRequest(method, _url.String(), payload)
 }

@@ -14,8 +14,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-
-
 var _ = Describe("Database Configuration", func() {
 	var pgContainer *postgres.PostgresContainer
 	var dbPool *pgxpool.Pool
@@ -42,7 +40,7 @@ var _ = Describe("Database Configuration", func() {
 		dbPool, err = pgxpool.New(ctx, connStr)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = dbPool.Exec(ctx, `CREATE TABLE app_config (key TEXT PRIMARY KEY, value TEXT)`);
+		_, err = dbPool.Exec(ctx, `CREATE TABLE app_config (key TEXT PRIMARY KEY, value TEXT)`)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = dbPool.Exec(ctx, `INSERT INTO app_config (key, value) VALUES ('db.setting', 'db_value'), ('db.port', '5432')`)
@@ -71,7 +69,7 @@ var _ = Describe("Database Configuration", func() {
 
 	It("should use the cache", func() {
 		// Set a 1-second cache
-		config.DB.WithCacheTTL(1 * time.Second).From(dbPool, "app_config")
+		config.DB.WithCacheTTL(1*time.Second).From(dbPool, "app_config")
 
 		// First call, should hit DB
 		val1 := config.DB.Get("db.setting")
@@ -132,7 +130,7 @@ var _ = Describe("Database Configuration", func() {
 		// 3. Disable seeding and get again to ensure it reads the new value
 		config.DB.SeedMissing(false)
 		val2 := config.DB.Get("new.feature.flag", "true") // Use different default
-		Expect(val2.Bool()).To(BeFalse()) // Should be the value from the DB, not the default
+		Expect(val2.Bool()).To(BeFalse())                 // Should be the value from the DB, not the default
 	})
 
 	It("should implicitly enable seeding when a custom seeder is provided", func() {

@@ -8,8 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-
-
 var _ = Describe("YAML Configuration", func() {
 
 	BeforeEach(func() {

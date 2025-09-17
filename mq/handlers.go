@@ -13,20 +13,20 @@ import (
 
 // UnifiedHandler provides a single, flexible API for handling MQ messages
 type UnifiedHandler struct {
-	manager     NewWorkerManager
-	theme       string
-	logger      *logr.Logger
-	ctx         context.Context
+	manager NewWorkerManager
+	theme   string
+	logger  *logr.Logger
+	ctx     context.Context
 }
 
 // HandlerConfig defines handler configuration
 type HandlerConfig struct {
-	Manager       NewWorkerManager
-	Theme         string
-	Logger        *logr.Logger
-	Context       context.Context
-	ErrorHandler  ErrorProcessor
-	RetryPolicy   RetryPolicy
+	Manager      NewWorkerManager
+	Theme        string
+	Logger       *logr.Logger
+	Context      context.Context
+	ErrorHandler ErrorProcessor
+	RetryPolicy  RetryPolicy
 }
 
 // RetryPolicy defines retry behavior

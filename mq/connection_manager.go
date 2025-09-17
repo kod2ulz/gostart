@@ -11,9 +11,9 @@ import (
 
 // ConnectionManager manages both publisher and consumer connections with proper retry logic
 type ConnectionManager struct {
-	config     *Conf
-	logger     *logr.Logger
-	ctx        context.Context
+	config *Conf
+	logger *logr.Logger
+	ctx    context.Context
 
 	publisherConn *RetryableConnection
 	consumerConn  *RetryableConnection
@@ -89,12 +89,12 @@ func (cm *ConnectionManager) DeclareExchange(name, kind string, options Exchange
 	}
 
 	exchange := &ManagedExchange{
-		name:           name,
-		kind:           kind,
-		options:        options,
-		publisherConn:  cm.publisherConn,
-		consumerConn:   cm.consumerConn,
-		logger:         cm.logger.ExtendWithField("exchange", name),
+		name:          name,
+		kind:          kind,
+		options:       options,
+		publisherConn: cm.publisherConn,
+		consumerConn:  cm.consumerConn,
+		logger:        cm.logger.ExtendWithField("exchange", name),
 	}
 
 	// Declare exchange on both connections
@@ -123,11 +123,11 @@ func (cm *ConnectionManager) DeclareQueue(name string, options QueueOptions) (*M
 	}
 
 	queue := &ManagedQueue{
-		name:           name,
-		options:        options,
-		publisherConn:  cm.publisherConn,
-		consumerConn:   cm.consumerConn,
-		logger:         cm.logger.ExtendWithField("queue", name),
+		name:          name,
+		options:       options,
+		publisherConn: cm.publisherConn,
+		consumerConn:  cm.consumerConn,
+		logger:        cm.logger.ExtendWithField("queue", name),
 	}
 
 	// Declare queue on both connections
@@ -209,11 +209,11 @@ func (cm *ConnectionManager) GetStats() map[string]interface{} {
 	defer cm.mu.RUnlock()
 
 	return map[string]interface{}{
-		"connected":     cm.IsConnected(),
-		"exchanges":     len(cm.exchanges),
-		"queues":        len(cm.queues),
-		"publisher":     cm.publisherConn.GetStats(),
-		"consumer":      cm.consumerConn.GetStats(),
+		"connected": cm.IsConnected(),
+		"exchanges": len(cm.exchanges),
+		"queues":    len(cm.queues),
+		"publisher": cm.publisherConn.GetStats(),
+		"consumer":  cm.consumerConn.GetStats(),
 	}
 }
 

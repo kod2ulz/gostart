@@ -113,7 +113,7 @@ func (s *VaultSource) getManyFromVault(ctx context.Context, keys []string) ([]co
 	for path, pathKeys := range keysByPath {
 		secret, err := client.Logical().Read(path)
 		if err != nil {
-		if firstErr == nil {
+			if firstErr == nil {
 				firstErr = err // Capture the first error we encounter
 			}
 			continue // Can't read this path

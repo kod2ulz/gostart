@@ -60,7 +60,7 @@ func createSignupRequest() auth.SignupRequest {
 		Password: fmt.Sprintf("%d@Paswerd", time.Now().Unix())}
 }
 
-func registerUser[ID comparable, U auth.SessionUser[ID]](ctx context.Context, signupReq auth.SignupRequest, sessionService *auth.GenericSessionService[ID, U]) (out U){
+func registerUser[ID comparable, U auth.SessionUser[ID]](ctx context.Context, signupReq auth.SignupRequest, sessionService *auth.GenericSessionService[ID, U]) (out U) {
 	// Note: Context validation removed for now since it requires RequestContext
 	var err ierrors.Error
 	if out, err = sessionService.Signup(ctx); err != nil {
@@ -69,7 +69,7 @@ func registerUser[ID comparable, U auth.SessionUser[ID]](ctx context.Context, si
 	return
 }
 
-func authenticateUser[ID comparable, U auth.SessionUser[ID]](ctx context.Context, signupReq auth.SignupRequest, sessionService *auth.GenericSessionService[ID, U]) (token auth.TokenResponse){
+func authenticateUser[ID comparable, U auth.SessionUser[ID]](ctx context.Context, signupReq auth.SignupRequest, sessionService *auth.GenericSessionService[ID, U]) (token auth.TokenResponse) {
 	// Simplified stub implementation
 	return auth.TokenResponse{AccessToken: "stub-token"}
 }

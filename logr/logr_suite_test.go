@@ -1,4 +1,3 @@
-
 package logr_test
 
 import (

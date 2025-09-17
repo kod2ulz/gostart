@@ -6,7 +6,7 @@ import (
 
 // registry manages router factory registration
 var registry = struct {
-	factories map[string]RouterFactory
+	factories      map[string]RouterFactory
 	defaultFactory string
 }{
 	factories: make(map[string]RouterFactory),

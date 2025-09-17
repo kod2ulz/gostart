@@ -11,7 +11,7 @@ type Annotation struct {
 	// Basic Information
 	Summary     string   `json:"summary,omitempty"`
 	Description string   `json:"description,omitempty"`
-	OperationID string  `json:"operationId,omitempty"`
+	OperationID string   `json:"operationId,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	Deprecated  bool     `json:"deprecated,omitempty"`
 
@@ -38,7 +38,7 @@ type Annotation struct {
 // ParameterAnnotation represents a parameter annotation
 type ParameterAnnotation struct {
 	Name        string      `json:"name"`
-	In          string      `json:"in"`          // "query", "header", "path", "cookie"
+	In          string      `json:"in"` // "query", "header", "path", "cookie"
 	Description string      `json:"description,omitempty"`
 	Required    bool        `json:"required"`
 	Schema      *Schema     `json:"schema,omitempty"`
@@ -48,10 +48,10 @@ type ParameterAnnotation struct {
 
 // ResponseAnnotation represents a response annotation
 type ResponseAnnotation struct {
-	Description string                 `json:"description"`
-	Headers     map[string]Header      `json:"headers,omitempty"`
-	Content     map[string]MediaType  `json:"content,omitempty"`
-	Links       map[string]Link        `json:"links,omitempty"`
+	Description string               `json:"description"`
+	Headers     map[string]Header    `json:"headers,omitempty"`
+	Content     map[string]MediaType `json:"content,omitempty"`
+	Links       map[string]Link      `json:"links,omitempty"`
 }
 
 // ExternalDocs represents external documentation
@@ -62,51 +62,51 @@ type ExternalDocs struct {
 
 // Schema represents a JSON schema
 type Schema struct {
-	Type                 string             `json:"type,omitempty"`
-	Format               string             `json:"format,omitempty"`
-	Description          string             `json:"description,omitempty"`
-	Enum                 []interface{}      `json:"enum,omitempty"`
-	Items                *Schema            `json:"items,omitempty"`
-	Properties           map[string]Schema   `json:"properties,omitempty"`
-	Required             []string           `json:"required,omitempty"`
-	AllOf                []Schema           `json:"allOf,omitempty"`
-	AnyOf                []Schema           `json:"anyOf,omitempty"`
-	OneOf                []Schema           `json:"oneOf,omitempty"`
-	Not                  *Schema            `json:"not,omitempty"`
-	AdditionalProperties *Schema            `json:"additionalProperties,omitempty"`
-	Default              interface{}        `json:"default,omitempty"`
-	Example              interface{}        `json:"example,omitempty"`
-	Ref                  string             `json:"$ref,omitempty"`
+	Type                 string            `json:"type,omitempty"`
+	Format               string            `json:"format,omitempty"`
+	Description          string            `json:"description,omitempty"`
+	Enum                 []interface{}     `json:"enum,omitempty"`
+	Items                *Schema           `json:"items,omitempty"`
+	Properties           map[string]Schema `json:"properties,omitempty"`
+	Required             []string          `json:"required,omitempty"`
+	AllOf                []Schema          `json:"allOf,omitempty"`
+	AnyOf                []Schema          `json:"anyOf,omitempty"`
+	OneOf                []Schema          `json:"oneOf,omitempty"`
+	Not                  *Schema           `json:"not,omitempty"`
+	AdditionalProperties *Schema           `json:"additionalProperties,omitempty"`
+	Default              interface{}       `json:"default,omitempty"`
+	Example              interface{}       `json:"example,omitempty"`
+	Ref                  string            `json:"$ref,omitempty"`
 }
 
 // Header represents a header definition
 type Header struct {
-	Description string  `json:"description,omitempty"`
-	Required    bool    `json:"required,omitempty"`
-	Deprecated  bool    `json:"deprecated,omitempty"`
-	Schema      *Schema `json:"schema,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Required    bool        `json:"required,omitempty"`
+	Deprecated  bool        `json:"deprecated,omitempty"`
+	Schema      *Schema     `json:"schema,omitempty"`
 	Example     interface{} `json:"example,omitempty"`
 }
 
 // MediaType represents a media type
 type MediaType struct {
-	Schema   *Schema               `json:"schema,omitempty"`
-	Example  interface{}           `json:"example,omitempty"`
-	Examples map[string]Example    `json:"examples,omitempty"`
+	Schema   *Schema                      `json:"schema,omitempty"`
+	Example  interface{}                  `json:"example,omitempty"`
+	Examples map[string]Example           `json:"examples,omitempty"`
 	Encoding map[string]MediaTypeEncoding `json:"encoding,omitempty"`
 }
 
 // Example represents an example
 type Example struct {
-	Summary     string      `json:"summary,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Value       interface{} `json:"value,omitempty"`
-	ExternalValue string    `json:"externalValue,omitempty"`
+	Summary       string      `json:"summary,omitempty"`
+	Description   string      `json:"description,omitempty"`
+	Value         interface{} `json:"value,omitempty"`
+	ExternalValue string      `json:"externalValue,omitempty"`
 }
 
 // MediaTypeEncoding represents encoding information
 type MediaTypeEncoding struct {
-	ContentType    string            `json:"contentType,omitempty"`
+	ContentType   string            `json:"contentType,omitempty"`
 	Headers       map[string]Header `json:"headers,omitempty"`
 	Style         string            `json:"style,omitempty"`
 	Explode       bool              `json:"explode,omitempty"`
@@ -115,19 +115,19 @@ type MediaTypeEncoding struct {
 
 // Link represents a link
 type Link struct {
-	OperationRef string            `json:"operationRef,omitempty"`
-	OperationID  string            `json:"operationId,omitempty"`
-	Description  string            `json:"description,omitempty"`
+	OperationRef string                 `json:"operationRef,omitempty"`
+	OperationID  string                 `json:"operationId,omitempty"`
+	Description  string                 `json:"description,omitempty"`
 	Parameters   map[string]interface{} `json:"parameters,omitempty"`
-	RequestBody  interface{}        `json:"requestBody,omitempty"`
-	Server       *Server           `json:"server,omitempty"`
+	RequestBody  interface{}            `json:"requestBody,omitempty"`
+	Server       *Server                `json:"server,omitempty"`
 }
 
 // Server represents a server
 type Server struct {
-	URL         string                     `json:"url"`
-	Description string                     `json:"description,omitempty"`
-	Variables   map[string]ServerVariable  `json:"variables,omitempty"`
+	URL         string                    `json:"url"`
+	Description string                    `json:"description,omitempty"`
+	Variables   map[string]ServerVariable `json:"variables,omitempty"`
 }
 
 // ServerVariable represents a server variable
@@ -145,14 +145,14 @@ type Annotatable interface {
 
 // AnnotationStore manages annotations for routes and handlers
 type AnnotationStore struct {
-	routeAnnotations  map[string][]Annotation
+	routeAnnotations   map[string][]Annotation
 	handlerAnnotations map[reflect.Type][]Annotation
 }
 
 // NewAnnotationStore creates a new annotation store
 func NewAnnotationStore() *AnnotationStore {
 	return &AnnotationStore{
-		routeAnnotations:  make(map[string][]Annotation),
+		routeAnnotations:   make(map[string][]Annotation),
 		handlerAnnotations: make(map[reflect.Type][]Annotation),
 	}
 }

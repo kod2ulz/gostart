@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
+	"github.com/kod2ulz/gostart/api/openapi"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
-	"github.com/kod2ulz/gostart/api/openapi"
 )
 
 // Router defines a framework-agnostic router interface
@@ -119,4 +119,3 @@ func DefaultRouterConfig() *RouterConfig {
 		StaticPaths: make(map[string]string),
 	}
 }
-

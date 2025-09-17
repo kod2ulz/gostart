@@ -138,7 +138,6 @@ func (a *ap) shutdown() {
 	a.log.Info("shutting down")
 }
 
-
 func WithStaticFileHandler(webPath, filePath string) AppIniter {
 	return func(a *ap) error {
 		if a == nil {

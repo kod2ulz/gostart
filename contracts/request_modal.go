@@ -53,7 +53,6 @@ func (r RequestModal[T]) ContextKey() string {
 	return fmt.Sprintf("%T", *new(T))
 }
 
-
 // ContextLoad retrieves parameter from standard Go context
 func (r RequestModal[T]) ContextLoad(ctx context.Context) (RequestParam, error) {
 	val := ctx.Value(r.ContextKey())

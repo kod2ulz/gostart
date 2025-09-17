@@ -19,25 +19,25 @@ type RabbitMQConnection struct {
 
 // RabbitMQPublisher implements the Publisher interface
 type RabbitMQPublisher struct {
-	exchange *ManagedExchange
-	logger   *logr.Logger
+	exchange   *ManagedExchange
+	logger     *logr.Logger
 	defaultKey string
 }
 
 // RabbitMQConsumer implements the NewConsumer interface
 type RabbitMQConsumer struct {
-	queue         *ManagedQueue
-	exchange      *ManagedExchange
-	bindingKeys   []string
-	processor     Processor
-	options       WorkerOptions
-	logger        *logr.Logger
-	ctx           context.Context
-	cancel        context.CancelFunc
+	queue       *ManagedQueue
+	exchange    *ManagedExchange
+	bindingKeys []string
+	processor   Processor
+	options     WorkerOptions
+	logger      *logr.Logger
+	ctx         context.Context
+	cancel      context.CancelFunc
 
-	messages      <-chan amqp.Delivery
-	running       bool
-	mu            sync.RWMutex
+	messages <-chan amqp.Delivery
+	running  bool
+	mu       sync.RWMutex
 }
 
 // RabbitMQWorkerManager implements the NewWorkerManager interface
@@ -143,9 +143,9 @@ func (r *RabbitMQConnection) Consume(queue, consumer string, opts ConsumeOptions
 // Publisher interface methods
 func NewRabbitMQPublisher(exchange *ManagedExchange, defaultKey string, logger *logr.Logger) *RabbitMQPublisher {
 	return &RabbitMQPublisher{
-		exchange:    exchange,
-		logger:      logger,
-		defaultKey:  defaultKey,
+		exchange:   exchange,
+		logger:     logger,
+		defaultKey: defaultKey,
 	}
 }
 

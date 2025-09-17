@@ -9,10 +9,10 @@ import (
 	"time"
 
 	json "github.com/json-iterator/go"
+	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/ierrors"
-	"github.com/kod2ulz/gostart/collections"
 	"github.com/sirupsen/logrus"
 )
 
@@ -221,10 +221,10 @@ func (c *client[T]) getResponse(res *http.Response) (out contracts.Response[T]) 
 
 	// A temporary struct to help unmarshal the error field into a concrete type
 	type tempResponse struct {
-		Success bool                 `json:"success"`
+		Success bool                  `json:"success"`
 		Error   *errors.ErrorModel[T] `json:"error"`
-		Data    interface{}          `json:"data"`
-		Meta    *contracts.Metadata  `json:"meta"`
+		Data    interface{}           `json:"data"`
+		Meta    *contracts.Metadata   `json:"meta"`
 	}
 
 	var temp tempResponse

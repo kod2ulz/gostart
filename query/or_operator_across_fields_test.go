@@ -84,8 +84,8 @@ var _ = Describe("OR Operator Across Fields", func() {
 
 		ctx := context.Background()
 		provider := mockParameterProvider(map[string]string{
-			"*role":     "admin", // Star-prefixed field 1
-			"*accountId": "123",  // Star-prefixed field 2
+			"*role":      "admin", // Star-prefixed field 1
+			"*accountId": "123",   // Star-prefixed field 2
 		})
 
 		fmt.Println("=== Testing OR group with multiple star fields ===")

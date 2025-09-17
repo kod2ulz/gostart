@@ -15,22 +15,22 @@ import (
 
 // RetryableConnection implements a connection with automatic retry and backoff
 type RetryableConnection struct {
-	config     *Conf
-	logger     *logr.Logger
-	ctx        context.Context
+	config *Conf
+	logger *logr.Logger
+	ctx    context.Context
 
 	connection *amqp.Connection
 	channel    *amqp.Channel
 	mu         sync.RWMutex
 
-	errorChan   chan *amqp.Error
-	readyChan   chan struct{}
-	connected  bool
+	errorChan chan *amqp.Error
+	readyChan chan struct{}
+	connected bool
 
-	maxRetries      int
-	baseDelay      time.Duration
-	maxDelay       time.Duration
-	backoffFactor  float64
+	maxRetries    int
+	baseDelay     time.Duration
+	maxDelay      time.Duration
+	backoffFactor float64
 }
 
 // NewRetryableConnection creates a new connection with retry logic
@@ -274,8 +274,8 @@ func (rc *RetryableConnection) GetStats() map[string]interface{} {
 	defer rc.mu.RUnlock()
 
 	return map[string]interface{}{
-		"connected": rc.connected,
+		"connected":   rc.connected,
 		"has_channel": rc.channel != nil,
-		"config":     rc.config.String(),
+		"config":      rc.config.String(),
 	}
 }

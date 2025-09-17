@@ -15,99 +15,99 @@ type RequestContract struct {
 	PathParameters  map[string]ParameterContract `json:"pathParameters,omitempty"`
 	QueryParameters map[string]ParameterContract `json:"queryParameters,omitempty"`
 	Headers         map[string]ParameterContract `json:"headers,omitempty"`
-	Body            *BodyContract                 `json:"body,omitempty"`
+	Body            *BodyContract                `json:"body,omitempty"`
 	Cookies         map[string]ParameterContract `json:"cookies,omitempty"`
 	ContentType     string                       `json:"contentType,omitempty"`
 	Accept          string                       `json:"accept,omitempty"`
-	Authorization   *AuthorizationContract        `json:"authorization,omitempty"`
+	Authorization   *AuthorizationContract       `json:"authorization,omitempty"`
 }
 
 // ResponseContract represents the complete response specification
 type ResponseContract struct {
-	StatusCode      int                         `json:"statusCode"`
-	ContentType     string                      `json:"contentType,omitempty"`
+	StatusCode      int                          `json:"statusCode"`
+	ContentType     string                       `json:"contentType,omitempty"`
 	Headers         map[string]ParameterContract `json:"headers,omitempty"`
-	Body            *BodyContract               `json:"body,omitempty"`
-	File            *FileContract               `json:"file,omitempty"`
-	Stream          *StreamContract             `json:"stream,omitempty"`
-	ErrorResponses  map[int]ResponseContract    `json:"errorResponses,omitempty"`
-	IsPartial       bool                        `json:"isPartial,omitempty"`
-	HiddenFields    []string                    `json:"hiddenFields,omitempty"`
-	SanitizedFields []string                    `json:"sanitizedFields,omitempty"`
+	Body            *BodyContract                `json:"body,omitempty"`
+	File            *FileContract                `json:"file,omitempty"`
+	Stream          *StreamContract              `json:"stream,omitempty"`
+	ErrorResponses  map[int]ResponseContract     `json:"errorResponses,omitempty"`
+	IsPartial       bool                         `json:"isPartial,omitempty"`
+	HiddenFields    []string                     `json:"hiddenFields,omitempty"`
+	SanitizedFields []string                     `json:"sanitizedFields,omitempty"`
 }
 
 // ParameterContract represents a parameter specification
 type ParameterContract struct {
-	Name         string      `json:"name"`
-	Type         string      `json:"type"`
-	Format       string      `json:"format,omitempty"`
-	In           string      `json:"in,omitempty"`
-	Required     bool        `json:"required"`
-	Default      interface{} `json:"default,omitempty"`
-	Enum         []interface{} `json:"enum,omitempty"`
-	Min          *float64    `json:"min,omitempty"`
-	Max          *float64    `json:"max,omitempty"`
-	MinLength    *int        `json:"minLength,omitempty"`
-	MaxLength    *int        `json:"maxLength,omitempty"`
-	Pattern      string      `json:"pattern,omitempty"`
-	Description  string      `json:"description,omitempty"`
-	Example      interface{} `json:"example,omitempty"`
-	Deprecated   bool        `json:"deprecated,omitempty"`
-	ReadOnly     bool        `json:"readOnly,omitempty"`
-	WriteOnly    bool        `json:"writeOnly,omitempty"`
+	Name        string        `json:"name"`
+	Type        string        `json:"type"`
+	Format      string        `json:"format,omitempty"`
+	In          string        `json:"in,omitempty"`
+	Required    bool          `json:"required"`
+	Default     interface{}   `json:"default,omitempty"`
+	Enum        []interface{} `json:"enum,omitempty"`
+	Min         *float64      `json:"min,omitempty"`
+	Max         *float64      `json:"max,omitempty"`
+	MinLength   *int          `json:"minLength,omitempty"`
+	MaxLength   *int          `json:"maxLength,omitempty"`
+	Pattern     string        `json:"pattern,omitempty"`
+	Description string        `json:"description,omitempty"`
+	Example     interface{}   `json:"example,omitempty"`
+	Deprecated  bool          `json:"deprecated,omitempty"`
+	ReadOnly    bool          `json:"readOnly,omitempty"`
+	WriteOnly   bool          `json:"writeOnly,omitempty"`
 }
 
 // BodyContract represents a request/response body specification
 type BodyContract struct {
-	ContentType string                 `json:"contentType"`
-	Schema      *SchemaContract        `json:"schema,omitempty"`
-	Example     interface{}            `json:"example,omitempty"`
-	Encoding    map[string]Encoding    `json:"encoding,omitempty"`
-	Required    bool                   `json:"required"`
+	ContentType string              `json:"contentType"`
+	Schema      *SchemaContract     `json:"schema,omitempty"`
+	Example     interface{}         `json:"example,omitempty"`
+	Encoding    map[string]Encoding `json:"encoding,omitempty"`
+	Required    bool                `json:"required"`
 }
 
 // SchemaContract represents a JSON schema specification
 type SchemaContract struct {
-	Type                 string                   `json:"type,omitempty"`
-	Format               string                   `json:"format,omitempty"`
-	Description          string                   `json:"description,omitempty"`
+	Type                 string                    `json:"type,omitempty"`
+	Format               string                    `json:"format,omitempty"`
+	Description          string                    `json:"description,omitempty"`
 	Properties           map[string]SchemaContract `json:"properties,omitempty"`
-	Required             []string                 `json:"required,omitempty"`
-	Items                *SchemaContract          `json:"items,omitempty"`
-	AdditionalProperties bool                     `json:"additionalProperties,omitempty"`
-	Enum                 []interface{}            `json:"enum,omitempty"`
-	Default              interface{}              `json:"default,omitempty"`
-	Example              interface{}              `json:"example,omitempty"`
-	MinLength            *int                     `json:"minLength,omitempty"`
-	MaxLength            *int                     `json:"maxLength,omitempty"`
-	Pattern              string                   `json:"pattern,omitempty"`
-	Minimum              *float64                 `json:"minimum,omitempty"`
-	Maximum              *float64                 `json:"maximum,omitempty"`
-	ExclusiveMinimum     bool                     `json:"exclusiveMinimum,omitempty"`
-	ExclusiveMaximum     bool                     `json:"exclusiveMaximum,omitempty"`
-	MultipleOf           *float64                 `json:"multipleOf,omitempty"`
-	MinItems             *int                     `json:"minItems,omitempty"`
-	MaxItems             *int                     `json:"maxItems,omitempty"`
-	UniqueItems          bool                     `json:"uniqueItems,omitempty"`
-	MinProperties        *int                     `json:"minProperties,omitempty"`
-	MaxProperties        *int                     `json:"maxProperties,omitempty"`
-	AllOf                []SchemaContract         `json:"allOf,omitempty"`
-	AnyOf                []SchemaContract         `json:"anyOf,omitempty"`
-	OneOf                []SchemaContract         `json:"oneOf,omitempty"`
-	Not                  *SchemaContract          `json:"not,omitempty"`
-	Ref                  string                   `json:"$ref,omitempty"`
-	ReadOnly             bool                     `json:"readOnly,omitempty"`
-	WriteOnly            bool                     `json:"writeOnly,omitempty"`
-	Deprecated           bool                     `json:"deprecated,omitempty"`
+	Required             []string                  `json:"required,omitempty"`
+	Items                *SchemaContract           `json:"items,omitempty"`
+	AdditionalProperties bool                      `json:"additionalProperties,omitempty"`
+	Enum                 []interface{}             `json:"enum,omitempty"`
+	Default              interface{}               `json:"default,omitempty"`
+	Example              interface{}               `json:"example,omitempty"`
+	MinLength            *int                      `json:"minLength,omitempty"`
+	MaxLength            *int                      `json:"maxLength,omitempty"`
+	Pattern              string                    `json:"pattern,omitempty"`
+	Minimum              *float64                  `json:"minimum,omitempty"`
+	Maximum              *float64                  `json:"maximum,omitempty"`
+	ExclusiveMinimum     bool                      `json:"exclusiveMinimum,omitempty"`
+	ExclusiveMaximum     bool                      `json:"exclusiveMaximum,omitempty"`
+	MultipleOf           *float64                  `json:"multipleOf,omitempty"`
+	MinItems             *int                      `json:"minItems,omitempty"`
+	MaxItems             *int                      `json:"maxItems,omitempty"`
+	UniqueItems          bool                      `json:"uniqueItems,omitempty"`
+	MinProperties        *int                      `json:"minProperties,omitempty"`
+	MaxProperties        *int                      `json:"maxProperties,omitempty"`
+	AllOf                []SchemaContract          `json:"allOf,omitempty"`
+	AnyOf                []SchemaContract          `json:"anyOf,omitempty"`
+	OneOf                []SchemaContract          `json:"oneOf,omitempty"`
+	Not                  *SchemaContract           `json:"not,omitempty"`
+	Ref                  string                    `json:"$ref,omitempty"`
+	ReadOnly             bool                      `json:"readOnly,omitempty"`
+	WriteOnly            bool                      `json:"writeOnly,omitempty"`
+	Deprecated           bool                      `json:"deprecated,omitempty"`
 }
 
 // Encoding represents encoding information for multipart requests
 type Encoding struct {
-	ContentType   string   `json:"contentType,omitempty"`
+	ContentType   string                       `json:"contentType,omitempty"`
 	Headers       map[string]ParameterContract `json:"headers,omitempty"`
-	Style         string   `json:"style,omitempty"`
-	Explode       bool     `json:"explode,omitempty"`
-	AllowReserved bool     `json:"allowReserved,omitempty"`
+	Style         string                       `json:"style,omitempty"`
+	Explode       bool                         `json:"explode,omitempty"`
+	AllowReserved bool                         `json:"allowReserved,omitempty"`
 }
 
 // FileContract represents a file response specification
@@ -122,19 +122,19 @@ type FileContract struct {
 
 // StreamContract represents a streaming response specification
 type StreamContract struct {
-	ContentType   string `json:"contentType,omitempty"`
-	Chunked       bool   `json:"chunked,omitempty"`
-	EventStream   bool   `json:"eventStream,omitempty"`
+	ContentType string `json:"contentType,omitempty"`
+	Chunked     bool   `json:"chunked,omitempty"`
+	EventStream bool   `json:"eventStream,omitempty"`
 }
 
 // AuthorizationContract represents authorization requirements
 type AuthorizationContract struct {
-	Type        string   `json:"type"` // "bearer", "basic", "apiKey", "oauth2"
-	Scheme      string   `json:"scheme,omitempty"`
+	Type         string   `json:"type"` // "bearer", "basic", "apiKey", "oauth2"
+	Scheme       string   `json:"scheme,omitempty"`
 	BearerFormat string   `json:"bearerFormat,omitempty"`
-	Scopes      []string `json:"scopes,omitempty"`
-	In          string   `json:"in,omitempty"` // "header", "query", "cookie"
-	Name        string   `json:"name,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
+	In           string   `json:"in,omitempty"` // "header", "query", "cookie"
+	Name         string   `json:"name,omitempty"`
 }
 
 // ContractAnalyzer analyzes request/response contracts from handlers
@@ -185,8 +185,8 @@ func (ca *ContractAnalyzer) AnalyzeRequest(handler interface{}, path string) (*R
 // AnalyzeResponse analyzes a response contract from handler function
 func (ca *ContractAnalyzer) AnalyzeResponse(handler interface{}) (*ResponseContract, error) {
 	contract := &ResponseContract{
-		StatusCode:    http.StatusOK,
-		Headers:       make(map[string]ParameterContract),
+		StatusCode:     http.StatusOK,
+		Headers:        make(map[string]ParameterContract),
 		ErrorResponses: make(map[int]ResponseContract),
 	}
 
@@ -384,7 +384,7 @@ func (ca *ContractAnalyzer) analyzeHandlerResponse(handlerType reflect.Type, con
 			Type: "object",
 			Properties: map[string]SchemaContract{
 				"success": {
-					Type:   "boolean",
+					Type:    "boolean",
 					Default: true,
 				},
 				"data": {
@@ -411,10 +411,10 @@ func (ca *ContractAnalyzer) analyzeHandlerResponse(handlerType reflect.Type, con
 		Default:  "application/json",
 	}
 	contract.Headers["X-Request-ID"] = ParameterContract{
-		Name:     "X-Request-ID",
-		Type:     "string",
-		Required: false,
-		In:       "header",
+		Name:        "X-Request-ID",
+		Type:        "string",
+		Required:    false,
+		In:          "header",
 		Description: "Unique request identifier",
 	}
 }
@@ -449,7 +449,7 @@ func (ca *ContractAnalyzer) handleResponseTypePattern(returnType reflect.Type, r
 		// List response - add pagination metadata
 		contract.Body.Schema.Properties = map[string]SchemaContract{
 			"success": {
-				Type:   "boolean",
+				Type:    "boolean",
 				Default: true,
 			},
 			"data": {
@@ -460,11 +460,11 @@ func (ca *ContractAnalyzer) handleResponseTypePattern(returnType reflect.Type, r
 				Type: "object",
 				Properties: map[string]SchemaContract{
 					"page": {
-						Type:   "integer",
+						Type:    "integer",
 						Default: 1,
 					},
 					"pageSize": {
-						Type:   "integer",
+						Type:    "integer",
 						Default: 20,
 					},
 					"total": {
@@ -484,7 +484,7 @@ func (ca *ContractAnalyzer) handleResponseTypePattern(returnType reflect.Type, r
 		// Map response - typically used for status or simple responses
 		contract.Body.Schema.Properties = map[string]SchemaContract{
 			"success": {
-				Type:   "boolean",
+				Type:    "boolean",
 				Default: true,
 			},
 			"data": *responseSchema,
@@ -497,7 +497,7 @@ func (ca *ContractAnalyzer) handleResponseTypePattern(returnType reflect.Type, r
 		// Single resource response
 		contract.Body.Schema.Properties = map[string]SchemaContract{
 			"success": {
-				Type:   "boolean",
+				Type:    "boolean",
 				Default: true,
 			},
 			"data": *responseSchema,
@@ -510,7 +510,7 @@ func (ca *ContractAnalyzer) handleResponseTypePattern(returnType reflect.Type, r
 		// Primitive response - often used for simple values or counts
 		contract.Body.Schema.Properties = map[string]SchemaContract{
 			"success": {
-				Type:   "boolean",
+				Type:    "boolean",
 				Default: true,
 			},
 			"data": *responseSchema,
@@ -661,7 +661,7 @@ func (ca *ContractAnalyzer) analyzeErrorHandling(handlerType reflect.Type, contr
 						Type: "object",
 						Properties: map[string]SchemaContract{
 							"success": {
-								Type:   "boolean",
+								Type:    "boolean",
 								Default: false,
 							},
 							"error": {
@@ -692,7 +692,7 @@ func (ca *ContractAnalyzer) analyzeErrorHandling(handlerType reflect.Type, contr
 						Type: "object",
 						Properties: map[string]SchemaContract{
 							"success": {
-								Type:   "boolean",
+								Type:    "boolean",
 								Default: false,
 							},
 							"error": {
@@ -720,7 +720,7 @@ func (ca *ContractAnalyzer) analyzeErrorHandling(handlerType reflect.Type, contr
 						Type: "object",
 						Properties: map[string]SchemaContract{
 							"success": {
-								Type:   "boolean",
+								Type:    "boolean",
 								Default: false,
 							},
 							"error": {
@@ -748,7 +748,7 @@ func (ca *ContractAnalyzer) analyzeErrorHandling(handlerType reflect.Type, contr
 						Type: "object",
 						Properties: map[string]SchemaContract{
 							"success": {
-								Type:   "boolean",
+								Type:    "boolean",
 								Default: false,
 							},
 							"error": {
@@ -925,4 +925,3 @@ func parseFloat(s string) (float64, error) {
 	_, err := fmt.Sscanf(s, "%f", &result)
 	return result, err
 }
-

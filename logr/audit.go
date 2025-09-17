@@ -6,8 +6,6 @@ import (
 	"sync"
 )
 
-
-
 // --- File Audit Writer ---
 
 // FileAuditWriter is a simple AuditWriter that writes audit entries as JSON lines to a file.
@@ -23,7 +21,7 @@ func NewFileAuditWriter(path string) (AuditWriter, error) {
 		return nil, err
 	}
 	return &FileAuditWriter{file: file},
-	 nil
+		nil
 }
 
 // Write marshals the entry to JSON and writes it to the file, followed by a newline.

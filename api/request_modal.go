@@ -62,8 +62,6 @@ func (r RequestModal[T]) ContextKey() string {
 	return fmt.Sprintf("%T", t)
 }
 
-
-
 func (p RequestModal[T]) ContextLoad(ctx context.Context) (out contracts.RequestParam, err error) {
 	val := ctx.Value(p.ContextKey())
 	if val == nil {

@@ -47,7 +47,7 @@ type SqlBuild[T any] struct {
 	rowScanner   RowScanFunc[T]
 	where        *WhereCriteria
 	noSort       bool
-	noLimit       bool
+	noLimit      bool
 	dbtx         sqlc.DBTX
 }
 

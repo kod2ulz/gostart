@@ -86,7 +86,7 @@ var _ = Describe("End-to-End Query Library Tests", func() {
 
 			// Step 2: Verify parsed parameters
 			Expect(urlParams.GetConditions()).To(HaveLen(3)) // username, age between, active
-			Expect(urlParams.GetSorts()).To(HaveLen(2))     // created_at desc, username asc
+			Expect(urlParams.GetSorts()).To(HaveLen(2))      // created_at desc, username asc
 			Expect(urlParams.GetLimit()).To(Equal(int64(50)))
 
 			// Step 3: Build SQL query
@@ -116,8 +116,8 @@ var _ = Describe("End-to-End Query Library Tests", func() {
 
 			// Step 2: Verify parsed parameters
 			conditions := urlParams.GetConditions()
-			Expect(conditions).To(HaveLen(4)) // amount, account_id, status_in, date_between
-			Expect(urlParams.GetSorts()).To(HaveLen(1))     // amount desc
+			Expect(conditions).To(HaveLen(4))                 // amount, account_id, status_in, date_between
+			Expect(urlParams.GetSorts()).To(HaveLen(1))       // amount desc
 			Expect(urlParams.GetLimit()).To(Equal(int64(20))) // default limit
 
 			// Step 3: Build SQL query
@@ -243,7 +243,7 @@ var _ = Describe("End-to-End Query Library Tests", func() {
 			provider := mockParameterProvider(map[string]string{
 				"age_bt":       "invalid:range", // Invalid between format
 				"username_lyk": "john%",
-				"active":       "not_boolean",  // Invalid boolean
+				"active":       "not_boolean", // Invalid boolean
 			})
 
 			urlParams := query.SearchURL(provider, userFieldDefinitions).Load(ctx)
@@ -272,9 +272,9 @@ var _ = Describe("End-to-End Query Library Tests", func() {
 		It("should handle unknown parameters gracefully", func() {
 			ctx := context.Background()
 			provider := mockParameterProvider(map[string]string{
-				"unknown_field":  "value",
-				"username":       "john",
-				"unknown_param":  "another_value",
+				"unknown_field": "value",
+				"username":      "john",
+				"unknown_param": "another_value",
 			})
 
 			urlParams := query.SearchURL(provider, userFieldDefinitions).Load(ctx)
@@ -316,11 +316,11 @@ var _ = Describe("End-to-End Query Library Tests", func() {
 			// Simulate user search with various text matching patterns
 			ctx := context.Background()
 			provider := mockParameterProvider(map[string]string{
-				"username_lyk": "john%",
-				"email":        "john@example.com",
+				"username_lyk":  "john%",
+				"email":         "john@example.com",
 				"metadata.city": "New York",
-				"active":       "true",
-				"sort":         "username",
+				"active":        "true",
+				"sort":          "username",
 			})
 
 			urlParams := query.SearchURL(provider, userFieldDefinitions).Load(ctx)

@@ -42,4 +42,3 @@ func InitConfig(prefix ...string) (conf *Config) {
 	}
 	return
 }
-

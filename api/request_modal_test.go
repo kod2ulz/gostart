@@ -108,7 +108,6 @@ var _ = Describe("RequestModal", func() {
 			})
 		})
 
-
 	})
 
 })

@@ -73,13 +73,13 @@ var _ = Describe("Parameter Override Functionality Verification", func() {
 			// Try to use the old interface methods (these should not exist)
 			// This will cause compilation errors if uncommented, confirming the functionality was lost
 			/*
-			// These methods from the old interface are no longer available:
-			// - WithField(field string, val any) URLSearchParam
-			// - WithComparison(field string, comparator CompareOperator, val any) URLSearchParam
-			// - GetFieldValues() map[string]any
-			// - GetFieldNullables() map[string]bool
-			// - GetFieldSort() map[string]SortType
-			// - GetFieldComparisons() map[string]map[CompareOperator]any
+				// These methods from the old interface are no longer available:
+				// - WithField(field string, val any) URLSearchParam
+				// - WithComparison(field string, comparator CompareOperator, val any) URLSearchParam
+				// - GetFieldValues() map[string]any
+				// - GetFieldNullables() map[string]bool
+				// - GetFieldSort() map[string]SortType
+				// - GetFieldComparisons() map[string]map[CompareOperator]any
 			*/
 
 			// The current interface only has these methods:

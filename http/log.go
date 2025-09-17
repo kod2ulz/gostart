@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kod2ulz/gostart/logr"
 	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/logr"
 )
 
 type ResponseHandler[T any] func(resp *http.Response) (T, error)
@@ -39,7 +39,7 @@ func LogSimpleGetRequest[T any](ctx context.Context, log *logr.Logger, url strin
 }
 
 type Payload struct {
-	body io.Reader
+	body   io.Reader
 	params map[string][]string
 }
 

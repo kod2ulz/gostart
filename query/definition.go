@@ -8,14 +8,14 @@ import (
 type DataType string
 
 const (
-	TypeText    DataType = "text"
-	TypeInt     DataType = "int"
-	TypeFloat   DataType = "float"
-	TypeDate    DataType = "date"
-	TypeTime    DataType = "time"
-	TypeUUID    DataType = "uuid"
-	TypeJSON    DataType = "json"
-	TypeBool    DataType = "bool"
+	TypeText  DataType = "text"
+	TypeInt   DataType = "int"
+	TypeFloat DataType = "float"
+	TypeDate  DataType = "date"
+	TypeTime  DataType = "time"
+	TypeUUID  DataType = "uuid"
+	TypeJSON  DataType = "json"
+	TypeBool  DataType = "bool"
 )
 
 // FieldDefinition holds the complete definition for a queryable field.

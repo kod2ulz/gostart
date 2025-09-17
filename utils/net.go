@@ -9,7 +9,7 @@ import (
 
 var Net netutils
 
-type netutils struct {}
+type netutils struct{}
 
 func (netutils) ReadJson(reader io.ReadCloser, out interface{}) (err error) {
 	if reader == nil {
@@ -27,7 +27,6 @@ func (netutils) ReadJson(reader io.ReadCloser, out interface{}) (err error) {
 	}
 	return
 }
-
 
 func (u netutils) Http(host string, port int) string {
 	return u.url("http", host, port)

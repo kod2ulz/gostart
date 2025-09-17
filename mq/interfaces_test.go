@@ -220,16 +220,16 @@ var _ = Describe("MQ Interfaces", func() {
 
 		BeforeEach(func() {
 			config = mq.BrokerConfig{
-				Host:             "localhost",
-				Port:             "5672",
-				VHost:            "/test",
-				Username:         "user",
-				Password:         "pass",
-				Protocol:         "amqp",
-				Heartbeat:        10 * time.Second,
-				Timeout:          30 * time.Second,
-				MaxRetries:       5,
-				RetryDelay:       1 * time.Second,
+				Host:              "localhost",
+				Port:              "5672",
+				VHost:             "/test",
+				Username:          "user",
+				Password:          "pass",
+				Protocol:          "amqp",
+				Heartbeat:         10 * time.Second,
+				Timeout:           30 * time.Second,
+				MaxRetries:        5,
+				RetryDelay:        1 * time.Second,
 				BackoffMultiplier: 2.0,
 				AdditionalArgs:    map[string]interface{}{"custom": "value"},
 			}

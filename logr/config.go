@@ -59,13 +59,11 @@ func (h *MultiHandler) WithGroup(name string) slog.Handler {
 	return NewMultiHandler(newHandlers...)
 }
 
-
-
 // NewConsoleHandler creates a handler that writes to stdout.
 // If pretty is true, it uses a colorized, human-friendly format.
 // Otherwise, it writes minified JSON.
 func NewConsoleHandler(pretty bool) slog.Handler {
-	
+
 	level := _getLogLevel(logrEnv.GetString("LOG_LEVEL", "info"))
 	opts := &slog.HandlerOptions{
 		AddSource: true,

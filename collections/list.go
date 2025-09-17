@@ -72,9 +72,9 @@ func (l List[T]) Sort(lessFn func(t1, t2 T) bool) (out []T) {
 	return
 }
 
-func (l List[T]) SortStable(comp func(t1, t2 T) int)  {
+func (l List[T]) SortStable(comp func(t1, t2 T) int) {
 	if l.Empty() {
-		return 
+		return
 	}
 	slices.SortStableFunc(l, comp)
 }

@@ -50,8 +50,6 @@ func (r ListRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.
 	return out, err
 }
 
-
-
 type ListRequestIdType interface {
 	string | uuid.UUID | constraints.Integer
 }

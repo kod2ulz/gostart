@@ -51,12 +51,12 @@ const (
 
 // AccessController handles access control for OpenAPI documentation
 type AccessController struct {
-	config       *AccessControlConfig
-	allowedNets  []*net.IPNet
-	deniedNets   []*net.IPNet
-	rateLimiter  *RateLimiter
-	auditLogger  *AuditLogger
-	mu           sync.RWMutex
+	config      *AccessControlConfig
+	allowedNets []*net.IPNet
+	deniedNets  []*net.IPNet
+	rateLimiter *RateLimiter
+	auditLogger *AuditLogger
+	mu          sync.RWMutex
 }
 
 // RateLimiter implements a simple in-memory rate limiter
@@ -303,7 +303,7 @@ func (ac *AccessController) logAccess(r *http.Request, ip string, allowed bool, 
 func DefaultAccessControlConfig() *AccessControlConfig {
 	return &AccessControlConfig{
 		DefaultAccess:      AccessNonPublic,
-		EnableRateLimiter: false,
+		EnableRateLimiter:  false,
 		EnableAuditLogging: false,
 	}
 }

@@ -34,7 +34,7 @@ var _ = Describe("AuditLogger", func() {
 	})
 
 	Context("with a mock writer", func() {
-	
+
 		It("should write audit logs asynchronously", func() {
 			wg := &sync.WaitGroup{}
 			mockWriter := &MockAuditWriter{buffer: &bytes.Buffer{}, wg: wg}
@@ -59,7 +59,7 @@ var _ = Describe("AuditLogger", func() {
 	})
 
 	Context("with a file writer", func() {
-	
+
 		It("should write audit logs to a file", func() {
 			tempFile, err := os.CreateTemp("", "audit-test-*.log")
 			Expect(err).NotTo(HaveOccurred())

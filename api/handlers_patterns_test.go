@@ -15,10 +15,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kod2ulz/gostart/api"
+	gin_framework "github.com/kod2ulz/gostart/api/frameworks/gin"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/ierrors"
-	gin_framework "github.com/kod2ulz/gostart/api/frameworks/gin"
 )
 
 var _ = Describe("API Handler Patterns", func() {
@@ -167,9 +167,9 @@ var _ = Describe("API Handler Patterns", func() {
 
 			// Test with invalid data (missing required fields)
 			invalidReq := map[string]interface{}{
-				"name": "", // Empty name should fail validation
+				"name":  "",              // Empty name should fail validation
 				"email": "invalid-email", // Invalid email
-				"age": 15, // Age below minimum
+				"age":   15,              // Age below minimum
 			}
 
 			jsonValue, _ := json.Marshal(invalidReq)
@@ -353,10 +353,10 @@ func (s *UserService) ListUsers(req *ListUsersRequest) ([]User, *int64, ierrors.
 func (s *UserService) seedUsers(count int) {
 	for i := 0; i < count; i++ {
 		user := User{
-			ID:    uuid.New().String(),
-			Name:  fmt.Sprintf("User %d", i+1),
-			Email: fmt.Sprintf("user%d@example.com", i+1),
-			Age:   20 + i,
+			ID:        uuid.New().String(),
+			Name:      fmt.Sprintf("User %d", i+1),
+			Email:     fmt.Sprintf("user%d@example.com", i+1),
+			Age:       20 + i,
 			CreatedAt: time.Now(),
 		}
 		s.users[user.ID] = user

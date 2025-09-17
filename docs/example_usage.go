@@ -137,9 +137,9 @@ func ExampleMiddlewareSetup() {
 
 // ComplexExample shows advanced usage with custom types
 type ComplexRequest struct {
-	Query     string                 `json:"query" query:"q" description:"Search query"`
-	Filters   map[string]interface{} `json:"filters" description:"Search filters"`
-	Pagination PaginationRequest     `json:"pagination"`
+	Query      string                 `json:"query" query:"q" description:"Search query"`
+	Filters    map[string]interface{} `json:"filters" description:"Search filters"`
+	Pagination PaginationRequest      `json:"pagination"`
 }
 
 type PaginationRequest struct {
@@ -148,8 +148,8 @@ type PaginationRequest struct {
 }
 
 type ComplexResponse struct {
-	Results    []interface{} `json:"results"`
-	Total      int            `json:"total"`
+	Results    []interface{}      `json:"results"`
+	Total      int                `json:"total"`
 	Pagination PaginationResponse `json:"pagination"`
 }
 
@@ -178,68 +178,68 @@ func NewComplexDocumentation() (*OpenAPI, error) {
 // IntegrationExample shows how to integrate with the app package router
 func IntegrationExample() {
 	/*
-	// This would be integrated into your main application setup
+		// This would be integrated into your main application setup
 
-	// Create documentation registry
-	docRegistry := docs.NewHandlerRegistry(&docs.DocumentationConfig{
-		BaseURL:    "http://localhost:8080",
-		Title:      "My Application API",
-		Version:    "1.0.0",
-		OutputFile: "docs/swagger.json",
-	})
+		// Create documentation registry
+		docRegistry := docs.NewHandlerRegistry(&docs.DocumentationConfig{
+			BaseURL:    "http://localhost:8080",
+			Title:      "My Application API",
+			Version:    "1.0.0",
+			OutputFile: "docs/swagger.json",
+		})
 
-	// Register routes as you define them
-	app := app.Init(
-		app.WithHandlerOverride("/api/users", func(ctx contracts.RequestContext) {
-			// Your handler implementation
-		}),
-	)
+		// Register routes as you define them
+		app := app.Init(
+			app.WithHandlerOverride("/api/users", func(ctx contracts.RequestContext) {
+				// Your handler implementation
+			}),
+		)
 
-	// Register for documentation
-	docRegistry.GET("/api/users", yourHandler).
-		Description("Get all users").
-		RequestType(reflect.TypeOf(YourRequestType{}))
+		// Register for documentation
+		docRegistry.GET("/api/users", yourHandler).
+			Description("Get all users").
+			RequestType(reflect.TypeOf(YourRequestType{}))
 
-	// Generate documentation
-	spec, err := docRegistry.GenerateDocumentation()
-	if err != nil {
-		log.Fatal("Failed to generate documentation:", err)
-	}
+		// Generate documentation
+		spec, err := docRegistry.GenerateDocumentation()
+		if err != nil {
+			log.Fatal("Failed to generate documentation:", err)
+		}
 
-	// Serve documentation endpoint
-	app.Router().GET("/swagger.json", func(ctx contracts.RequestContext) {
-		ctx.JSON(http.StatusOK, spec)
-	})
+		// Serve documentation endpoint
+		app.Router().GET("/swagger.json", func(ctx contracts.RequestContext) {
+			ctx.JSON(http.StatusOK, spec)
+		})
 
-	// Run the application
-	app.Run()
+		// Run the application
+		app.Run()
 	*/
 }
 
 // Demonstrates how the system works with the tag-driven request loading
 func TagBasedLoadingExample() {
 	/*
-	The documentation system automatically reads struct tags to understand:
+		The documentation system automatically reads struct tags to understand:
 
-	- `json:"field"` - Request body field
-	- `query:"param"` - URL query parameter
-	- `param:"name"` - URL path parameter
-	- `header:"X-Header"` - HTTP header
-	- `description:"text"` - Field description
-	- `validate:"required"` - Validation rules
+		- `json:"field"` - Request body field
+		- `query:"param"` - URL query parameter
+		- `param:"name"` - URL path parameter
+		- `header:"X-Header"` - HTTP header
+		- `description:"text"` - Field description
+		- `validate:"required"` - Validation rules
 
-	ExampleRequest struct {
-		ID    string `json:"id" param:"id" description:"User ID"`
-		Name  string `json:"name" validate:"required" description:"User name"`
-		Email string `json:"email" validate:"required,email" description:"User email"`
-		Age   int    `json:"age" query:"age" description:"User age (optional)"`
-		Token string `json:"-" header:"Authorization" description:"Auth token"`
-	}
+		ExampleRequest struct {
+			ID    string `json:"id" param:"id" description:"User ID"`
+			Name  string `json:"name" validate:"required" description:"User name"`
+			Email string `json:"email" validate:"required,email" description:"User email"`
+			Age   int    `json:"age" query:"age" description:"User age (optional)"`
+			Token string `json:"-" header:"Authorization" description:"Auth token"`
+		}
 
-	This would generate OpenAPI documentation that shows:
-	- GET /users/{id} - path parameter "id"
-	- POST /users - JSON body with name, email, age
-	- Authorization header required
-	- Field descriptions and validation rules
+		This would generate OpenAPI documentation that shows:
+		- GET /users/{id} - path parameter "id"
+		- POST /users - JSON body with name, email, age
+		- Authorization header required
+		- Field descriptions and validation rules
 	*/
 }
