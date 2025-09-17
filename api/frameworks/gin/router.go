@@ -255,6 +255,15 @@ func (r *GinRouter) wrapHandler(handler api.HandlerFunc) gin.HandlerFunc {
 	}
 }
 
+// WrapHandler converts an api.HandlerFunc to gin.HandlerFunc for testing
+// This is a convenience function for testing purposes
+func WrapHandler(handler api.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
+		handler(ctx)
+	}
+}
+
 // RequestContext implementations
 func (ctx *RequestContext) Next() {
 	ctx.ctx.Next()

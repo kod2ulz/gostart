@@ -1,0 +1,364 @@
+package api_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/ierrors"
+	gin_framework "github.com/kod2ulz/gostart/api/frameworks/gin"
+)
+
+var _ = Describe("API Handler Patterns", func() {
+
+	var router *gin.Engine
+	var recorder *httptest.ResponseRecorder
+	var testUserService *UserService
+
+	BeforeEach(func() {
+		gin.SetMode(gin.TestMode)
+		router = gin.New()
+		testUserService = NewUserService()
+		recorder = httptest.NewRecorder()
+	})
+
+	When("using the new Handler patterns with RequestContext", func() {
+		It("should handle single entity creation using JSONHandler[T]", func() {
+			// Setup route using the new JSONHandler pattern
+			router.POST("/users", gin_framework.WrapHandler(api.JSONHandler[User](func(ctx contracts.RequestContext) (User, ierrors.Error) {
+				// Load request from context
+				var req CreateUserRequest
+				var modal api.RequestModal[CreateUserRequest]
+				if loadError := modal.FromContext(ctx.Context(), &req); loadError != nil {
+					return User{}, errors.RequestLoadError[CreateUserRequest](loadError)
+				}
+
+				// Business logic for creating user
+				return testUserService.CreateUser(&req)
+			})))
+
+			// Test successful creation
+			userReq := CreateUserRequest{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				Age:   25,
+			}
+
+			jsonValue, _ := json.Marshal(userReq)
+			req, _ := http.NewRequest("POST", "/users", bytes.NewBuffer(jsonValue))
+			req.Header.Set("Content-Type", "application/json")
+
+			router.ServeHTTP(recorder, req)
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+
+			var response contracts.Response[User]
+			json.Unmarshal(recorder.Body.Bytes(), &response)
+			Expect(response.Success).To(BeTrue())
+			var user User
+			Expect(response.ParseDataTo(&user)).To(BeNil())
+			Expect(user.Name).To(Equal("John Doe"))
+			Expect(user.Email).To(Equal("john@example.com"))
+			Expect(user.Age).To(Equal(25))
+		})
+
+		It("should handle list response using JSONHandler[T] with pagination", func() {
+			// Setup route using the new JSONHandler pattern for lists
+			router.GET("/users", gin_framework.WrapHandler(api.JSONHandler[[]User](func(ctx contracts.RequestContext) ([]User, ierrors.Error) {
+				// Load request parameters from context
+				var req ListUsersRequest
+				var modal api.RequestModal[ListUsersRequest]
+				if loadError := modal.FromContext(ctx.Context(), &req); loadError != nil {
+					return nil, errors.RequestLoadError[ListUsersRequest](loadError)
+				}
+
+				// Business logic for listing users
+				users, _, err := testUserService.ListUsers(&req)
+				return users, err
+			})))
+
+			// Seed some test data
+			testUserService.seedUsers(5)
+
+			req, _ := http.NewRequest("GET", "/users", nil)
+			router.ServeHTTP(recorder, req)
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+
+			var response contracts.Response[[]User]
+			json.Unmarshal(recorder.Body.Bytes(), &response)
+			Expect(response.Success).To(BeTrue())
+			var users []User
+			Expect(response.ParseDataTo(&users)).To(BeNil())
+			Expect(len(users)).To(BeNumerically(">", 0))
+		})
+
+		It("should handle single entity retrieval using JSONHandler[T]", func() {
+			// First, create a user to retrieve
+			createdUser, err := testUserService.CreateUser(&CreateUserRequest{
+				Name:  "Jane Doe",
+				Email: "jane@example.com",
+				Age:   30,
+			})
+			Expect(err).To(BeNil())
+
+			// Setup route using the new JSONHandler pattern
+			router.GET("/users/:id", gin_framework.WrapHandler(api.JSONHandler[User](func(ctx contracts.RequestContext) (User, ierrors.Error) {
+				// Extract ID from context (path parameter)
+				id := ctx.Param("id").String()
+				if id == "" {
+					return User{}, errors.GeneralError[any](fmt.Errorf("missing user ID")).WithErrorCodeAndHttpStatusCode("BAD_REQUEST", http.StatusBadRequest)
+				}
+
+				// Business logic for getting user by ID
+				return testUserService.GetUser(id)
+			})))
+
+			req, _ := http.NewRequest("GET", fmt.Sprintf("/users/%s", createdUser.ID), nil)
+			router.ServeHTTP(recorder, req)
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+
+			var response contracts.Response[User]
+			json.Unmarshal(recorder.Body.Bytes(), &response)
+			Expect(response.Success).To(BeTrue())
+			var user User
+			Expect(response.ParseDataTo(&user)).To(BeNil())
+			Expect(user.Name).To(Equal("Jane Doe"))
+			Expect(user.Email).To(Equal("jane@example.com"))
+		})
+
+		It("should handle not found errors properly", func() {
+			router.GET("/users/:id", gin_framework.WrapHandler(api.JSONHandler[User](func(ctx contracts.RequestContext) (User, ierrors.Error) {
+				id := ctx.Param("id").String()
+				return testUserService.GetUser(id)
+			})))
+
+			req, _ := http.NewRequest("GET", "/users/nonexistent-id", nil)
+			router.ServeHTTP(recorder, req)
+			Expect(recorder.Code).To(Equal(http.StatusNotFound))
+
+			var response contracts.Response[User]
+			json.Unmarshal(recorder.Body.Bytes(), &response)
+			Expect(response.Success).To(BeFalse())
+		})
+
+		It("should handle validation errors properly", func() {
+			router.POST("/users", gin_framework.WrapHandler(api.JSONHandler[User](func(ctx contracts.RequestContext) (User, ierrors.Error) {
+				// Load request from context
+				var req CreateUserRequest
+				var modal api.RequestModal[CreateUserRequest]
+				if loadError := modal.FromContext(ctx.Context(), &req); loadError != nil {
+					return User{}, errors.RequestLoadError[CreateUserRequest](loadError)
+				}
+
+				// Business logic for creating user
+				return testUserService.CreateUser(&req)
+			})))
+
+			// Test with invalid data (missing required fields)
+			invalidReq := map[string]interface{}{
+				"name": "", // Empty name should fail validation
+				"email": "invalid-email", // Invalid email
+				"age": 15, // Age below minimum
+			}
+
+			jsonValue, _ := json.Marshal(invalidReq)
+			req, _ := http.NewRequest("POST", "/users", bytes.NewBuffer(jsonValue))
+			req.Header.Set("Content-Type", "application/json")
+
+			router.ServeHTTP(recorder, req)
+			Expect(recorder.Code).To(Equal(http.StatusBadRequest))
+
+			var response contracts.Response[User]
+			json.Unmarshal(recorder.Body.Bytes(), &response)
+			Expect(response.Success).To(BeFalse())
+		})
+	})
+
+	When("using the same service methods with MQ handlers", func() {
+		It("should handle user creation via MQ", func() {
+			// Test the same service method but called from MQ context
+			mqHandler := func(ctx context.Context, msg interface{}) (interface{}, ierrors.Error) {
+				// Simulate MQ message processing
+				userReq, ok := msg.(*CreateUserRequest)
+				if !ok {
+					return nil, errors.GeneralError[CreateUserRequest](fmt.Errorf("invalid message type")).WithErrorCodeAndHttpStatusCode("BAD_REQUEST", http.StatusBadRequest)
+				}
+
+				// Use the same service method
+				user, err := testUserService.CreateUser(userReq)
+				if err != nil {
+					return nil, err
+				}
+
+				return UserCreatedEvent{
+					UserID:    user.ID,
+					Name:      user.Name,
+					Email:     user.Email,
+					Timestamp: time.Now(),
+				}, nil
+			}
+
+			// Test the handler
+			userReq := &CreateUserRequest{
+				Name:  "MQ User",
+				Email: "mq@example.com",
+				Age:   28,
+			}
+
+			result, err := mqHandler(context.Background(), userReq)
+			Expect(err).To(BeNil())
+			Expect(result).NotTo(BeNil())
+
+			event, ok := result.(UserCreatedEvent)
+			Expect(ok).To(BeTrue())
+			Expect(event.Name).To(Equal("MQ User"))
+			Expect(event.Email).To(Equal("mq@example.com"))
+		})
+	})
+})
+
+// Test types and service implementation for the new handler patterns
+
+type User struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	Age       int       `json:"age"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type CreateUserRequest struct {
+	Name  string `json:"name" validate:"required" example:"John Doe"`
+	Email string `json:"email" validate:"required,email" example:"john@example.com"`
+	Age   int    `json:"age" validate:"required,gte=18" example:"25"`
+	api.RequestModal[CreateUserRequest]
+}
+
+func (r CreateUserRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.RequestParam, err error) {
+	var out CreateUserRequest
+	if loadErr := out.LoadFromJsonBody(ctx, &out); loadErr != nil {
+		return param, errors.RequestLoadError[any](loadErr)
+	}
+	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		ctxSetter.Set(out.ContextKey(), out)
+	}
+	return out, nil
+}
+
+type ListUsersRequest struct {
+	Limit  int `json:"limit" validate:"min=1,max=100" example:"20"`
+	Offset int `json:"offset" validate:"min=0" example:"0"`
+	api.RequestModal[ListUsersRequest]
+}
+
+func (r ListUsersRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.RequestParam, err error) {
+	var out ListUsersRequest
+	if loadErr := out.LoadFromJsonBody(ctx, &out); loadErr != nil {
+		return param, errors.RequestLoadError[any](loadErr)
+	}
+	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		ctxSetter.Set(out.ContextKey(), out)
+	}
+	return out, nil
+}
+
+type UserCreatedEvent struct {
+	UserID    string    `json:"userId"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type UserService struct {
+	users map[string]User
+}
+
+func NewUserService() *UserService {
+	return &UserService{
+		users: make(map[string]User),
+	}
+}
+
+func (s *UserService) CreateUser(req *CreateUserRequest) (User, ierrors.Error) {
+	// Validate request
+	if req.Name == "" {
+		return User{}, errors.ValidationFailed[CreateUserRequest](fmt.Errorf("name is required"))
+	}
+	if req.Age < 18 {
+		return User{}, errors.ValidationFailed[CreateUserRequest](fmt.Errorf("age must be at least 18"))
+	}
+
+	// Check if email already exists
+	for _, user := range s.users {
+		if user.Email == req.Email {
+			return User{}, errors.GeneralError[CreateUserRequest](fmt.Errorf("email already exists")).WithErrorCodeAndHttpStatusCode("CONFLICT", http.StatusConflict)
+		}
+	}
+
+	// Create user
+	user := User{
+		ID:        uuid.New().String(),
+		Name:      req.Name,
+		Email:     req.Email,
+		Age:       req.Age,
+		CreatedAt: time.Now(),
+	}
+
+	s.users[user.ID] = user
+	return user, nil
+}
+
+func (s *UserService) GetUser(id string) (User, ierrors.Error) {
+	user, exists := s.users[id]
+	if !exists {
+		return User{}, errors.NotFoundError[string, string]("user not found")
+	}
+	return user, nil
+}
+
+func (s *UserService) ListUsers(req *ListUsersRequest) ([]User, *int64, ierrors.Error) {
+	users := make([]User, 0, len(s.users))
+	for _, user := range s.users {
+		users = append(users, user)
+	}
+
+	// Apply pagination
+	start := req.Offset
+	if start > len(users) {
+		start = len(users)
+	}
+
+	end := start + req.Limit
+	if end > len(users) {
+		end = len(users)
+	}
+
+	paginatedUsers := users[start:end]
+	total := int64(len(users))
+
+	return paginatedUsers, &total, nil
+}
+
+func (s *UserService) seedUsers(count int) {
+	for i := 0; i < count; i++ {
+		user := User{
+			ID:    uuid.New().String(),
+			Name:  fmt.Sprintf("User %d", i+1),
+			Email: fmt.Sprintf("user%d@example.com", i+1),
+			Age:   20 + i,
+			CreatedAt: time.Now(),
+		}
+		s.users[user.ID] = user
+	}
+}
