@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,13 @@ type URLSearchParam interface {
 	GetSorts() []ParsedSort
 	GetLimit() int64
 	GetOffset() int64
+
+	// Parameter override methods for service/data layer
+	AddCondition(field string, operator CompareOperator, value any) URLSearchParam
+	AddField(field string, value any) URLSearchParam
+	AddSort(field string, sortType SortType) URLSearchParam
+	SetLimit(limit int64) URLSearchParam
+	SetOffset(offset int64) URLSearchParam
 }
 
 // SearchURL initializes a new URL search parser.
@@ -96,14 +104,7 @@ func (s *urlSearch) loadFields(ctx context.Context, defs FieldDefinitions, paren
 		}
 
 		// Special handling for 'between' operator
-		var hasBetween bool
-		for _, op := range def.Operators {
-			if op == CompareBetween {
-				hasBetween = true
-				break
-			}
-		}
-		if hasBetween {
+		if hasBetween := slices.Contains(def.Operators, CompareBetween); hasBetween {
 			s.loadBetweenComparison(ctx, apiPath, dbPath, def)
 		}
 	}
@@ -173,7 +174,7 @@ func (s *urlSearch) loadBetweenComparison(ctx context.Context, apiPath string, d
 	s.conditions = append(s.conditions, ParsedCondition{
 		DBPath:   dbPath,
 		Operator: CompareBetween,
-		Value:    []interface{}{from, to},
+		Value:    []any{from, to},
 	})
 }
 
@@ -222,4 +223,40 @@ func (s *urlSearch) GetLimit() int64 {
 // GetOffset returns the pagination offset.
 func (s *urlSearch) GetOffset() int64 {
 	return s.offset
+}
+
+// AddCondition adds a new condition to the search parameters.
+func (s *urlSearch) AddCondition(field string, operator CompareOperator, value any) URLSearchParam {
+	s.conditions = append(s.conditions, ParsedCondition{
+		DBPath:   []string{field},
+		Operator: operator,
+		Value:    value,
+	})
+	return s
+}
+
+// AddField adds a new field equality condition.
+func (s *urlSearch) AddField(field string, value any) URLSearchParam {
+	return s.AddCondition(field, CompareEqual, value)
+}
+
+// AddSort adds a new sort instruction.
+func (s *urlSearch) AddSort(field string, sortType SortType) URLSearchParam {
+	s.sorts = append(s.sorts, ParsedSort{
+		DBName: field,
+		Type:   sortType,
+	})
+	return s
+}
+
+// SetLimit sets the pagination limit.
+func (s *urlSearch) SetLimit(limit int64) URLSearchParam {
+	s.limit = limit
+	return s
+}
+
+// SetOffset sets the pagination offset.
+func (s *urlSearch) SetOffset(offset int64) URLSearchParam {
+	s.offset = offset
+	return s
 }

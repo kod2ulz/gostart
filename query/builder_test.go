@@ -2,89 +2,202 @@ package query_test
 
 import (
 	"context"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/query"
-	"github.com/stretchr/testify/assert"
 )
 
-// mockParameterProvider simulates reading from a URL query map for testing.
-func mockParameterProvider(params map[string]string) query.UrlParameterProvider {
-	return func(ctx context.Context, name string, _default ...string) config.Value {
-		if val, ok := params[name]; ok {
-			return config.Value(val)
+var _ = Describe("SQL Builder", func() {
+
+	var mockParameterProvider func(params map[string]string) query.UrlParameterProvider
+	var defs query.FieldDefinitions
+
+	BeforeEach(func() {
+		mockParameterProvider = func(params map[string]string) query.UrlParameterProvider {
+			return func(ctx context.Context, name string, _default ...string) config.Value {
+				if val, ok := params[name]; ok {
+					return config.Value(val)
+				}
+				if len(_default) > 0 {
+					return config.Value(_default[0])
+				}
+				return ""
+			}
 		}
-		if len(_default) > 0 {
-			return config.Value(_default[0])
-		}
-		return ""
-	}
-}
 
-func TestSQLBuilderFromUrl(t *testing.T) {
-	defs := query.NewDefinitions(
-		query.Text("name"),
-		query.Int("age"),
-		query.Float("score"),
-		query.Date("birthDate", "2006-01-02"),
-		query.JSON("meta").WithSchema(
-			query.Text("city"),
-		),
-	)
+		defs = query.NewDefinitions(
+			query.Text("name"),
+			query.Int("age"),
+			query.Float("score"),
+			query.Date("birthDate", "2006-01-02"),
+			query.JSON("meta").WithSchema(
+				query.Text("city"),
+			),
+		)
+	})
 
-	testCases := []struct {
-		name         string
-		params       map[string]string
-		expectedSQL  string
-		expectedArgs []interface{}
-	}{
-		{
-			name:         "Basic Equality",
-			params:       map[string]string{"name": "John"},
-			expectedSQL:  "name = $1",
-			expectedArgs: []interface{}{"John"},
-		},
-		{
-			name:         "Greater Than",
-			params:       map[string]string{"score_gt": "88.5"},
-			expectedSQL:  "score > $1",
-			expectedArgs: []interface{}{float64(88.5)},
-		},
-		{
-			name:         "Nested JSON Field Equality",
-			params:       map[string]string{"meta.city": "New York"},
-			expectedSQL:  "(meta ->> 'city') = $1",
-			expectedArgs: []interface{}{"New York"},
-		},
-		{
-			name: "Multiple Clauses",
-			params: map[string]string{"name": "Jane", "age_lt": "30"},
-			expectedSQL:  "(name = $1) and (age < $2)",
-			expectedArgs: []interface{}{"Jane", int64(30)},
-		},
-	{
-			name: "Numeric Between",
-			params: map[string]string{"age_bt": "25:35"},
-			expectedSQL:  "age between $1 and $2",
-			expectedArgs: []interface{}{float64(25), float64(35)},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	Describe("FromUrlParams", func() {
+		It("should handle basic equality", func() {
 			ctx := context.Background()
-			provider := mockParameterProvider(tc.params)
+			provider := mockParameterProvider(map[string]string{"name": "John"})
 			urlParams := query.SearchURL(provider, defs).Load(ctx)
 
 			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
 			build, args := qb.Criteria()
 
-			// The ElementsMatch assertion is tricky with argument order ($1, $2).
-			// For this test, we will rely on the fact that our parser processes fields in a stable order.
-			// A more advanced test could parse the SQL, but this is sufficient for now.
-			assert.Equal(t, tc.expectedSQL, build.String())
-			assert.Equal(t, tc.expectedArgs, args)
+			Expect(build.String()).To(Equal("name = $1"))
+			Expect(args).To(Equal([]any{"John"}))
 		})
-	}
-}
+
+		It("should handle greater than comparison", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"score_gt": "88.5"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("score > $1"))
+			Expect(args).To(Equal([]any{float64(88.5)}))
+		})
+
+		It("should handle nested JSON field equality", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"meta.city": "New York"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("(meta ->> 'city') = $1"))
+			Expect(args).To(Equal([]any{"New York"}))
+		})
+
+		It("should handle multiple clauses", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"name": "Jane", "age_lt": "30"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("(name = $1) and (age < $2)"))
+			Expect(args).To(Equal([]any{"Jane", int64(30)}))
+		})
+
+		It("should handle numeric between queries", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"age_bt": "25:35"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("age between $1 and $2"))
+			Expect(args).To(Equal([]any{float64(25), float64(35)}))
+		})
+
+		It("should handle date between queries", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"birthDate_bt": "2023-01-01:2023-12-31"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("birthDate between $1 and $2"))
+			Expect(len(args)).To(Equal(2))
+		})
+
+		It("should handle text like queries", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"name_lyk": "John%"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("name ilike $1"))
+			Expect(args).To(Equal([]any{"John%"}))
+		})
+
+		It("should handle in queries", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"name_in": "John,Jane,Bob"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("name in ($1, $2, $3)"))
+			Expect(args).To(Equal([]any{"John", "Jane", "Bob"}))
+		})
+
+		It("should handle empty parameters", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal(""))
+			Expect(args).To(BeEmpty())
+		})
+
+		It("should handle unknown fields gracefully", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{"unknown_field": "value"})
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal(""))
+			Expect(args).To(BeEmpty())
+		})
+	})
+
+	Describe("SQL Builder Integration", func() {
+		It("should work with sort parameters", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{
+				"name": "John",
+				"sort": "-name,age",
+			})
+
+			sortableDefs := query.NewDefinitions(
+				query.Text("name").Sortable(),
+				query.Int("age").Sortable(),
+			)
+
+			urlParams := query.SearchURL(provider, sortableDefs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("name = $1"))
+			Expect(args).To(Equal([]any{"John"}))
+		})
+
+		It("should work with pagination parameters", func() {
+			ctx := context.Background()
+			provider := mockParameterProvider(map[string]string{
+				"name":  "John",
+				"limit": "10",
+				"offset": "5",
+			})
+
+			urlParams := query.SearchURL(provider, defs).Load(ctx)
+
+			qb := query.SQLBuilder[any](nil, nil).FromUrlParams(urlParams)
+			build, args := qb.Criteria()
+
+			Expect(build.String()).To(Equal("name = $1"))
+			Expect(args).To(Equal([]any{"John"}))
+		})
+	})
+})
