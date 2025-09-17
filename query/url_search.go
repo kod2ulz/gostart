@@ -96,6 +96,11 @@ func (s *urlSearch) loadFields(ctx context.Context, defs FieldDefinitions, paren
 			s.loadSort(ctx, apiPath, def.DBName)
 		}
 
+		// Load tilde wildcard syntax for LIKE operations
+		if slices.Contains(def.Operators, CompareLike) {
+			s.loadTildeWildcard(ctx, apiPath, dbPath, def)
+		}
+
 		for _, op := range def.Operators {
 			if op == CompareBetween { // Skip between, as it's handled separately
 				continue
@@ -110,16 +115,186 @@ func (s *urlSearch) loadFields(ctx context.Context, defs FieldDefinitions, paren
 	}
 }
 
-func (s *urlSearch) loadSort(ctx context.Context, apiPath, dbName string) {
-	val := s.query(ctx, "sort_"+apiPath)
-	if !val.Valid() {
-		val = s.query(ctx, "sort_"+strcase.ToCamel(apiPath))
+// findFieldValue tries to find a field value by checking different separator variations
+// Only applies separator variations (., -, _) to field names, not word casing
+func (s *urlSearch) findFieldValue(ctx context.Context, fieldName string) config.Value {
+	// For tilde wildcard patterns, don't apply variations - be exact
+	if strings.HasPrefix(fieldName, "~") || strings.HasSuffix(fieldName, "~") {
+		return s.query(ctx, fieldName)
 	}
+
+	// For sort parameters, handle the field name part with separator variations
+	if strings.HasPrefix(fieldName, "sort_") {
+		fieldOnly := strings.TrimPrefix(fieldName, "sort_")
+		return s.findFieldValueWithPrefix(ctx, "sort_", fieldOnly)
+	}
+
+	// For field names with operators (like field_gt, field_lt), handle the field part
+	if strings.Contains(fieldName, "_") {
+		parts := strings.Split(fieldName, "_")
+		if len(parts) == 2 {
+			operator := parts[1]
+			fieldPart := parts[0]
+			// Check if this is a known operator
+			switch operator {
+			case "gt", "lt", "gte", "lte", "neq", "bt", "in", "lk":
+				return s.findFieldValueWithPrefix(ctx, "", fieldPart+"_"+operator)
+			}
+		}
+	}
+
+	// For plain field names, apply separator variations (but preserve word casing)
+	return s.findFieldValueWithSeparatorVariations(ctx, fieldName)
+}
+
+// findFieldValueWithPrefix finds a field value with separator variations applied only to the field part
+func (s *urlSearch) findFieldValueWithPrefix(ctx context.Context, prefix, fieldName string) config.Value {
+	// Try the original field name first
+	if val := s.query(ctx, prefix+fieldName); val.Valid() {
+		return val
+	}
+
+	// Try separator variations while preserving word casing
+	return s.findFieldValueWithSeparatorVariations(ctx, prefix+fieldName)
+}
+
+// findFieldValueWithSeparatorVariations tries different separator variations
+// Rules: firstName != firstname, but first_name == firstName == first-name
+// For dotted names: apply variations to each part separately
+func (s *urlSearch) findFieldValueWithSeparatorVariations(ctx context.Context, fieldName string) config.Value {
+	// Handle dotted names (JSONB fields) - apply variations to each part separately
+	if strings.Contains(fieldName, ".") {
+		return s.findFieldValueWithDotVariations(ctx, fieldName)
+	}
+
+	// Handle simple field names - apply separator variations
+	return s.findFieldValueWithSimpleVariations(ctx, fieldName)
+}
+
+// findFieldValueWithDotVariations handles field names with dots (JSONB fields)
+// Each part of the dot-separated name gets separator variations applied separately
+func (s *urlSearch) findFieldValueWithDotVariations(ctx context.Context, fieldName string) config.Value {
+	parts := strings.Split(fieldName, ".")
+	if len(parts) != 2 {
+		return config.Value("")
+	}
+
+	columnPart := parts[0]
+	fieldPart := parts[1]
+
+	// Generate variations for the column part
+	columnVariations := s.generateSeparatorVariations(columnPart)
+
+	// Generate variations for the field part
+	fieldVariations := s.generateSeparatorVariations(fieldPart)
+
+	// Try all combinations
+	for _, colVar := range columnVariations {
+		for _, fieldVar := range fieldVariations {
+			combined := colVar + "." + fieldVar
+			if val := s.query(ctx, combined); val.Valid() {
+				return val
+			}
+		}
+	}
+
+	return config.Value("")
+}
+
+// findFieldValueWithSimpleVariations handles field names without dots
+func (s *urlSearch) findFieldValueWithSimpleVariations(ctx context.Context, fieldName string) config.Value {
+	// Try all separator variations
+	variations := s.generateSeparatorVariations(fieldName)
+	for _, variation := range variations {
+		if val := s.query(ctx, variation); val.Valid() {
+			return val
+		}
+	}
+
+	return config.Value("")
+}
+
+// generateSeparatorVariations generates all valid separator variations for a field name
+// Note: firstName != firstname (word casing is preserved), but first_name == firstName
+func (s *urlSearch) generateSeparatorVariations(fieldName string) []string {
+	variations := []string{fieldName}
+
+	// Convert to camelCase (if not already)
+	if strings.Contains(fieldName, "_") || strings.Contains(fieldName, "-") {
+		camelVersion := strcase.ToCamel(fieldName)
+		if camelVersion != fieldName {
+			variations = append(variations, camelVersion)
+		}
+	}
+
+	// Convert underscores to hyphens
+	if strings.Contains(fieldName, "_") {
+		hyphenVersion := strings.ReplaceAll(fieldName, "_", "-")
+		if hyphenVersion != fieldName {
+			variations = append(variations, hyphenVersion)
+		}
+	}
+
+	// Convert hyphens to underscores
+	if strings.Contains(fieldName, "-") {
+		underscoreVersion := strings.ReplaceAll(fieldName, "-", "_")
+		if underscoreVersion != fieldName {
+			variations = append(variations, underscoreVersion)
+		}
+	}
+
+	return variations
+}
+
+func (s *urlSearch) loadSort(ctx context.Context, apiPath, dbName string) {
+	// Try the new format: sort_field=desc
+	val := s.findFieldValue(ctx, "sort_"+apiPath)
 	if val.Valid() && sortTypeValid(val.String()) {
 		s.sorts = append(s.sorts, ParsedSort{
 			DBName: dbName,
 			Type:   SortType(val.String()),
 		})
+	}
+
+	// Try legacy format: sort=-field,+field
+	if len(s.sorts) == 0 {
+		s.loadLegacySort(ctx, apiPath, dbName)
+	}
+}
+
+func (s *urlSearch) loadLegacySort(ctx context.Context, apiPath, dbName string) {
+	// Legacy format: sort=-field,+field (comma-separated list)
+	if sortParam := s.query(ctx, "sort"); sortParam.Valid() {
+		sortFields := strings.Split(sortParam.String(), ",")
+		for _, sortField := range sortFields {
+			sortField = strings.TrimSpace(sortField)
+			if sortField == "" {
+				continue
+			}
+
+			// Extract field name and direction
+			var fieldName string
+			var sortType SortType
+
+			if strings.HasPrefix(sortField, "-") {
+				fieldName = sortField[1:]
+				sortType = SortDesc
+			} else if strings.HasPrefix(sortField, "+") {
+				fieldName = sortField[1:]
+				sortType = SortAsc
+			} else {
+				fieldName = sortField
+				sortType = SortAsc
+			}
+
+			// Check if this field matches our apiPath (case-insensitive)
+			if strings.EqualFold(fieldName, apiPath) || strings.EqualFold(fieldName, strcase.ToCamel(apiPath)) {
+				s.sorts = append(s.sorts, ParsedSort{
+					DBName: dbName,
+					Type:   sortType,
+				})
+			}
+		}
 	}
 }
 
@@ -129,10 +304,7 @@ func (s *urlSearch) loadComparison(ctx context.Context, apiPath string, dbPath [
 		paramName = apiPath
 	}
 
-	val := s.query(ctx, paramName)
-	if !val.Valid() {
-		val = s.query(ctx, strcase.ToCamel(paramName))
-	}
+	val := s.findFieldValue(ctx, paramName)
 	if !val.Valid() {
 		return
 	}
@@ -151,10 +323,7 @@ func (s *urlSearch) loadComparison(ctx context.Context, apiPath string, dbPath [
 
 func (s *urlSearch) loadBetweenComparison(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition) {
 	paramName := fmt.Sprintf("%s_%s", apiPath, string(CompareBetween))
-	val := s.query(ctx, paramName)
-	if !val.Valid() {
-		val = s.query(ctx, strcase.ToCamel(paramName))
-	}
+	val := s.findFieldValue(ctx, paramName)
 	if !val.Valid() {
 		return
 	}
@@ -176,6 +345,49 @@ func (s *urlSearch) loadBetweenComparison(ctx context.Context, apiPath string, d
 		Operator: CompareBetween,
 		Value:    []any{from, to},
 	})
+}
+
+func (s *urlSearch) loadTildeWildcard(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition) {
+	// Check for tilde wildcard patterns: ~field~, ~field, field~
+	// ~field~=value -> field ILIKE '%value%'
+	// ~field=value -> field ILIKE '%value'
+	// field~=value -> field ILIKE 'value%'
+
+	// Pattern 1: ~field~=value (contains)
+	paramName1 := "~" + apiPath + "~"
+	if val1 := s.findFieldValue(ctx, paramName1); val1.Valid() {
+		if parsedVal, ok := s.parseValue(val1.String(), def); ok {
+			s.conditions = append(s.conditions, ParsedCondition{
+				DBPath:   dbPath,
+				Operator: CompareLike,
+				Value:    "%" + fmt.Sprintf("%v", parsedVal) + "%",
+			})
+		}
+	}
+
+	// Pattern 2: ~field=value (starts with)
+	paramName2 := "~" + apiPath
+	if val2 := s.findFieldValue(ctx, paramName2); val2.Valid() {
+		if parsedVal, ok := s.parseValue(val2.String(), def); ok {
+			s.conditions = append(s.conditions, ParsedCondition{
+				DBPath:   dbPath,
+				Operator: CompareLike,
+				Value:    "%" + fmt.Sprintf("%v", parsedVal),
+			})
+		}
+	}
+
+	// Pattern 3: field~=value (ends with)
+	paramName3 := apiPath + "~"
+	if val3 := s.findFieldValue(ctx, paramName3); val3.Valid() {
+		if parsedVal, ok := s.parseValue(val3.String(), def); ok {
+			s.conditions = append(s.conditions, ParsedCondition{
+				DBPath:   dbPath,
+				Operator: CompareLike,
+				Value:    fmt.Sprintf("%v", parsedVal) + "%",
+			})
+		}
+	}
 }
 
 func (s *urlSearch) parseValue(val string, def FieldDefinition) (any, bool) {

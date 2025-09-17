@@ -107,6 +107,21 @@ sqlQuery, args := qb.Criteria()
 
 ## URL Parameter Patterns
 
+### Field Name Resolution Rules
+
+The query library supports intelligent field name resolution with these rules:
+
+1. **Separator Variations**: `first_name`, `firstName`, and `first-name` are treated as the same field
+2. **Word Casing Matters**: `firstName` and `firstname` are different fields
+3. **JSONB Fields**: For dotted field names like `person.first_name`, each part gets separator variations applied separately:
+   - `person.first_name` matches `person.firstName`, `person.first-name`, etc.
+   - Results in SQL: `person ->> 'first_name'`
+
+#### Examples:
+- Field definition: `first_name` matches parameters: `first_name`, `firstName`, `first-name`
+- Field definition: `firstName` matches parameters: `firstName` only (not `firstname`)
+- Field definition: `person.first_name` matches: `person.first_name`, `person.firstName`, `person.first-name`, etc.
+
 ### Basic Comparisons
 - `username=john` → `username = 'john'`
 - `age_gt=25` → `age > 25`
@@ -115,8 +130,11 @@ sqlQuery, args := qb.Criteria()
 - `age_lte=30` → `age <= 30`
 - `age_neq=25` → `age != 25`
 
-### Text Operations
-- `username_lyk=john%` → `username LIKE 'john%'`
+### Text Operations (Tilde Wildcard Syntax)
+- `~username~=john` → `username ILIKE '%john%'` (contains)
+- `~username=john` → `username ILIKE '%john'` (starts with)
+- `username~=john` → `username ILIKE 'john%'` (ends with)
+- `username=john` → `username = 'john'` (exact match)
 - `username_in=john,jane,bob` → `username IN ('john', 'jane', 'bob')`
 
 ### Range Operations
@@ -127,7 +145,9 @@ sqlQuery, args := qb.Criteria()
 - `metadata.city=New York` → `(metadata ->> 'city') = 'New York'`
 - `metadata.zip_code_gt=10000` → `(metadata ->> 'zip_code') > 10000`
 
-### Sorting
+### Sorting (Both Formats Supported)
+- **Legacy Format**: `sort_username=desc&sort_age=asc` → `ORDER BY username DESC, age ASC`
+- **New Format**: `sort=-username,+age` → `ORDER BY username DESC, age ASC`
 - `sort=username` → `ORDER BY username ASC`
 - `sort=-username` → `ORDER BY username DESC`
 - `sort=username,-created_at` → `ORDER BY username ASC, created_at DESC`
