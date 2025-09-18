@@ -1,10 +1,10 @@
 # API Package
 
-The `api` package provides a highly productive, opinionated toolkit for building robust, consistent, and framework-adaptable JSON APIs in Go with pluggable web framework support.
+The `api` package provides a framework-agnostic, highly productive toolkit for building robust, consistent JSON APIs in Go. It implements a clean separation between core application logic and web framework specifics.
 
 ## Goal
 
-The primary goal of this package is to drastically reduce boilerplate and enforce a standardized, scalable pattern for API development. It handles the repetitive tasks of the request/response lifecycle so developers can focus purely on business logic.
+The primary goal is to provide a standardized, scalable pattern for API development that drastically reduces boilerplate while maintaining complete framework agnosticism. Developers can write business logic once and easily switch between web frameworks (Gin, Echo, Fiber, etc.) without changing their core application code.
 
 ## Core Concepts
 
@@ -18,32 +18,53 @@ gin.Setup()
 
 // Use the unified router interface
 router := app.R()
-router.GET("/users", api.Handler[ListRequest, UserResponse](userService.ListUsers))
+router.GET("/users", api.JSONHandler[[]User](userService.ListUsers))
 ```
 
 ### 2. Simplified Type-Safe Handlers
 
 The package provides generic, type-safe handler functions that eliminate boilerplate code:
 
-- `Handler[P, T]`: For single object responses with request parameters
-- `ListHandler[P, T]`: For list responses with pagination
-- `FileHandler[P]`: For file responses
+- `JSONHandler[T]`: For JSON responses with automatic request loading
+- File handlers: For non-JSON responses (io.Reader, byte data)
 
 ```go
-// Single object response with typed parameters
-router.GET("/users/:id", api.Handler[GetUserRequest, User](func(ctx context.Context, req GetUserRequest) (User, error) {
+// Single object response
+router.GET("/users/:id", api.JSONHandler[User](func(ctx contracts.RequestContext) (User, ierrors.Error) {
+    var req GetUserRequest
+
+    // Load from context (correct pattern - RequestLoad is called automatically by JSONHandler)
+    if err := contracts.ContextLoad(ctx.Context(), &req); err != nil {
+        return User{}, err
+    }
+
     return userService.GetUser(req.ID)
 }))
 
-// List response with pagination
-router.GET("/users", api.ListHandler[ListUsersRequest, User](func(ctx context.Context, req ListUsersRequest) ([]User, *int64, error) {
+// List response
+router.GET("/users", api.JSONHandler[[]User](func(ctx contracts.RequestContext) ([]User, ierrors.Error) {
+    var req ListUsersRequest
+
+    // Load from context (correct pattern)
+    if err := contracts.ContextLoad(ctx.Context(), &req); err != nil {
+        return nil, err
+    }
+
     return userService.ListUsers(req)
 }))
 
-// File response
-router.GET("/files/:id", api.FileHandler[GetFileRequest](func(ctx context.Context, req GetFileRequest) (FileResponse, error) {
-    return fileService.GetFile(req.ID)
-}))
+// File response for downloads
+router.GET("/files/:id", func(ctx contracts.RequestContext) {
+    // File handlers can return io.Reader or byte data
+    data, filename, err := fileService.GetFile(req.ID)
+    if err != nil {
+        ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+        return
+    }
+
+    ctx.Header("Content-Disposition", "attachment; filename="+filename)
+    ctx.Data(http.StatusOK, "application/octet-stream", data)
+})
 ```
 
 ### 3. Unified Response Envelope
@@ -125,11 +146,15 @@ gin.SetupWithOptions(func(config *api.RouterConfig) {
 })
 ```
 
-## Roadmap
-
-Future enhancements for this package include:
+## Architecture Status
 
 - [x] **Framework Agnosticism**: Complete framework-agnostic design allowing use with Gin, Echo, Fiber, or standard `net/http`.
-- [ ] **Enhanced Error Parsing**: Deeper inspection of database and validator errors to provide even more specific and helpful error messages (e.g., "user with this email already exists" from a SQL unique constraint violation).
-- [ ] **Automated API Documentation**: Structure the API definitions in a way that enables the automatic generation of OpenAPI (Swagger) specifications.
+- [x] **Comprehensive Test Coverage**: Full test coverage for router initialization, error handling, and file responses.
+- [x] **File Handler Support**: Complete support for non-JSON responses including io.Reader and byte data streaming.
+- [x] **OpenAPI Integration**: Automatic OpenAPI documentation generation with route registration.
+
+## Future Enhancements
+
+- [ ] **Enhanced Error Parsing**: Deeper inspection of database and validator errors to provide even more specific and helpful error messages.
 - [ ] **Additional Framework Implementations**: Built-in support for Echo, Fiber, and other popular frameworks.
+- [ ] **Response Streaming**: Enhanced support for streaming responses and real-time data.

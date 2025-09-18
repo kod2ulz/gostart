@@ -54,21 +54,24 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 		// Check config for logapi flag (defaulting to true)
 		if shouldEnableLogging() {
 			logger := logr.Log()
-			loggingMiddleware := api.LoggingMiddleware(logger, logConfig)
+			// Skip logging if logger is not initialized (test environment)
+			if logger != nil {
+				loggingMiddleware := api.LoggingMiddleware(logger, logConfig)
 
-			engine.Use(func(c *gin.Context) {
-				ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
-				if cont, err := loggingMiddleware(ctx); !cont || err != nil {
-					if err != nil {
-						c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
-							"error": err.Error(),
-						})
+				engine.Use(func(c *gin.Context) {
+					ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
+					if cont, err := loggingMiddleware(ctx); !cont || err != nil {
+						if err != nil {
+							c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
+								"error": err.Error(),
+							})
+						}
+						c.Abort()
+						return
 					}
-					c.Abort()
-					return
-				}
-				c.Next()
-			})
+					c.Next()
+				})
+			}
 		}
 	}
 
@@ -194,7 +197,12 @@ func (r *GinRouter) HEAD(path string, handler api.HandlerFunc) api.Router {
 // Grouping
 func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
 	group := r.engine.Group(path)
-	subRouter := &GinRouter{engine: r.engine, group: group}
+	subRouter := &GinRouter{
+		engine:          r.engine,
+		group:           group,
+		openAPIRegistry: r.openAPIRegistry,
+		openAPIConfig:   r.openAPIConfig,
+	}
 	fn(subRouter)
 	return r
 }

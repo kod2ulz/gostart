@@ -16,6 +16,7 @@ import (
 	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/ierrors"
 	gin_framework "github.com/kod2ulz/gostart/api/frameworks/gin"
+	"github.com/kod2ulz/gostart/utils"
 )
 
 var _ = Describe("Error Handling Integration Tests", func() {
@@ -64,11 +65,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 
 		It("should handle missing required fields", func() {
@@ -88,6 +89,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 					req = loaded.(TestRequest)
 				}
 
+				// Explicitly validate the struct - this is needed because RequestModal doesn't auto-validate
+				if validateErr := utils.Validate.Struct(req); validateErr != nil {
+					return "", errors.ValidatorError[TestRequest](validateErr)
+				}
+
 				return "Hello, " + req.Name, nil
 			})
 
@@ -100,11 +106,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 	})
 
@@ -125,6 +131,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 					req = loaded.(UserRequest)
 				}
 
+				// Explicitly validate the struct
+				if validateErr := utils.Validate.Struct(req); validateErr != nil {
+					return "", errors.ValidatorError[UserRequest](validateErr)
+				}
+
 				return "Email: " + req.Email, nil
 			})
 
@@ -137,11 +148,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 
 		It("should handle numeric range validation", func() {
@@ -160,6 +171,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 					req = loaded.(RangeRequest)
 				}
 
+				// Explicitly validate the struct
+				if validateErr := utils.Validate.Struct(req); validateErr != nil {
+					return "", errors.ValidatorError[RangeRequest](validateErr)
+				}
+
 				return fmt.Sprintf("Age: %d", req.Age), nil
 			})
 
@@ -172,11 +188,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 	})
 
@@ -217,11 +233,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusNotFound))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 
 		It("should handle conflict errors", func() {
@@ -260,11 +276,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusConflict))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 	})
 
@@ -305,11 +321,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusUnauthorized))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 	})
 
@@ -350,11 +366,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusInternalServerError))
 
-			var response contracts.Response[string]
+			var response map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &response)
 			Expect(err).To(BeNil())
-			Expect(response.Success).To(BeFalse())
-			Expect(response.Error).NotTo(BeNil())
+			Expect(response["success"]).To(Equal(false))
+			Expect(response["error"]).NotTo(BeNil())
 		})
 	})
 
@@ -373,6 +389,11 @@ var _ = Describe("Error Handling Integration Tests", func() {
 					return "", errors.RequestLoadFailed[TestRequest](loadError)
 				} else {
 					req = loaded.(TestRequest)
+				}
+
+				// Explicitly validate the struct
+				if validateErr := utils.Validate.Struct(req); validateErr != nil {
+					return "", errors.ValidatorError[TestRequest](validateErr)
 				}
 
 				return "Value: " + req.Value, nil
