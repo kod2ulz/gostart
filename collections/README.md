@@ -1,296 +1,412 @@
-# Collections (`collections`)
+# Collections Package
 
 This package provides a set of generic, thread-safe, and feature-rich data structures designed to improve upon the built-in Go types.
 
 ## Overview
 
-The collections are designed with a fluent, chainable API, making complex data manipulations more expressive and readable.
+Go's built-in slices and maps are powerful but can be verbose for common operations. This package provides enhanced data structures with more convenient methods while maintaining the performance characteristics you expect from Go.
 
-- **`List[T]`**: A generic wrapper for a slice (`[]T`) with a rich set of utility methods.
-- **`Map[K, T]`**: A generic wrapper for a map (`map[K]T`) with helpful extensions.
-- **`Set[T]`**: A generic implementation of a Set data structure, built on top of `Map`.
-- **`Tree[ID, T]`**: A powerful tool for converting a flat list of items into a hierarchical tree structure.
-- **`ConcurrentMap[K, T]`**: A thread-safe implementation of the `Map`.
-- **`ConcurrentList[T]`**: A thread-safe implementation of the `List`.
+The collections are designed to be:
+- **Generic**: Work with any type using Go's generics
+- **Thread-safe**: Concurrent access patterns for shared data
+- **Intuitive**: Methods that follow familiar patterns from other languages
+- **Performant**: Minimal overhead with efficient implementations
 
----
+## Core Data Structures
 
-## `List[T]`
+### List[T] - Enhanced Slice Operations
 
-A `List` is an enhanced slice.
-
-### Example
+The `List[T]` type extends Go slices with additional methods for common operations:
 
 ```go
-import "github.com/kod2ulz/gostart/collections"
+// Basic operations
+users := List([]User{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}})
 
-// Create a new list
-myList := collections.List[int]{1, 2, 3, 4, 5}
+// Add elements
+users.Append(User{ID: 3, Name: "Charlie"})
 
-// Add items
-myList.Add(6, 7)
-
-// Filter for even numbers
-evens := myList.Filter(func(i int, val int) bool {
-    return val%2 == 0
-}) // Result: [2, 4, 6]
-
-// Get the first item
-first := evens.First() // Result: 2
-
-// Sort descending
-sorted := myList.Sort(func(a, b int) bool {
-    return a > b
-}) // Result: [7, 6, 5, 4, 3, 2, 1]
-```
-
----
-
-## `Map[K, T]`
-
-A `Map` is an enhanced map.
-
-### Example
-
-```go
-// Create a new map
-myMap := collections.Map[string, string]{"a": "apple", "b": "banana"}
-
-// Add an item
-myMap.Add("c", "cherry")
-
-// Get all keys
-keys := myMap.Keys() // Result: ["a", "b", "c"]
-
-// Get all values
-values := myMap.Values() // Result: ["apple", "banana", "cherry"]
-
-// Get a single value (returns a pointer)
-val := myMap.Get("b") // *val is "banana"
-```
-
----
-
-## `Set[T]`
-
-A `Set` stores unique, comparable values.
-
-### Example
-
-```go
-mySet := collections.Set[string]{}
-mySet.Add("apple")
-mySet.Add("banana")
-mySet.Add("apple") // Duplicate is ignored
-
-// Check for existence
-hasApple := mySet.Has("apple") // true
-hasCherry := mySet.Has("cherry") // false
-
-// Get all unique values
-values := mySet.Values() // ["apple", "banana"] (order not guaranteed)
-
-// Remove an item
-mySet.Remove("apple")
-
-// Union: a new set with all items from both
-set1 := collections.Set[string]{"a": {}, "b": {}}
-set2 := collections.Set[string]{"b": {}, "c": {}}
-union := set1.Union(set2) // Contains "a", "b", "c"
-
-// Intersection: a new set with only common items
-intersection := set1.Intersection(set2) // Contains just "b"
-
-// Difference: a new set with items in the first set but not the second
-difference := set1.Difference(set2) // Contains just "a"
-```
-
----
-
-## `Tree[ID, T]`
-
-The `Tree` is used to build a hierarchy from a flat slice of objects. Each object must implement the `TreeDataInterface`.
-
-For improved performance and control over JSON serialization, your data structure can optionally implement the `TreeDataMapper` interface.
-
-### Tree Methods
-
-- **`Flatten()`**: Returns a flat `List[T]` of all nodes in the tree.
-- **`Walk(fn func(node *TreeNode[ID, T]))`**: Traverses the tree in breadth-first order and applies a function to each node.
-
-### JSON Marshaling
-
-The `TreeNode` type implements the `json.Marshaler` interface, so you can serialize a tree directly to JSON. The output will be a nested structure representing the hierarchy.
-
-### Example
-
-```go
-import (
-    "encoding/json"
-    "fmt"
-    "time"
-
-    "github.com/google/uuid"
-    "github.com/kod2ulz/gostart/collections"
-)
-
-// 1. Define your data structure
-type Category struct {
-    ID       int     `json:"id"`
-    Name     string  `json:"name"`
-    ParentID *int    `json:"parentId,omitempty"`
-    CreatedAt time.Time `json:"createdAt"`
+// Check if empty
+if users.Empty() {
+    fmt.Println("No users")
 }
 
-// 2. Implement the TreeDataInterface
-func (c Category) Identifier() int {
-    return c.ID
-}
-func (c Category) ParentIdentifier() *int {
-    return c.ParentID
-}
+// Get first and last elements
+first := users.First()
+last := users.Last()
 
-// 3. Optionally implement the TreeDataMapper interface for custom JSON output
-func (c Category) ToMap() map[string]any {
-    return map[string]any{
-        "id": c.ID,
-        "name": c.Name,
-        "parent_id": c.ParentID,
-        "created_at": c.CreatedAt.Format(time.RFC3339),
-        "_custom_field": "example", // Add custom fields
-    }
-}
-
-// 4. Your flat data
-data := []Category{
-    {ID: 1, Name: "Electronics", CreatedAt: time.Now()},
-    {ID: 2, Name: "Computers", ParentID: collections.AsPointer(1), CreatedAt: time.Now()},
-    {ID: 3, Name: "Laptops", ParentID: collections.AsPointer(2), CreatedAt: time.Now()},
-    {ID: 4, Name: "Phones", ParentID: collections.AsPointer(1), CreatedAt: time.Now()},
-}
-
-// 5. Build the tree
-tree := collections.TreeOf(data...)
-
-// 6. Flatten the tree
-flatList := tree.Flatten()
-fmt.Printf("Found %d items in the flattened list\n", flatList.Size())
-
-// 7. Walk the tree
-var count int
-tree.Walk(func(node *collections.TreeNode[int, Category]) {
-	count++
+// Find elements matching a condition
+activeUsers := users.Filter(func(u User) bool {
+    return u.IsActive
 })
-fmt.Printf("Walked %d nodes\n", count)
 
-// 8. Serialize to JSON
-jsonBytes, _ := json.MarshalIndent(tree, "", "  ")
-fmt.Println(string(jsonBytes))
-/* Example Output (structure will vary based on actual data and ToMap implementation):
-{
-  "id": 1,
-  "name": "Electronics",
-  "parent_id": null,
-  "created_at": "2023-10-27T10:00:00Z",
-  "_custom_field": "example",
-  "children": [
-    {
-      "id": 2,
-      "name": "Computers",
-      "parent_id": 1,
-      "created_at": "2023-10-27T10:00:00Z",
-      "_custom_field": "example",
-      "children": [
-        {
-          "id": 3,
-          "name": "Laptops",
-          "parent_id": 2,
-          "created_at": "2023-10-27T10:00:00Z",
-          "_custom_field": "example"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "name": "Phones",
-      "parent_id": 1,
-      "created_at": "2023-10-27T10:00:00Z",
-      "_custom_field": "example"
-    }
-  ]
-}
-*/
+// Find first matching element
+admin := users.Any(func(u User) bool {
+    return u.Role == "admin"
+})
+
+// Sort with custom comparator
+sorted := users.Sort(func(a, b User) bool {
+    return a.Name < b.Name
+})
+
+// In-place stable sort
+users.SortStable(func(a, b User) int {
+    return strings.Compare(a.Name, b.Name)
+})
+
+// Iterate over elements
+users.Iterate(func(i int, user User) error {
+    fmt.Printf("User %d: %s\n", i, user.Name)
+    return nil
+})
+
+// Apply transformation
+userIDs := users.ForEach(func(i int, user User) string {
+    return user.ID
+})
 ```
 
----
+### ConcurrentMap[K, V] - Thread-Safe Dictionary
 
-## Concurrent Collections
+For scenarios where multiple goroutines need to access shared data:
 
-For use in concurrent applications, the package provides thread-safe versions of `Map` and `List`.
+```go
+// Create thread-safe map
+sessionCache := NewConcurrentMap[string, Session]()
 
-- **`ConcurrentMap[K, T]`**: A map where read and write operations are protected by a mutex.
-- **`ConcurrentList[T]`**: A list where read and write operations are protected by a mutex.
+// Concurrent operations are safe
+go func() {
+    for _, session := range sessions {
+        sessionCache.Set(session.ID, session)
+    }
+}()
 
-These can be used as direct, thread-safe replacements for their non-concurrent counterparts.
+go func() {
+    if session, exists := sessionCache.Get("session123"); exists {
+        processSession(session)
+    }
+}()
 
----
+// Atomic operations
+counter := NewConcurrentMap[string, int]()
+counter.Increment("request_count")
+counter.Decrement("active_connections")
 
-## `Cache[K, T, E]`
+// Range over entries safely
+sessionCache.Range(func(key string, session Session) bool {
+    fmt.Printf("Session %s: %v\n", key, session)
+    return true // continue iteration
+})
+```
 
-The `Cache` provides a generic, thread-safe, in-memory caching layer with read-through and write-through capabilities.
+### Cache[K, T] - Generic Caching Interface
 
-### Core Concepts
+For caching data with automatic expiration and loading:
 
-- **`CacheModel[K, T]`**: Your cached objects must implement this interface, which requires a `Key() K` method to uniquely identify the object.
-- **Fetcher Function**: The cache requires a "fetcher" function that it can call to load objects from a persistent data store (e.g., a database) when they are not in the cache or have expired.
-- **Background Eviction**: The cache automatically starts a background process to periodically remove expired items.
+```go
+// Cache interface for different implementations
+type Cache[K comparable, T CacheModel[K, T], E error] interface {
+    Get(key K) (T, error)
+    Set(key K, value T) error
+    Delete(key K) error
+    Clear() error
+}
 
-### Example
+// Memory-based implementation
+userCache := &memoryCache[string, User, error]{
+    items:    make(map[string]cacheItem[User]),
+    ttl:      time.Hour,
+    loadFn:   loadUserFromDB,
+}
+
+// Usage
+user, err := userCache.Get("user123")
+if err != nil {
+    // Handle error or load from database
+}
+```
+
+### Set[T] - Set Operations
+
+For managing unique collections:
+
+```go
+// Create set from slice
+tags := Set([]string{"golang", "api", "database"})
+
+// Check membership
+hasTag := tags.Has("golang")
+
+// Add and remove elements
+tags.Add("web")
+tags.Remove("legacy")
+
+// Set operations
+allTags := tags.Union(otherTags)
+commonTags := tags.Intersection(otherTags)
+uniqueTags := tags.Difference(otherTags)
+```
+
+## Real-World Usage Patterns
+
+### Data Processing Pipelines
+
+```go
+// Process log entries
+func processLogs(logs []LogEntry) []ProcessedLog {
+    return List(logs).
+        Filter(func(entry LogEntry) bool {
+            return entry.Level == "ERROR" || entry.Level == "WARN"
+        }).
+        Sort(func(a, b LogEntry) bool {
+            return a.Timestamp.After(b.Timestamp)
+        }).
+        Slice(0, 1000) // Get first 1000 entries
+}
+```
+
+### Configuration Management
+
+```go
+// Manage application configuration
+type ConfigManager struct {
+    sources *ConcurrentMap[string, ConfigSource]
+    cache   *memoryCache[string, interface{}, error]
+}
+
+func (cm *ConfigManager) Get(key string) (interface{}, error) {
+    // Try cache first
+    if value, err := cm.cache.Get(key); err == nil {
+        return value, nil
+    }
+
+    // Load from sources
+    for _, source := range cm.sources.Values() {
+        if value, exists := source.Get(key); exists {
+            cm.cache.Set(key, value)
+            return value, nil
+        }
+    }
+
+    return nil, fmt.Errorf("config key not found: %s", key)
+}
+```
+
+### Session Management
+
+```go
+// Thread-safe session storage
+type SessionManager struct {
+    sessions *ConcurrentMap[string, Session]
+    cleanup  *time.Ticker
+}
+
+func (sm *SessionManager) Create(userID string) *Session {
+    session := &Session{
+        ID:        generateSessionID(),
+        UserID:    userID,
+        CreatedAt: time.Now(),
+        ExpiresAt: time.Now().Add(24 * time.Hour),
+    }
+
+    sm.sessions.Set(session.ID, session)
+    return session
+}
+
+func (sm *SessionManager) Validate(sessionID string) (*Session, error) {
+    session, exists := sm.sessions.Get(sessionID)
+    if !exists {
+        return nil, errors.New("session not found")
+    }
+
+    if time.Now().After(session.ExpiresAt) {
+        sm.sessions.Delete(sessionID)
+        return nil, errors.New("session expired")
+    }
+
+    return session, nil
+}
+```
+
+## Performance Considerations
+
+### Memory Usage
+
+All operations create new collections rather than modifying existing ones. This ensures thread safety but means you should be mindful of memory usage with large datasets:
+
+```go
+// Efficient for small to medium datasets
+result := largeList.Filter(func(item Item) bool {
+    return item.IsActive
+})
+
+// For very large datasets, consider streaming or batch processing
+func processLargeDataset[T any](items []T, batchSize int, processor func([]T)) {
+    List(items).Chunk(batchSize).ForEach(func(i int, batch []T) {
+        processor(batch)
+    })
+}
+```
+
+### Concurrency
+
+The thread-safe structures use appropriate locking strategies:
+
+```go
+// ConcurrentMap uses fine-grained locking
+var counter ConcurrentMap[string, int]
+
+// Multiple goroutines can safely update different keys
+go func() {
+    counter.Increment("counter1")
+}()
+
+go func() {
+    counter.Increment("counter2")
+}()
+
+// Operations on the same key are serialized
+go func() {
+    counter.Increment("counter1") // This will wait if counter1 is being updated
+}()
+```
+
+## Integration with Other Packages
+
+The collections package integrates well with other GoStart packages:
 
 ```go
 import (
-    "context"
-    "time"
     "github.com/kod2ulz/gostart/collections"
-    "github.com/kod2ulz/gostart/logr"
+    "github.com/kod2ulz/gostart/config"
+    "github.com/kod2ulz/gostart/errors"
 )
 
-// 1. Define your model
-type User struct {
-    ID   string
-    Name string
+// Use with configuration
+func loadUsers() []User {
+    dbHost := config.Get("database.host", "localhost").String()
+    users := fetchUsersFromDB(dbHost)
+
+    return collections.List(users).Filter(func(u User) bool {
+        return u.IsActive
+    })
 }
 
-func (u User) Key() string { // Implement the CacheModel interface
-    return u.ID
-}
+// Use with error handling
+func safeProcess(items []Item) ([]ProcessedItem, error) {
+    results := collections.List(items).ForEach(func(i int, item Item) ProcessedItem {
+        result, err := processItem(item)
+        if err != nil {
+            return ProcessedItem{Error: err}
+        }
+        return result
+    })
 
-// 2. Define your fetcher function
-fetcher := func(ctx context.Context, keys []string) ([]User, error) {
-    // In a real application, you would fetch these users from a database
-    var users []User
-    for _, key := range keys {
-        users = append(users, User{ID: key, Name: "User " + key})
+    // Check for errors
+    if collections.List(results).Any(func(p ProcessedItem) bool {
+        return p.Error != nil
+    }) != nil {
+        return nil, errors.GeneralFailure("processing failed")
     }
-    return users, nil
-}
 
-// 3. Create the cache instance
-// (Assuming 'logger' is an initialized *logr.Logger)
-userCache := collections.NewMemoryCache[string, User, error](
-    logger,
-    collections.WithFetcherFunc[string, User, error](fetcher),
-    collections.WithDefaultTTL[string, User, error](5 * time.Minute),
-)
-defer userCache.Stop() // Clean up the background eviction goroutine
-
-// 4. Use the cache
-// Get a single user. If not in cache, it will be fetched.
-user, err := userCache.Get(context.Background(), "user-123")
-if err != nil {
-    // handle error
-}
-if user != nil {
-    fmt.Printf("Got user: %s", user.Name)
+    return results, nil
 }
 ```
+
+## When to Use This Package
+
+### Well-Suited For:
+
+- **Data transformation pipelines**: Filter, sort, and process collections
+- **Concurrent applications**: Shared data structures accessed by multiple goroutines
+- **API response processing**: Clean, readable data manipulation
+- **Session management**: Thread-safe user session storage
+- **Configuration systems**: Cached configuration with multiple sources
+
+### Consider Standard Go For:
+
+- **Simple operations**: Basic slice operations where built-ins suffice
+- **Performance-critical code**: Raw loops may be faster for simple cases
+- **Memory-constrained environments**: The additional features have some overhead
+- **Small datasets**: Overhead may not justify benefits for trivial use cases
+
+## Migration from Standard Go
+
+### From Slices to List[T]
+
+```go
+// Before: Standard Go
+var activeUsers []User
+for _, user := range users {
+    if user.IsActive {
+        activeUsers = append(activeUsers, user)
+    }
+}
+
+sort.Slice(activeUsers, func(i, j int) bool {
+    return activeUsers[i].Name < activeUsers[j].Name
+})
+
+// After: Collections
+activeUsers := collections.List(users).
+    Filter(func(u User) bool { return u.IsActive }).
+    Sort(func(a, b User) bool { return a.Name < b.Name })
+```
+
+### From Maps to ConcurrentMap[K, V]
+
+```go
+// Before: Standard Go with mutex
+var (
+    sessions = make(map[string]Session)
+    mutex    sync.RWMutex
+)
+
+func getSession(id string) (Session, bool) {
+    mutex.RLock()
+    defer mutex.RUnlock()
+    session, exists := sessions[id]
+    return session, exists
+}
+
+// After: ConcurrentMap
+sessions := collections.NewConcurrentMap[string, Session]()
+session, exists := sessions.Get(id)
+```
+
+## Implementation Status
+
+### ✅ **Fully Implemented Data Structures**
+- **Generic Cache System** - Thread-safe caching with TTL, background eviction, and prefix-based management
+- **ConcurrentMap[K, V]** - Thread-safe dictionary with atomic operations, range iteration, and fine-grained locking
+- **List[T]** - Enhanced slice operations with `Filter()`, `Sort()`, `SortStable()`, `Any()`, `ForEach()`, `First()`, `Last()`
+- **Set[T]** - Set operations with union, intersection, difference, and membership testing
+- **Iterator Pattern** - Generic iteration support for all collections
+- **Cache Model Interface** - Extensible caching system for custom types
+
+### ✅ **Well-Implemented Utility Methods**
+- **List Operations**: `Filter()`, `Sort(lessFn)`, `SortStable(comp)`, `Any(predicate)`, `ForEach(fn)`, `First()`, `Last()`, `Empty()`, `Append()`, `Iterate()`
+- **ConcurrentMap Operations**: `Set()`, `Get()`, `Delete()`, `Increment()`, `Decrement()`, `Range()`, `Values()`
+- **Set Operations**: `Has()`, `Add()`, `Remove()`, `Union()`, `Intersection()`, `Difference()`
+- **Cache Operations**: `Get()`, `Set()`, `Delete()`, `Clear()`, TTL management, background cleanup
+
+### ⚠️ **Needs Verification/Completion**
+- **Tree Structures** - Referenced in file structure but implementation needs verification
+- **Advanced List Methods** - Some utility methods may be incomplete
+- **Performance Optimization** - Further optimization for large datasets may be needed
+
+### 🚧 **Planned Enhancements**
+- **Additional Data Structures** - Trees, graphs, priority queues
+- **Performance Benchmarks** - Comprehensive performance testing and optimization
+- **Memory Pooling** - Object pooling for reduced GC pressure
+- **Stream Processing** - Real-time data stream processing capabilities
+
+## Detailed Documentation
+
+For comprehensive guides on specific features:
+
+- **[List Operations](./docs/list.md)** - Complete reference for List[T] methods
+- **[Concurrent Data Structures](./docs/concurrent-structures.md)** - Thread-safe patterns and examples
+- **[Performance Optimization](./docs/performance.md)** - Performance characteristics and best practices
+
+This package provides practical enhancements to Go's built-in collections while maintaining the language's performance characteristics and idioms.

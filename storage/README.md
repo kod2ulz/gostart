@@ -1,47 +1,87 @@
 # Storage Package
 
-This package provides utilities for data storage, primarily a factory for creating Redis clients.
+The `storage` package provides a unified abstraction layer for configuring and initializing various data storage technologies. It serves as the central configuration point for database connections, caching systems, and other persistence layers, enabling consistent setup patterns across different storage backends.
 
-## Redis Client
+## Overview
 
-A Redis client can be easily created by providing a configuration prefix. The factory will then use the main `gostart/config` package to retrieve the necessary connection details.
+This package is designed to be **storage-technology agnostic**, providing a common interface for configuration management while supporting specific implementations for different storage systems. Currently supports:
 
-### Usage
+- **PostgreSQL** (via pgx/v5)
+- **Redis** (caching and pub/sub)
+- **Extensible architecture** for future additions (DGraph, MinIO, Neo4j, etc.)
+
+## Core Philosophy
+
+The storage package follows these principles:
+
+- **Configuration Unification**: Single entry point for all storage configuration
+- **Environment-Aware**: Seamless integration with GoStart's hierarchical configuration system
+- **Technology Agnostic**: Consistent patterns regardless of underlying storage technology
+- **Production-Ready**: Built-in connection pooling, logging, and health checking
+
+## Current Implementations
+
+### PostgreSQL Integration
+
+The package provides streamlined PostgreSQL configuration and initialization:
 
 ```go
 import "github.com/kod2ulz/gostart/storage"
 
-// Create a redis client using settings from keys prefixed with "MY_APP_REDIS_"
-// (e.g., MY_APP_REDIS_HOST, MY_APP_REDIS_PORT)
-redisClient := storage.Redis("MY_APP_REDIS")
+// Configure PostgreSQL connection
+dbConf := storage.Config("POSTGRES_DB")
+connString := dbConf.ConnectionString()
+
+// Use with pgx/v5 for connection pooling
+pool, err := pgxpool.New(context.Background(), connString)
 ```
 
-## Datastore Configuration (`storage.Config`)
+### Redis Integration
 
-The `storage.Config` function is a helper for bootstrapping datastore configurations. It reads environment variables based on a prefix to populate a `storage.Conf` struct, which can then be used to generate a `ConnectionString`.
+Redis client creation with automatic configuration management:
 
-This is particularly useful for initializing database connections like PostgreSQL.
+```go
+import "github.com/kod2ulz/gostart/storage"
 
-### End-to-End Example
+// Create Redis client using configuration prefix
+redisClient := storage.Redis("MY_APP_REDIS")
+// Reads from MY_APP_REDIS_HOST, MY_APP_REDIS_PORT, etc.
+```
 
-Here is an example of how `storage.Config` is used in a `main.go` file to set up a database connection. Note how it uses the main `config` package to load a `config.yaml` file first, and `storage.Config` can then draw from those values if they are present, falling back to environment variables if they are not.
+## Configuration Pattern
+
+All storage technologies follow the same configuration pattern:
+
+1. **Define a configuration prefix** (e.g., "POSTGRES_DB", "REDIS_CACHE")
+2. **Use the appropriate factory function** (`storage.Config()`, `storage.Redis()`, etc.)
+3. **Get configured client/connection** ready for use
+
+The system automatically reads from GoStart's hierarchical configuration:
+- YAML configuration files
+- Environment variables
+- Database settings (for dynamic configuration)
+- HashiCorp Vault (for secrets)
+- Default values
+
+## Usage Examples
+
+### Database Configuration
 
 ```go
 package main
 
 import (
-	"context"
+    "context"
 
-	"github.com/kod2ulz/gostart/app"
-	"github.com/kod2ulz/gostart/config"
-	"github.com/kod2ulz/gostart/logr"
-	"github.com/kod2ulz/gostart/storage"
-	"github.com/kod2ulz/gostart/utils"
+    "github.com/kod2ulz/gostart/app"
+    "github.com/kod2ulz/gostart/config"
+    "github.com/kod2ulz/gostart/logr"
+    "github.com/kod2ulz/gostart/storage"
+    "github.com/kod2ulz/gostart/utils"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+    "github.com/jackc/pgx/v5/pgxpool"
 )
 
-// This function would live in your project's database package
 func InitDB(ctx context.Context, log *logr.Logger, conf *storage.Conf) (*pgxpool.Pool, error) {
     connString := conf.ConnectionString()
     config, err := pgxpool.ParseConfig(connString)
@@ -49,35 +89,99 @@ func InitDB(ctx context.Context, log *logr.Logger, conf *storage.Conf) (*pgxpool
         return nil, err
     }
 
-    // Attach the pgx/v5 logger
+    // Attach structured logging
     config.ConnConfig.Tracer = storage.NewPgxLogger(log)
 
     return pgxpool.NewWithConfig(ctx, config)
 }
 
 func main() {
-	// Load hierarchical config from file/env/etc.
-	if err := config.Yaml.Load("config.yaml"); err != nil {
-		// handle error
-	}
+    // Load hierarchical configuration
+    if err := config.Yaml.Load("config.yaml"); err != nil {
+        // handle error
+    }
 
-	// Initialize the core application
-	app := app.Init()
-	ctx, log := app.Ctx(), app.Log()
+    app := app.Init()
+    ctx, log := app.Ctx(), app.Log()
 
-	// Use storage.Config to get database configuration.
-	// It will pull from the values loaded by the main config package.
-	// Keys would be e.g., POSTGRES_DB_HOST, POSTGRES_DB_PORT, etc.
-	dbConf := storage.Config("POSTGRES_DB")
+    // Configure PostgreSQL
+    dbConf := storage.Config("POSTGRES_DB")
+    dbConn, err := InitDB(ctx, log, dbConf)
+    utils.Error.Fail(log.Entry, err, "failed to connect to database")
+    defer dbConn.Close()
 
-	// Pass the config to your database initializer
-	db_conn, err := InitDB(ctx, log, dbConf)
-	utils.Error.Fail(log.Entry, err, "failed to connect to database")
-	defer db_conn.Close()
+    // Configure Redis for caching
+    redisClient := storage.Redis("CACHE_REDIS")
 
-	log.Info("Database connection successful!")
-
-	// ... rest of your application
-	app.Run()
+    log.Info("Storage systems initialized successfully!")
+    app.Run()
 }
 ```
+
+## Extensibility
+
+The storage package is designed to be easily extended with new storage technologies:
+
+1. **Configuration Structure**: Define configuration parameters for the new technology
+2. **Factory Function**: Create a factory function that uses `storage.Config()`
+3. **Integration**: Follow the established patterns for logging and health checking
+
+### Example: Adding DGraph Support
+
+```go
+// Future extension example
+func DGraph(configPrefix string) (*dgraph.Client, error) {
+    conf := storage.Config(configPrefix)
+    // Configure DGraph client using conf.Host, conf.Port, etc.
+    return dgraphClient, nil
+}
+```
+
+## Integration with GoStart Ecosystem
+
+The storage package seamlessly integrates with other GoStart packages:
+
+- **[`config`](../config/README.md)**: Hierarchical configuration management
+- **[`logr`](../logr/README.md)**: Structured logging with pgx integration
+- **[`errors`](../errors/README.md)**: Enhanced error handling for storage operations
+- **[`query`](../query/README.md)**: Query builders and criteria patterns
+
+## Implementation Status
+
+### ⚠️ **Current State: Basic Configuration Only**
+
+**IMPORTANT:** This package provides only basic configuration utilities. No actual storage abstractions or query builders are implemented.
+
+### ✅ **Implemented Features**
+- **Redis Client Factory** - Basic Redis client creation with authentication
+- **PostgreSQL Configuration** - Basic database configuration structure
+- **Connection String Generation** - Utility for building database connection strings
+- **pgx Logger Integration** - Basic logging integration for PostgreSQL
+
+### ❌ **NOT Implemented (Documentation Overstates Capabilities)**
+- **Storage Abstractions** - No generic storage interfaces exist
+- **Query Builders** - No type-safe query builders implemented
+- **Caching Layer** - No intelligent caching system exists
+- **Database Connection Management** - Basic configuration only, no pooling or health monitoring
+- **Multiple Storage Technologies** - Only basic Redis and PostgreSQL setup
+- **Migration System** - No schema migration tools
+- **Transaction Management** - No transaction support beyond basic pgx
+
+### 🚧 **What This Package Actually Provides**
+This package is currently just a configuration utility that helps set up Redis and PostgreSQL clients. It does NOT provide:
+- Generic storage interfaces
+- Query builders or ORM functionality
+- Advanced caching systems
+- Multi-technology storage abstractions
+- Health monitoring or automatic reconnection
+
+## Roadmap
+
+### 🚧 **Planned Enhancements**
+- **Storage Interface Abstractions** - Generic interfaces for multiple storage backends
+- **Query Builder System** - Type-safe query construction
+- **Advanced Caching Layer** - Intelligent caching with invalidation strategies
+- **Additional Storage Technologies** - DGraph, MinIO, Neo4j, MongoDB, Cassandra support
+- **Connection Management** - Connection pooling, health monitoring, automatic reconnection
+- **Migration Tools** - Database schema migration utilities
+- **Performance Monitoring** - Query metrics and optimization insights

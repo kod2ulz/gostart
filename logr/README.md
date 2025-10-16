@@ -1,194 +1,179 @@
-# Logger (`logr`)
+# Logr Package
 
-## 1. Vision & Goals
+The `logr` package provides a structured logging framework built on Go's standard `slog` package. It enables powerful log analysis and monitoring for modern applications with pluggable handlers and audit logging capabilities.
 
-This package provides a high-performance, structured, and extensible logging framework for the `gostart` ecosystem. It is designed not just for displaying logs, but for enabling powerful, automated **log analysis**.
+## Philosophy
 
-The core goal is to produce consistent, machine-readable logs (primarily JSON) that can be shipped to platforms like Grafana, Loki, or the ELK Stack (Elasticsearch, Logstash, Kibana). This enables:
+The logr package is built around **structured logging for observability**:
 
-- **Performance Monitoring:** Tracking request durations, identifying bottlenecks, and analyzing slow database queries.
-- **Security & Auditing:** Detecting attacks, service misuse, and providing a clear audit trail.
-- **Analytics:** Understanding user behavior and geographic usage patterns.
-- **Debugging:** Tracing requests across multiple services via a `request_id` and quickly diagnosing panics and failures with exact file locations.
+- **Analysis-First**: Logs are designed for machine processing, not just human reading
+- **Performance Aware**: Minimal overhead with non-blocking audit logging
+- **Security Focused**: Separate audit trails for compliance and security monitoring
+- **Standards Compliant**: Built on Go's standard `slog` package for maximum compatibility
 
-## 2. Core Architecture
+## Quick Start
 
-To achieve these goals, the `logr` package is built on the following principles:
-
-- **`slog`-native API:** The public API is a wrapper around the standard library's `slog.Logger`, ensuring modern, idiomatic Go usage.
-- **Pluggable Handlers (Sinks/Writers):** The output destination is determined by one or more `slog.Handler` implementations. This allows for extreme flexibility. The library provides pre-built handlers for common use cases, and developers can easily write and plug in their own.
-
-## 3. Configuration & Usage
-
-Initialization is designed to be simple and declarative. The main `logr.Config(...slog.Handler)` function accepts one or more handlers that determine where logs are sent. If no handler is provided, it defaults to a JSON handler writing to the console.
-
-### Handler: Console Output
-
-`logr.NewConsoleHandler(pretty bool) slog.Handler`
-
-- **pretty `false` (Production):** Outputs compact, single-line JSON.
-- **pretty `true` (Development):** Outputs colorized, human-readable logs.
-
-**Example: Pretty-printed console logger for development**
 ```go
-// main.go
+import "github.com/kod2ulz/gostart/logr"
+
+// Initialize with console output
 func main() {
+    // Development: Pretty console output
     handler := logr.NewConsoleHandler(true)
     if err := logr.Config(handler); err != nil {
         panic(err)
     }
-    // ...
+
+    // Start logging
+    logr.Info("Application started",
+        "version", "1.0.0",
+        "environment", "development",
+    )
 }
 ```
 
-### Handler: File Output
+## Key Features
 
-`logr.NewFileHandler(path string, rotation *logr.RotationConfig) slog.Handler`
+### Multiple Output Handlers
 
-This handler writes logs to a file with automatic rotation. The rotation behavior can be configured with the `RotationConfig` struct. If `nil` is passed, settings are read from environment variables, with sensible defaults.
-
-**RotationConfig Struct:**
 ```go
-type RotationConfig struct {
-    MaxSize    int  // Max size in megabytes before rotation
-    MaxAge     int  // Max number of days to retain old log files
-    MaxBackups int  // Max number of old log files to retain
-    Compress   bool // Whether to compress/gzip old log files
-}
-```
-
-**Environment Variables for Default Rotation:**
-- `LOG_ROTATE_MAX_SIZE`: (Default: `100` MB)
-- `LOG_ROTATE_MAX_AGE`: (Default: `28` days)
-- `LOG_ROTATE_MAX_BACKUPS`: (Default: `5`)
-- `LOG_ROTATE_COMPRESS`: (Default: `true`)
-
-**Example: Production file logger with explicit rotation**
-```go
-// main.go
-func main() {
-    handler := logr.NewFileHandler("/var/log/app.log", &logr.RotationConfig{
+// Production: JSON to console and rotating files
+func setupProductionLogging() error {
+    consoleHandler := logr.NewConsoleHandler(false) // Minified JSON
+    fileHandler := logr.NewFileHandler("/var/log/app.log", &logr.RotationConfig{
         MaxSize:    100,
-        MaxBackups: 3,
-        MaxAge:     28,
+        MaxBackups: 10,
+        MaxAge:     30,
         Compress:   true,
     })
-    if err := logr.Config(handler); err != nil {
-        panic(err)
-    }
-    // ...
+
+    return logr.Config(consoleHandler, fileHandler)
 }
 ```
 
-### Combining Multiple Handlers
+### Context-Aware Logging
 
-You can easily log to multiple destinations by passing more than one handler to `Config`.
-
-**Example: Log to both console and a file**
 ```go
-// main.go
-func main() {
-    consoleHandler := logr.NewConsoleHandler(false) // Minified JSON for production
-    fileHandler := logr.NewFileHandler("/var/log/app.log", nil) // Use default rotation from ENV
+// Add context to all logs within a request scope
+func UserHandler(ctx contracts.RequestContext) {
+    logger := logr.With(
+        "request_id", ctx.Header("X-Request-ID"),
+        "user_id", ctx.Header("X-User-ID"),
+        "method", ctx.Method(),
+        "path", ctx.Path(),
+    )
 
-    if err := logr.Config(consoleHandler, fileHandler); err != nil {
-        panic(err)
-    }
-    // ...
+    logger.Info("Processing user request")
+
+    // All subsequent logs include the context
+    logger.Debug("Fetching user from database")
+    logger.Info("Request completed", "duration_ms", 45)
 }
 ```
 
-## 4. Log Structure
+### Audit Logging
 
-The default JSON handler produces a consistent, top-level structure. While top-level keys are standardized, attribute values can be complex nested objects or arrays.
-
-**Example: Anonymized HTTP Request Log**
-```json
-{
-  "time": "2025-09-13T14:20:04Z",
-  "level": "INFO",
-  "msg": "",
-  "source": {
-    "file": "/app/gostart/api/log.go:59",
-    "function": "github.com/user/project/app.(*ap).initAPI.JSONLogMiddleware.func3"
-  },
-  "application": "my-app-name",
-  "host": "app-host-1",
-  "client_ip": "41.210.141.216",
-  "duration": 9,
-  "method": "GET",
-  "path": "/api/public/settings",
-  "referrer": "https://example.com/admin",
-  "request_id": "b6ce62e1-fdbe-4ce4-bd91-ddc3b7435915",
-  "size": 677,
-  "status": 200,
-  "user_id": "fcc80928-9ca7-4e9a-b7df-748d352705ad"
-}
-```
-
-**Example: Anonymized Database Query Log (with nested object)**
-```json
-{
-  "time": "2025-09-13T14:20:04Z",
-  "level": "INFO",
-  "msg": "Query",
-  "source": {
-    "file": "/app/vendor/github.com/jackc/pgx/log/adapter.go:34",
-    "function": "github.com/jackc/pgx/log.Logger.Log"
-  },
-  "application": "my-app-name",
-  "host": "app-host-1",
-  "pid": 522747,
-  "sql": "SELECT id, name, email FROM users WHERE id = $1 LIMIT $2",
-  "args": ["user-uuid-123", 1],
-  "rowCount": 1
-}
-```
-
-## 5. Audit Logging
-
-Audit logging is a separate, critical concern. The audit logger is configured independently from the main application logger to ensure audit trails are never dropped and are routed to a secure, permanent destination. By default, the audit writer is **non-blocking** to prevent performance degradation.
-
-**Environment Variables for Audit Writer:**
-- `AUDIT_LOG_ASYNC_WRITER_BUFFER_MAX_SIZE`: The size of the in-memory buffer for the async writer. (Default: `1000`)
-
-**Example: Configuring a Database Audit Writer**
 ```go
-// main.go
-
-dbConn := getDbConnection() // Your database connection
-
-auditWriter := func(entry map[string]interface{}) error {
-    // Custom logic to insert the audit entry into a database table
-    return dbConn.Create(&models.AuditLog{Details: entry}).Error
+// Separate audit logging for security events
+func setupAuditLogging() {
+    auditWriter := logr.NewFileAuditWriter("/var/log/audit.log")
+    logr.SetAuditWriter(auditWriter)
 }
 
-logr.SetAuditWriter(auditWriter)
-
-// Later, in your application code...
-func someImportantAction(user User) {
+func LogSecurityEvent(eventType string, details map[string]interface{}) {
     logr.Audit().Log(map[string]interface{}{
-        "action": "user_deleted",
-        "user_id": user.ID,
+        "event_type": eventType,
         "timestamp": time.Now(),
+        "details": details,
     })
 }
 ```
 
-## 6. Implementation Roadmap
+### Performance Monitoring
 
-- [x] **Phase 1: Core Refactor**
-    - [x] Migrate core API from `logrus` to `slog`.
-    - [x] Implement non-blocking, channel-based handler (Re-evaluated and removed for simplicity, can be re-added if needed).
-    - [x] Fix log caller source location reporting.
-- [x] **Phase 2: Handlers & Formatting**
-    - [x] Implement `NewConsoleHandler` (supporting pretty/minified JSON).
-    - [x] Implement `NewFileHandler` (with log rotation).
-    - [ ] Implement a customizable text-based handler.
-- [x] **Phase 3: Advanced Routing & Audit**
-    - [ ] Implement Level-based Routing (e.g., errors to a separate file/handler).
-    - [x] Implement `SetAuditWriter` and `logr.Audit()` API.
-    - [x] Provide a pre-built `NewFileAuditWriter`.
-- [ ] **Phase 4: Advanced Handlers**
-    - [ ] Implement `NewLogstashHandler`.
-    - [ ] Implement `NewLokiHandler`.
+```go
+// Automatic performance tracking
+func TimeOperation[T any](operation string, fn func() (T, error)) (T, error) {
+    start := time.Now()
+    defer func() {
+        duration := time.Since(start)
+        logr.Info("Operation completed",
+            "operation", operation,
+            "duration_ms", duration.Milliseconds(),
+        )
+    }()
+    return fn()
+}
+```
+
+## Integration with GoStart
+
+The logr package integrates seamlessly with other GoStart components:
+
+- **[`api`](../api/README.md)**: HTTP request logging and middleware integration
+- **[`storage`](../storage/README.md)**: Database query logging with pgx integration
+- **[`config`](../config/README.md)**: Logging configuration from environment or YAML
+- **[`errors`](../errors/README.md)**: Structured error logging with context
+
+### Database Integration
+
+```go
+// Enhanced query logging with pgx
+func setupDatabaseLogging(dbPool *pgxpool.Pool) {
+    dbPool.Config().ConnConfig.Logger = logr.NewPgxLogger()
+}
+
+// Automatic query logging with:
+// - SQL queries and parameters
+// - Execution duration
+// - Row counts
+// - Connection information
+```
+
+## Learning Resources
+
+### Getting Started
+- [Logging Quick Start](./docs/quick-start.md) - Basic setup and configuration
+- [Handler Guide](./docs/handlers.md) - Console, file, and custom handlers
+
+### Advanced Topics
+- [Audit Logging](./docs/audit.md) - Security and compliance logging
+- [Performance Monitoring](./docs/performance.md) - Performance tracking and optimization
+- [Database Logging](./docs/database.md) - Query logging and pgx integration
+
+### Reference
+- [API Documentation](./docs/api.md) - Complete method reference
+- [Configuration Examples](./examples/) - Real-world logging configurations
+- [Best Practices](./docs/best-practices.md) - Production logging patterns
+
+## When to Use Logr
+
+### Perfect For:
+- **Production Applications**: Structured logging for observability platforms
+- **Microservices**: Request tracing across service boundaries
+- **Security-Conscious Applications**: Audit trails and compliance requirements
+- **Performance Monitoring**: Detailed performance metrics and bottlenecks
+
+### Consider Alternatives For:
+- **Simple CLI Tools**: Standard library `log` package may suffice
+- **Development Debugging**: Pretty console logging without structured needs
+- **Legacy Systems**: Applications that don't need observability
+
+## Roadmap
+
+Future enhancements for the logr package:
+
+- **Additional Handlers**: Logstash, Loki, and cloud platform integrations
+- **Log Sampling**: Automatic log sampling for high-volume applications
+- **Structured Field Validation**: Enforce consistent field names and types
+- **Log Aggregation**: Built-in log aggregation and forwarding
+- **Metrics Integration**: Automatic metrics extraction from log data
+
+The logr package provides the foundation for production-ready, observability-focused logging in GoStart applications.
+
+### Implementation Status
+
+- [x] **Phase 1: Core Refactor** - Migrated to `slog` package
+- [x] **Phase 2: Handlers & Formatting** - Console and file handlers
+- [x] **Phase 3: Advanced Routing & Audit** - Audit logging capabilities
+- [ ] **Phase 4: Advanced Handlers** - Logstash, Loki, and cloud integrations

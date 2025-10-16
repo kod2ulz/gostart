@@ -4,15 +4,36 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/kod2ulz/gostart)
 
-**GoStart** is a library built to bootstrap Go projects quickly, enforcing best practices for request and route management, authentication, and database interactions. It allows developers to build faster, providing extendable logging and metrics without compromising on standards.
+**GoStart** is an opinionated Go framework bootstrap library that provides a standardized structure for building backend services. It's designed for developers who want to build production-ready applications quickly without getting lost in configuration decisions, while still maintaining the flexibility to customize when needed.
+
+---
+
+## Philosophy & Vision
+
+GoStart is built on the principle that **convention over configuration** accelerates development, but **flexibility over rigidity** ensures long-term maintainability. We believe that:
+
+- **Structure matters**: A consistent project structure reduces cognitive load and makes codebases easier to navigate
+- **Standards save time**: Enforcing best practices for security, error handling, and logging prevents common pitfalls
+- **Business logic is king**: Framework and infrastructure concerns should fade into the background
+- **Choice is important**: While opinionated, GoStart never locks you into a single ecosystem or approach
+
+The framework provides sensible defaults and patterns that work for 80% of use cases, while allowing deep customization for the remaining 20%.
 
 ---
 
 ## Overview
 
-This library provides a solid foundation for building scalable and maintainable backend services in Go. It wires together common components like a web framework, authentication, data access, caching, and message queues, allowing you to focus on business logic instead of boilerplate code.
+GoStart provides a comprehensive foundation for backend services by integrating:
 
-The core design philosophy is to be "opinionated" where it matters (structure, standards, security) but flexible where it counts (pluggable components).
+- **Framework-agnostic API layer** with unified interfaces
+- **Pluggable authentication** and session management
+- **Structured logging** and observability
+- **Database abstraction** with intelligent query building
+- **Message queue integration** for async processing
+- **Configuration management** across environments
+- **Thread-safe collections** and utilities
+
+The architecture is designed around **clean separation of concerns**, enabling you to swap components (web frameworks, databases, etc.) without rewriting business logic.
 
 ## Features
 
@@ -94,22 +115,44 @@ For more detailed, real-world examples of how to use specific packages, please s
 - **Logging:** [Integrating `logr` with `pgx/v5`](./logr/pgxv5_example.md)
 - *(More examples will be added as we refactor each package)*
 
-## Project Structure
+## Package Architecture
 
-The library is organized into logical packages. For a detailed breakdown, see the [Introduction to GoStart](./docs/01-introduction.md).
+GoStart is organized into focused packages, each with a clear responsibility:
 
-- `/app`: Core application bootstrap and configuration.
-- `/api`: Framework-agnostic API layer with unified response envelopes and generic handlers.
-- `/api/frameworks`: Framework-specific implementations (Gin, Echo, etc.).
-- `/contracts`: Core interfaces defining the framework-agnostic contracts.
-- `/auth`: Authentication, session management, and authorization middleware.
-- `/http`: HTTP client utilities for making external API calls.
-- `/storage`: Caching (Redis) and persistence helpers.
-- `/mq`: Message queue integration (RabbitMQ).
-- `/logr`: Structured logging configuration.
-- `/query`: Database query builders and helpers.
-- `/collections`: Thread-safe collections and data structures.
-- `/utils`: Common utilities for errors, environment variables, etc.
+### Core Foundation
+- [`/app`](./app/README.md) - Application bootstrap, lifecycle management, and graceful shutdown
+- [`/contracts`](./contracts/README.md) - Framework-agnostic interfaces and type definitions
+- [`/config`](./config/README.md) - Hierarchical configuration management (Vault → Database → YAML → Env → Defaults)
+
+### API & Web Framework
+- [`/api`](./api/README.md) - Framework-agnostic API layer with generic handlers and unified responses
+- [`/api/frameworks`](./api/frameworks/gin/) - Framework-specific implementations (currently Gin, extensible)
+- [`/router`](./router/README.md) - Unified router interface with CORS and middleware support
+- [`/errors`](./errors/README.md) - Enhanced error handling with HTTP status mapping and field validation
+- [`/ierrors`](./ierrors/README.md) - Base error interface and chainable error construction
+
+### Data & Persistence
+- [`/storage`](./storage/README.md) - Multi-technology storage abstraction layer (PostgreSQL, Redis, extensible)
+- [`/query`](./query/README.md) - Intelligent query builders with criteria patterns and field resolution
+- [`/sqlc`](./sqlc/README.md) - Database interface definitions and pgx integration utilities
+
+### Application Services
+- [`/auth`](./auth/README.md) - Authentication interfaces and JWT/PASETO utilities
+- [`/mq`](./mq/README.md) - Message queue integration with publisher-subscriber patterns
+- [`/http`](./http/README.md) - Type-safe HTTP client with authentication and logging
+- [`/logr`](./logr/README.md) - Structured logging with pluggable handlers and audit support
+
+### Utilities & Extensions
+- [`/collections`](./collections/README.md) - Thread-safe data structures and concurrent collections
+- [`/object`](./object/README.md) - Enhanced primitive types with fluent APIs
+- [`/utils`](./utils/README.md) - Common utilities for environment, validation, and more
+
+### Documentation
+- [`/docs`](./docs/README.md) - Comprehensive guides and conceptual documentation
+- [Introduction to GoStart](./docs/01-introduction.md) - Getting started guide
+- [Configuration Guide](./docs/02-configuration.md) - Configuration patterns and best practices
+- [API Development](./docs/03-api-development.md) - Building APIs with GoStart
+- [Authentication](./docs/04-authentication.md) - Authentication patterns and implementation
 
 ## Roadmap
 

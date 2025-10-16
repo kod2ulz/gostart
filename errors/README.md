@@ -302,35 +302,30 @@ package main
 import (
     "github.com/kod2ulz/gostart/api"
     "github.com/kod2ulz/gostart/errors"
+    "github.com/kod2ulz/gostart/contracts"
 )
 
 type CreateUserRequest struct {
-    api.RequestModal[CreateUserRequest]
     Email    string `json:"email" validate:"required,email"`
     Password string `json:"password" validate:"required,min=8"`
     Name     string `json:"name" validate:"required"`
 }
 
-func CreateUserHandler(ctx contracts.RequestContext) {
+func CreateUserHandler(ctx contracts.RequestContext) (User, ierrors.Error) {
     var req CreateUserRequest
-    if err := req.RequestLoad(ctx); err != nil {
-        errors.HandleError(ctx, errors.RequestLoadError[CreateUserRequest](err))
-        return
+
+    // Load from context (RequestLoad is handled automatically by JSONHandler)
+    if err := contracts.ContextLoad(ctx.Context(), &req); err != nil {
+        return User{}, err
     }
 
-    // Validate request
-    if err := req.Validate(ctx); err != nil {
-        errors.HandleError(ctx, errors.ValidationFailed[CreateUserRequest](err))
-        return
+    // Create user in database (validation is automatic)
+    user, err := userRepository.Create(req)
+    if err != nil {
+        return User{}, errors.SQLError[CreateUserRequest](err)
     }
 
-    // Create user in database
-    if err := userRepository.Create(req); err != nil {
-        errors.HandleError(ctx, errors.SQLError[CreateUserRequest](err))
-        return
-    }
-
-    api.SuccessResponse(ctx, "User created successfully")
+    return user, nil
 }
 ```
 
@@ -368,13 +363,14 @@ package service
 
 import (
     "github.com/kod2ulz/gostart/errors"
+    "github.com/kod2ulz/gostart/ierrors"
 )
 
 type UserService struct {
     repo UserRepository
 }
 
-func (s *UserService) CreateUser(user User) (User, error) {
+func (s *UserService) CreateUser(user User) (User, ierrors.Error) {
     // Business logic validation
     if !s.isValidEmail(user.Email) {
         return User{}, errors.ValidationFailed[User](fmt.Errorf("invalid email format"))
@@ -389,10 +385,10 @@ func (s *UserService) CreateUser(user User) (User, error) {
     return result, nil
 }
 
-func (s *UserService) GetUserByID(id int) (User, error) {
+func (s *UserService) GetUserByID(id int) (User, ierrors.Error) {
     user, err := s.repo.FindByID(id)
     if err != nil {
-        return User{}, errors.SqlQueryError[id, User](id, User{}, err)
+        return User{}, errors.NotFound[User](fmt.Sprintf("user with ID %d not found", id))
     }
     return user, nil
 }
@@ -459,6 +455,7 @@ If you're upgrading from a previous version, the main changes are:
 2. **Enhanced Error Messages**: Error messages are now more user-friendly and actionable
 3. **Automatic Field Extraction**: Database and validation errors automatically extract field-level information
 4. **New Validation Function**: Use `ValidationFailed[T any]()` instead of `ValidatorError[T any]()`
+5. **Automatic Request Loading**: Request loading is now handled automatically by framework handlers, use `contracts.ContextLoad()` instead of manual `RequestLoad()`
 
 ```go
 // Old way
@@ -466,4 +463,14 @@ return errors.ValidatorError[User](err)
 
 // New way
 return errors.ValidationFailed[User](err)
+
+// Old request loading
+if err := req.RequestLoad(ctx); err != nil {
+    return User{}, errors.RequestLoadFailed[User](err)
+}
+
+// New request loading (automatic)
+if err := contracts.ContextLoad(ctx.Context(), &req); err != nil {
+    return User{}, err
+}
 ```
