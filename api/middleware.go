@@ -169,6 +169,13 @@ func logRequest(ctx contracts.RequestContext, log *logr.Logger, config *RequestL
 		args = append(args, "size", size)
 	}
 
+	// Try to add actual user code location (where the handler was called)
+	if config.LogHandler {
+		if userCodeLoc := findUserCodeLocation(2); userCodeLoc != "" {
+			args = append(args, "code", userCodeLoc)
+		}
+	}
+
 	// Create log entry
 	entry := log.With(args...)
 
@@ -183,6 +190,38 @@ func logRequest(ctx contracts.RequestContext, log *logr.Logger, config *RequestL
 	default:
 		entry.Info("Request processed")
 	}
+}
+
+// findUserCodeLocation searches the call stack for user code location
+// Returns "file:line" format, skipping all framework internals
+func findUserCodeLocation(skipFrames int) string {
+	start := skipFrames + 1
+	maxDepth := 20
+
+	for depth := start; depth < start+maxDepth; depth++ {
+		pc, file, line, ok := runtime.Caller(depth)
+		if !ok {
+			break
+		}
+
+		// Get function name
+		fullName := "unknown"
+		if fn := runtime.FuncForPC(pc); fn != nil {
+			fullName = fn.Name()
+		}
+
+		// Skip framework internals
+		if isFrameworkFunction(fullName) {
+			continue
+		}
+
+		// Found user code - return file:line
+		if file != "" {
+			return fmt.Sprintf("%s:%d", file, line)
+		}
+	}
+
+	return ""
 }
 
 // Helper functions to extract information from RequestContext
@@ -283,7 +322,7 @@ func SetErrorLocation(ctx contracts.RequestContext, file string, line int) {
 // Skips framework internals to find user code
 func findErrorOrigin(skipFrames int) string {
 	start := skipFrames + 1
-	maxDepth := 15
+	maxDepth := 20
 
 	for depth := start; depth < start+maxDepth; depth++ {
 		pc, file, line, ok := runtime.Caller(depth)
@@ -291,8 +330,14 @@ func findErrorOrigin(skipFrames int) string {
 			break
 		}
 
+		// Get function name to check if it's framework code
+		fullName := "unknown"
+		if fn := runtime.FuncForPC(pc); fn != nil {
+			fullName = fn.Name()
+		}
+
 		// Skip framework internals
-		if isFrameworkFunction(runtime.FuncForPC(pc).Name()) {
+		if isFrameworkFunction(fullName) {
 			continue
 		}
 
@@ -339,9 +384,9 @@ func getFunctionName(fullPath string) string {
 // This is a convenience function for handler wrappers to automatically track their name
 // Uses a heuristic to find the actual user handler (skips framework internals)
 func GetCallersHandlerName(skipFrames int) string {
-	// Start searching from the caller's position
-	start := skipFrames + 1
-	maxDepth := 10 // Don't go too deep
+	// Start searching deeper - skip more frames to get past wrappers
+	start := skipFrames + 2
+	maxDepth := 15
 
 	for depth := start; depth < start+maxDepth; depth++ {
 		pc, _, _, ok := runtime.Caller(depth)
@@ -375,22 +420,26 @@ func isFrameworkFunction(fullName string) bool {
 		return true
 	}
 
-	// Skip known framework packages
-	frameworkPaths := []string{
-		"github.com/kod2ulz/gostart/",
-		// "net/http",
+	// Check for framework package names (works with module cache paths)
+	frameworkPackages := []string{
+		"github.com/kod2ulz/gostart/api",
+		"github.com/kod2ulz/gostart/app",
+		"github.com/kod2ulz/gostart/contracts",
+		"github.com/kod2ulz/gostart/config",
+		"github.com/kod2ulz/gostart/errors",
+		"github.com/kod2ulz/gostart/frameworks",
+		"github.com/kod2ulz/gostart/ierrors",
+		"github.com/kod2ulz/gostart/logr",
+		"github.com/kod2ulz/gostart/mq",
+		"github.com/kod2ulz/gostart/query",
+		"github.com/kod2ulz/gostart/storage",
+		"github.com/kod2ulz/gostart/utils",
+		"github.com/gin-gonic/gin",
 	}
 
-	for _, prefix := range frameworkPaths {
-		if strings.HasPrefix(fullName, prefix) {
-			// Only skip if it's in framework's internal packages
-			// Allow user's code that imports gostart
-			if strings.Contains(fullName, "/api/") ||
-			   strings.Contains(fullName, "/app/") ||
-			   strings.Contains(fullName, "/contracts/") ||
-			   strings.Contains(fullName, "/middleware") {
-				return true
-			}
+	for _, pkg := range frameworkPackages {
+		if strings.Contains(fullName, pkg) {
+			return true
 		}
 	}
 
