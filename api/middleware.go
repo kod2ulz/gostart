@@ -20,33 +20,38 @@ const (
 	contextKeyErrorLocation = "error_location"
 )
 
-var (
-	requestIdHeader string
-)
-
 // RequestLogConfig holds configuration for request logging
 type RequestLogConfig struct {
-	Enabled          bool
-	RequestIDHeader  string
-	LogUser          bool
-	LogRequestBody   bool
-	LogResponseBody  bool
-	LogHandler       bool // Log which handler/function processed the request
-	SensitiveHeaders []string
-	ExcludedPaths    []string
+	Enabled            bool
+	RequestIDHeader    string   // Primary header to check for request ID
+	RequestIDFallbacks []string // Fallback headers to check if primary not found (common standards)
+	LogUser            bool
+	LogRequestBody     bool
+	LogResponseBody    bool
+	LogHandler         bool   // Log which handler/function processed the request
+	SensitiveHeaders   []string
+	ExcludedPaths      []string
 }
 
 // DefaultRequestLogConfig returns the default logging configuration
 func DefaultRequestLogConfig() *RequestLogConfig {
+	// Get configured primary header
+	primaryHeader := config.Get("api.request-id.header", "X-Request-Id").String()
+
+	// Get fallback headers from config (comma-separated) or use defaults
+	fallbackConfig := config.Get("api.request-id.fallbacks", "X-Request-Id,Request-Id,X-Request-ID").String()
+	fallbacks := splitAndTrim(fallbackConfig, ",")
+
 	return &RequestLogConfig{
-		Enabled:          true,
-		RequestIDHeader:  config.Get("api.request-id.header", "X-Request-Id").String(),
-		LogUser:          true,
-		LogRequestBody:   false,
-		LogResponseBody:  false,
-		LogHandler:       true, // Enable handler logging by default
-		SensitiveHeaders: []string{"Authorization", "Cookie", "Set-Cookie"},
-		ExcludedPaths:    []string{"/health", "/ok"},
+		Enabled:            true,
+		RequestIDHeader:    primaryHeader,
+		RequestIDFallbacks: fallbacks,
+		LogUser:            true,
+		LogRequestBody:     false,
+		LogResponseBody:    false,
+		LogHandler:         true, // Enable handler logging by default
+		SensitiveHeaders:   []string{"Authorization", "Cookie", "Set-Cookie"},
+		ExcludedPaths:      []string{"/health", "/ok"},
 	}
 }
 
@@ -63,8 +68,8 @@ func LoggingMiddleware(log *logr.Logger, config *RequestLogConfig) MiddlewareFun
 
 		start := time.Now()
 
-		// Generate or extract request ID
-		requestID := getOrCreateRequestID(ctx, config.RequestIDHeader)
+		// Generate or extract request ID (uses config with fallbacks)
+		requestID := getOrCreateRequestID(ctx, config)
 
 		// Store request ID in context
 		if ctxSetter, ok := ctx.(interface{ Set(string, any) }); ok {
@@ -84,15 +89,18 @@ func LoggingMiddleware(log *logr.Logger, config *RequestLogConfig) MiddlewareFun
 }
 
 // getOrCreateRequestID extracts or creates a request ID
-func getOrCreateRequestID(ctx contracts.RequestContext, headerName string) string {
-	// Try to get from header first
-	if headerValue := ctx.Header(headerName); headerValue != "" {
+func getOrCreateRequestID(ctx contracts.RequestContext, config *RequestLogConfig) string {
+	// Try to get from primary header first
+	if headerValue := ctx.Header(config.RequestIDHeader); headerValue != "" {
 		return headerValue
 	}
 
-	// Try common fallback headers
-	commonHeaders := []string{"X-Request-Id", "Request-Id", "X-Request-ID"}
-	for _, header := range commonHeaders {
+	// Try configured fallback headers (for upstream compatibility)
+	for _, header := range config.RequestIDFallbacks {
+		// Skip if it's the same as primary (avoid duplicate check)
+		if header == config.RequestIDHeader {
+			continue
+		}
 		if headerValue := ctx.Header(header); headerValue != "" {
 			return headerValue
 		}
@@ -214,7 +222,7 @@ func getResponseSize(ctx contracts.RequestContext) int64 {
 }
 
 func getUserID(ctx contracts.RequestContext) string {
-	if ctxValue, ok := ctx.(interface{ Value(string) interface{} }); ok {
+	if ctxValue, ok := ctx.(interface{ Value(string) any }); ok {
 		if user := ctxValue.Value("auth.User"); user != nil {
 			// We can't import auth here due to potential cycles, so we just return the string representation
 			if userObj, ok := user.(interface{ ID() string }); ok {
@@ -232,7 +240,7 @@ func shouldDebugLog(ctx contracts.RequestContext, config *RequestLogConfig) bool
 
 // getHandlerName extracts the handler name from context
 func getHandlerName(ctx contracts.RequestContext) string {
-	if ctxValue, ok := ctx.(interface{ Value(interface{}) interface{} }); ok {
+	if ctxValue, ok := ctx.(interface{ Value(any) any }); ok {
 		if handler := ctxValue.Value(contextKeyHandler); handler != nil {
 			return fmt.Sprintf("%v", handler)
 		}
@@ -263,7 +271,7 @@ func SetErrorLocation(ctx contracts.RequestContext, file string, line int) {
 // SetHandlerName sets the current handler name in context
 // This should be called by handler wrappers to track which function is processing the request
 func SetHandlerName(ctx contracts.RequestContext, name string) {
-	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+	if ctxSetter, ok := ctx.(interface{ Set(string, any) }); ok {
 		// Try to get a cleaner function name
 		cleanName := getFunctionName(name)
 		ctxSetter.Set(contextKeyHandler, cleanName)
@@ -311,4 +319,17 @@ func GetCallersHandlerName(skipFrames int) string {
 func JSONLogMiddleware(log *logr.Logger) any {
 	logConfig := DefaultRequestLogConfig()
 	return LoggingMiddleware(log, logConfig)
+}
+
+// splitAndTrim splits a string by a separator and trims each part
+func splitAndTrim(s, sep string) []string {
+	parts := strings.Split(s, sep)
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
