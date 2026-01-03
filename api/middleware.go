@@ -193,10 +193,10 @@ func logRequest(ctx contracts.RequestContext, log *logr.Logger, config *RequestL
 }
 
 // findUserCodeLocation searches the call stack for user code location
-// Returns "file:line" format, skipping all framework internals
+// Returns "file:line" format, skipping all framework internals and stdlib
 func findUserCodeLocation(skipFrames int) string {
 	start := skipFrames + 1
-	maxDepth := 20
+	maxDepth := 25
 
 	for depth := start; depth < start+maxDepth; depth++ {
 		pc, file, line, ok := runtime.Caller(depth)
@@ -210,7 +210,7 @@ func findUserCodeLocation(skipFrames int) string {
 			fullName = fn.Name()
 		}
 
-		// Skip framework internals
+		// Skip framework internals and standard library
 		if isFrameworkFunction(fullName) {
 			continue
 		}
@@ -385,8 +385,8 @@ func getFunctionName(fullPath string) string {
 // Uses a heuristic to find the actual user handler (skips framework internals)
 func GetCallersHandlerName(skipFrames int) string {
 	// Start searching deeper - skip more frames to get past wrappers
-	start := skipFrames + 2
-	maxDepth := 15
+	start := skipFrames + 3
+	maxDepth := 20
 
 	for depth := start; depth < start+maxDepth; depth++ {
 		pc, _, _, ok := runtime.Caller(depth)
@@ -401,7 +401,7 @@ func GetCallersHandlerName(skipFrames int) string {
 
 		fullName := fn.Name()
 
-		// Skip framework internals and anonymous functions
+		// Skip framework internals, standard library, and anonymous functions
 		if isFrameworkFunction(fullName) {
 			continue
 		}
@@ -413,14 +413,14 @@ func GetCallersHandlerName(skipFrames int) string {
 	return "unknown"
 }
 
-// isFrameworkFunction checks if a function name is from the gostart framework
+// isFrameworkFunction checks if a function name is from the gostart framework or standard library
 func isFrameworkFunction(fullName string) bool {
 	// Skip anonymous functions (e.g., .func1, .func2)
 	if strings.Contains(fullName, ".func") {
 		return true
 	}
 
-	// Check for framework package names (works with module cache paths)
+	// Check for gostart framework packages
 	frameworkPackages := []string{
 		"github.com/kod2ulz/gostart/api",
 		"github.com/kod2ulz/gostart/app",
@@ -439,6 +439,30 @@ func isFrameworkFunction(fullName string) bool {
 
 	for _, pkg := range frameworkPackages {
 		if strings.Contains(fullName, pkg) {
+			return true
+		}
+	}
+
+	// Check for Go standard library packages
+	// These typically appear as "net/http", "context", etc. in the function name
+	stdlibPrefixes := []string{
+		"net/http.",
+		"context.",
+		"runtime.",
+		"reflect.",
+		"sync.",
+		"time.",
+		"io.",
+		"bufio.",
+		"os.",
+		"path.",
+		"log.",
+		"fmt.",
+		"strings.",
+	}
+
+	for _, prefix := range stdlibPrefixes {
+		if strings.Contains(fullName, prefix) {
 			return true
 		}
 	}
