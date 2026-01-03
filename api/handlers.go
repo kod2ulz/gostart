@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"runtime"
 
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
@@ -136,10 +135,9 @@ func HandleError(ctx contracts.RequestContext, err ierrors.Error) {
 		return
 	}
 
-	// Capture error location (file:line) where the error was handled
-	// Skip 2 frames to get the caller of HandleError (the actual handler that failed)
-	_, file, line, _ := runtime.Caller(2)
-	SetErrorLocation(ctx, file, line)
+	// Capture error location automatically by searching the call stack
+	// This finds the actual error origin in user code, not framework internals
+	SetErrorLocation(ctx, "", 0)
 
 	// Use centralized error handling from errors package
 	errorCode, errorMessage, httpCode, fields := errors.HandleAPIError(err)

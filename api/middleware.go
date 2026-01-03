@@ -259,13 +259,50 @@ func getErrorLocation(ctx contracts.RequestContext) string {
 }
 
 // SetErrorLocation stores the error location in context
-// Should be called when an error occurs
+// Should be called when an error occurs.
+// Uses runtime.Callers to find the actual error origin (skips framework internals)
 func SetErrorLocation(ctx contracts.RequestContext, file string, line int) {
 	if ctxSetter, ok := ctx.(interface{ Set(string, any) }); ok {
-		// Format: "file.go:123" or just "file.go:123"
-		location := fmt.Sprintf("%s:%d", file, line)
-		ctxSetter.Set(contextKeyErrorLocation, location)
+		// If file and line are provided, use them
+		if file != "" && line > 0 {
+			location := fmt.Sprintf("%s:%d", file, line)
+			ctxSetter.Set(contextKeyErrorLocation, location)
+			return
+		}
+
+		// Otherwise, try to find the error origin automatically
+		// Skip 2 frames to get past this function and its caller
+		location := findErrorOrigin(2)
+		if location != "" {
+			ctxSetter.Set(contextKeyErrorLocation, location)
+		}
 	}
+}
+
+// findErrorLocation searches the call stack for the actual error origin
+// Skips framework internals to find user code
+func findErrorOrigin(skipFrames int) string {
+	start := skipFrames + 1
+	maxDepth := 15
+
+	for depth := start; depth < start+maxDepth; depth++ {
+		pc, file, line, ok := runtime.Caller(depth)
+		if !ok {
+			break
+		}
+
+		// Skip framework internals
+		if isFrameworkFunction(runtime.FuncForPC(pc).Name()) {
+			continue
+		}
+
+		// Found user code - return file:line
+		if file != "" {
+			return fmt.Sprintf("%s:%d", file, line)
+		}
+	}
+
+	return ""
 }
 
 // SetHandlerName sets the current handler name in context
@@ -300,19 +337,64 @@ func getFunctionName(fullPath string) string {
 
 // GetCallersHandlerName returns the name of the calling function (skip levels up the stack)
 // This is a convenience function for handler wrappers to automatically track their name
+// Uses a heuristic to find the actual user handler (skips framework internals)
 func GetCallersHandlerName(skipFrames int) string {
-	pc, _, _, ok := runtime.Caller(skipFrames + 1)
-	if !ok {
-		return "unknown"
+	// Start searching from the caller's position
+	start := skipFrames + 1
+	maxDepth := 10 // Don't go too deep
+
+	for depth := start; depth < start+maxDepth; depth++ {
+		pc, _, _, ok := runtime.Caller(depth)
+		if !ok {
+			break
+		}
+
+		fn := runtime.FuncForPC(pc)
+		if fn == nil {
+			continue
+		}
+
+		fullName := fn.Name()
+
+		// Skip framework internals and anonymous functions
+		if isFrameworkFunction(fullName) {
+			continue
+		}
+
+		// Found the user's handler function
+		return getFunctionName(fullName)
 	}
 
-	fn := runtime.FuncForPC(pc)
-	if fn == nil {
-		return "unknown"
+	return "unknown"
+}
+
+// isFrameworkFunction checks if a function name is from the gostart framework
+func isFrameworkFunction(fullName string) bool {
+	// Skip anonymous functions (e.g., .func1, .func2)
+	if strings.Contains(fullName, ".func") {
+		return true
 	}
 
-	fullName := fn.Name()
-	return getFunctionName(fullName)
+	// Skip known framework packages
+	frameworkPaths := []string{
+		"github.com/kod2ulz/gostart/",
+		// "net/http",
+	}
+
+	for _, prefix := range frameworkPaths {
+		if strings.HasPrefix(fullName, prefix) {
+			// Only skip if it's in framework's internal packages
+			// Allow user's code that imports gostart
+			if strings.Contains(fullName, "/api/") ||
+			   strings.Contains(fullName, "/app/") ||
+			   strings.Contains(fullName, "/contracts/") ||
+			   strings.Contains(fullName, "/middleware") {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // Legacy gin-compatible middleware for backward compatibility
