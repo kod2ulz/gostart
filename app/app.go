@@ -20,13 +20,14 @@ import (
 var (
 	// global single instance of the _instance
 	_instance *ap
+	_logHandlers []slog.Handler
 )
 
 type ap struct {
-	router api.Router
-	log    *logr.Logger
-	start  time.Time
-	conf   *conf
+	router      api.Router
+	log         *logr.Logger
+	start       time.Time
+	conf        *conf
 
 	serviceId string
 
@@ -48,7 +49,7 @@ func Init(opts ...AppIniter) *ap {
 	}
 	config.Load() // Load .env file
 
-	if err := logr.Config(); err != nil {
+	if err := logr.Config(_logHandlers...); err != nil {
 		slog.Error("Application log initialisation failed", "error", err)
 		panic(err)
 	}
@@ -154,6 +155,18 @@ func WithHeartbeatHandlers() AppIniter {
 			return nil
 		}
 		a.heartbeatHandlers = true
+		return nil
+	}
+}
+
+func WithLogHandlers(loggers ...slog.Handler) AppIniter {
+	if len(loggers) > 0 {
+		if len(_logHandlers) == 0 {
+			_logHandlers = make([]slog.Handler, 0)
+		}
+		_logHandlers = append(_logHandlers, loggers...)
+	}
+	return func(a *ap) error {
 		return nil
 	}
 }

@@ -97,8 +97,8 @@ type OpenAPIRouter interface {
 }
 
 // DefaultRouterConfig creates a router configuration from environment variables
-func DefaultRouterConfig() *RouterConfig {
-	env := config.Env.Helper("ROUTER").OrDefault("HTTP_SERVER")
+func DefaultRouterConfig(router_prefix...string) *RouterConfig {
+	env := config.Env.Helper(router_prefix...).OrDefault("HTTP_SERVER")
 
 	return &RouterConfig{
 		// CORS settings from environment

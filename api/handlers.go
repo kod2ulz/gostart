@@ -66,6 +66,13 @@ func handleRequestError(ctx contracts.RequestContext, err error) {
 // RequestHandlerFunc represents a function that handles a request and returns a result
 type RequestHandlerFunc[T any] func(ctx contracts.RequestContext, param contracts.RequestParam) (T, ierrors.Error)
 
+// TypedRequestHandlerFunc represents a function with concrete request and response types
+// This eliminates the need for type assertions in handlers
+type TypedRequestHandlerFunc[P contracts.RequestParam, R any] func(ctx contracts.RequestContext, req P) (R, ierrors.Error)
+
+// TypedListRequestHandlerFunc represents a list handler with concrete request type
+type TypedListRequestHandlerFunc[P contracts.RequestParam, R any] func(ctx contracts.RequestContext, req P) ([]R, *int64, ierrors.Error)
+
 // ListRequestHandlerFunc represents a function that handles a request and returns a list with pagination
 type ListRequestHandlerFunc[T any] func(ctx contracts.RequestContext, param contracts.RequestParam) ([]T, *int64, ierrors.Error)
 
@@ -211,5 +218,102 @@ func JSONHandler[T any](handler func(ctx contracts.RequestContext) (T, ierrors.E
 func SimpleHandler(handler func(contracts.RequestContext)) func(contracts.RequestContext) {
 	return func(ctx contracts.RequestContext) {
 		handler(ctx)
+	}
+}
+
+// TypedHandler creates a handler with concrete request and response types
+// Automatically loads the request parameter and passes it to your handler function
+// No type assertions needed in your handler code!
+//
+// Example:
+//   type HelloRequest struct {
+//       Name string `json:"name" query:"name"`
+//   }
+//   type HelloResponse struct {
+//       Message string `json:"message"`
+//   }
+//
+//   router.GET("/hello", api.TypedHandler(Hello))
+//
+//   func Hello(ctx contracts.RequestContext, req HelloRequest) (HelloResponse, ierrors.Error) {
+//       // req is already typed as HelloRequest - no type assertion needed!
+//       return HelloResponse{Message: "hello " + req.Name}, nil
+//   }
+func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFunc[P, R]) func(contracts.RequestContext) {
+	return func(ctx contracts.RequestContext) {
+		// Create a zero-value instance of the request type
+		var param P
+
+		// Load request parameters using RequestModal
+		var modal RequestModal[P]
+		loaded, err := modal.RequestLoad(ctx)
+		if err != nil {
+			HandleError(ctx, errors.RequestLoadFailed[P](err))
+			return
+		}
+
+		// Type assert to the concrete type
+		param, ok := loaded.(P)
+		if !ok {
+			HandleError(ctx, errors.RequestLoadFailed[P](fmt.Errorf("failed to cast loaded params to %T", param)))
+			return
+		}
+
+		// Call the handler with the properly typed request
+		result, apiErr := handler(ctx, param)
+		if apiErr != nil {
+			HandleError(ctx, apiErr)
+			return
+		}
+
+		SuccessResponse(ctx, result)
+	}
+}
+
+// TypedListHandler creates a list handler with concrete request and response types
+// Automatically loads request parameters and handles pagination
+//
+// Example:
+//   type ListUsersRequest struct {
+//       api.ListRequest
+//       Search string `json:"search" query:"search"`
+//   }
+//
+//   router.GET("/users", api.TypedListHandler(ListUsers))
+//
+//   func ListUsers(ctx contracts.RequestContext, req ListUsersRequest) ([]User, *int64, ierrors.Error) {
+//       // req is already typed as ListUsersRequest
+//       // req.Limit, req.Offset are available from embedded ListRequest
+//       return userService.SearchUsers(req.Search, req.Limit, req.Offset)
+//   }
+func TypedListHandler[P contracts.RequestParam, R any](handler TypedListRequestHandlerFunc[P, R]) func(contracts.RequestContext) {
+	return func(ctx contracts.RequestContext) {
+		// Create a zero-value instance of the request type
+		var param P
+
+		// Load request parameters using RequestModal
+		var modal RequestModal[P]
+		loaded, err := modal.RequestLoad(ctx)
+		if err != nil {
+			HandleError(ctx, errors.RequestLoadFailed[P](err))
+			return
+		}
+
+		// Type assert to the concrete type
+		param, ok := loaded.(P)
+		if !ok {
+			HandleError(ctx, errors.RequestLoadFailed[P](fmt.Errorf("failed to cast loaded params to %T", param)))
+			return
+		}
+
+		// Call the handler with the properly typed request
+		result, total, apiErr := handler(ctx, param)
+		if apiErr != nil {
+			HandleError(ctx, apiErr)
+			return
+		}
+
+		limit, offset := extractPagination(param)
+		ListResponse(ctx, result, total, limit, offset)
 	}
 }

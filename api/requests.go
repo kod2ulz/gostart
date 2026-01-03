@@ -10,6 +10,8 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
+var _ contracts.RequestParam = ListRequest{}
+
 type ListRequest struct {
 	Limit  int32 `validate:"required,gte=1"`
 	Offset int32 `validate:"omitempty,gte=0"`
