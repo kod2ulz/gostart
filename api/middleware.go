@@ -1,13 +1,23 @@
 package api
 
 import (
+	"fmt"
+	"runtime"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/logr"
+)
+
+const (
+	// Context key for storing the current handler name
+	contextKeyHandler = "current_handler"
+	// Context key for storing error location (file:line)
+	contextKeyErrorLocation = "error_location"
 )
 
 var (
@@ -21,6 +31,7 @@ type RequestLogConfig struct {
 	LogUser          bool
 	LogRequestBody   bool
 	LogResponseBody  bool
+	LogHandler       bool // Log which handler/function processed the request
 	SensitiveHeaders []string
 	ExcludedPaths    []string
 }
@@ -33,6 +44,7 @@ func DefaultRequestLogConfig() *RequestLogConfig {
 		LogUser:          true,
 		LogRequestBody:   false,
 		LogResponseBody:  false,
+		LogHandler:       true, // Enable handler logging by default
 		SensitiveHeaders: []string{"Authorization", "Cookie", "Set-Cookie"},
 		ExcludedPaths:    []string{"/health", "/ok"},
 	}
@@ -55,7 +67,7 @@ func LoggingMiddleware(log *logr.Logger, config *RequestLogConfig) MiddlewareFun
 		requestID := getOrCreateRequestID(ctx, config.RequestIDHeader)
 
 		// Store request ID in context
-		if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		if ctxSetter, ok := ctx.(interface{ Set(string, any) }); ok {
 			ctxSetter.Set("request_id", requestID)
 		}
 
@@ -92,9 +104,15 @@ func getOrCreateRequestID(ctx contracts.RequestContext, headerName string) strin
 
 // logRequest logs the request details
 func logRequest(ctx contracts.RequestContext, log *logr.Logger, config *RequestLogConfig, requestID string, start time.Time) {
+	duration := time.Since(start)
+
+	// Duration in seconds as float64 for Grafana compatibility
+	// 0.001 = 1ms, 1 = 1s
+	durationSec := float64(duration.Nanoseconds()) / 1e9
+
 	// Extract basic request information
-	args := []interface{}{
-		"duration", time.Since(start).Milliseconds(),
+	args := []any{
+		"duration", durationSec,
 		"request_id", requestID,
 	}
 
@@ -107,13 +125,28 @@ func logRequest(ctx contracts.RequestContext, log *logr.Logger, config *RequestL
 	}
 
 	// Add status code if available
-	if status := getResponseStatus(ctx); status != 0 {
+	status := getResponseStatus(ctx)
+	if status != 0 {
 		args = append(args, "status", status)
 	}
 
 	// Add client IP if available
 	if clientIP := getClientIP(ctx); clientIP != "" {
 		args = append(args, "client_ip", clientIP)
+	}
+
+	// Add handler name if enabled
+	if config.LogHandler {
+		if handler := getHandlerName(ctx); handler != "" {
+			args = append(args, "handler", handler)
+		}
+	}
+
+	// Add error location (file:line) for error responses
+	if status >= 400 {
+		if errorLoc := getErrorLocation(ctx); errorLoc != "" {
+			args = append(args, "error_at", errorLoc)
+		}
 	}
 
 	// Add user information if enabled and available
@@ -132,7 +165,6 @@ func logRequest(ctx contracts.RequestContext, log *logr.Logger, config *RequestL
 	entry := log.With(args...)
 
 	// Determine log level based on status code
-	status := getResponseStatus(ctx)
 	switch {
 	case status >= 500:
 		entry.Error("Server error")
@@ -196,6 +228,83 @@ func getUserID(ctx contracts.RequestContext) string {
 func shouldDebugLog(ctx contracts.RequestContext, config *RequestLogConfig) bool {
 	path := getRequestPath(ctx)
 	return slices.Contains(config.ExcludedPaths, path)
+}
+
+// getHandlerName extracts the handler name from context
+func getHandlerName(ctx contracts.RequestContext) string {
+	if ctxValue, ok := ctx.(interface{ Value(interface{}) interface{} }); ok {
+		if handler := ctxValue.Value(contextKeyHandler); handler != nil {
+			return fmt.Sprintf("%v", handler)
+		}
+	}
+	return ""
+}
+
+// getErrorLocation extracts the error location (file:line) from context
+func getErrorLocation(ctx contracts.RequestContext) string {
+	if ctxValue, ok := ctx.(interface{ Value(any) any }); ok {
+		if loc := ctxValue.Value(contextKeyErrorLocation); loc != nil {
+			return fmt.Sprintf("%v", loc)
+		}
+	}
+	return ""
+}
+
+// SetErrorLocation stores the error location in context
+// Should be called when an error occurs
+func SetErrorLocation(ctx contracts.RequestContext, file string, line int) {
+	if ctxSetter, ok := ctx.(interface{ Set(string, any) }); ok {
+		// Format: "file.go:123" or just "file.go:123"
+		location := fmt.Sprintf("%s:%d", file, line)
+		ctxSetter.Set(contextKeyErrorLocation, location)
+	}
+}
+
+// SetHandlerName sets the current handler name in context
+// This should be called by handler wrappers to track which function is processing the request
+func SetHandlerName(ctx contracts.RequestContext, name string) {
+	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
+		// Try to get a cleaner function name
+		cleanName := getFunctionName(name)
+		ctxSetter.Set(contextKeyHandler, cleanName)
+	}
+}
+
+// getFunctionName extracts a clean function name from a full function path
+// e.g., "github.com/yourapp/main.TypedHelloHandler" -> "main.TypedHelloHandler"
+func getFunctionName(fullPath string) string {
+	// Get just the function name without package path
+	parts := strings.Split(fullPath, ".")
+	if len(parts) == 0 {
+		return fullPath
+	}
+
+	funcName := parts[len(parts)-1]
+
+	// If we have at least 2 parts (package.function), return "package.function"
+	if len(parts) >= 2 {
+		packageName := parts[len(parts)-2]
+		return fmt.Sprintf("%s.%s", packageName, funcName)
+	}
+
+	return funcName
+}
+
+// GetCallersHandlerName returns the name of the calling function (skip levels up the stack)
+// This is a convenience function for handler wrappers to automatically track their name
+func GetCallersHandlerName(skipFrames int) string {
+	pc, _, _, ok := runtime.Caller(skipFrames + 1)
+	if !ok {
+		return "unknown"
+	}
+
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return "unknown"
+	}
+
+	fullName := fn.Name()
+	return getFunctionName(fullName)
 }
 
 // Legacy gin-compatible middleware for backward compatibility

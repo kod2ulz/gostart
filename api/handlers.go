@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
@@ -135,6 +136,11 @@ func HandleError(ctx contracts.RequestContext, err ierrors.Error) {
 		return
 	}
 
+	// Capture error location (file:line) where the error was handled
+	// Skip 2 frames to get the caller of HandleError (the actual handler that failed)
+	_, file, line, _ := runtime.Caller(2)
+	SetErrorLocation(ctx, file, line)
+
 	// Use centralized error handling from errors package
 	errorCode, errorMessage, httpCode, fields := errors.HandleAPIError(err)
 
@@ -241,6 +247,9 @@ func SimpleHandler(handler func(contracts.RequestContext)) func(contracts.Reques
 //   }
 func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFunc[P, R]) func(contracts.RequestContext) {
 	return func(ctx contracts.RequestContext) {
+		// Set handler name for logging (get the calling function's name)
+		SetHandlerName(ctx, GetCallersHandlerName(1))
+
 		// Load request parameters using RequestModal
 		// RequestLoad never fails - it loads what's available from multiple sources
 		var modal RequestModal[P]
@@ -282,6 +291,9 @@ func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFu
 //   }
 func TypedListHandler[P contracts.RequestParam, R any](handler TypedListRequestHandlerFunc[P, R]) func(contracts.RequestContext) {
 	return func(ctx contracts.RequestContext) {
+		// Set handler name for logging
+		SetHandlerName(ctx, GetCallersHandlerName(1))
+
 		// Create a zero-value instance of the request type
 		var param P
 
