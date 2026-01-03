@@ -14,13 +14,18 @@ func Conf() *conf {
 		return _config
 	}
 	var host = config.Get("host").String()
-	// var env = config.Env.Helper("APP")
+
+	// Support both new (SERVER_*) and old (APP_*) config formats
+	// SERVER_HTTP_PORT takes precedence over APP_HTTP_PORT
+	httpPort := config.Get("SERVER_HTTP_PORT", config.Get("APP_HTTP_PORT", "9025").String()).Int()
+	httpAddr := config.Get("SERVER_HTTP_ADDRESS", config.Get("APP_HTTP_ADDRESS", "0.0.0.0").String()).String()
+
 	_config = &conf{
 		Host:        host,
 		Name:        config.Get("APP_NAME", host).String(),
 		Version:     config.Get("APP_VERSION", "ver-0.0.0").String(),
-		HttpPort:    config.Get("APP_HTTP_PORT", "9025").Int(),
-		HttpAddress: config.Get("APP_HTTP_ADDRESS", "0.0.0.0").String(),
+		HttpPort:    httpPort,
+		HttpAddress: httpAddr,
 		Location:    config.Get("APP_TIME_LOCATION", "Africa/Kampala").Location(),
 		Uptime:      UptimeCheckConf(),
 	}

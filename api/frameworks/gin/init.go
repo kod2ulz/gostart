@@ -18,7 +18,7 @@ func init() {
 // Note: This is now handled automatically by init(), but kept for backward compatibility
 func Setup() {
 	if ginIsSetup {
-		fmt.Println("gin framework setup alaready run")
+		fmt.Println("gin framework setup already initialised")
 		return
 	}
 	fmt.Println("setting up gin framework")

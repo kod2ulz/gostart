@@ -241,16 +241,10 @@ func SimpleHandler(handler func(contracts.RequestContext)) func(contracts.Reques
 //   }
 func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFunc[P, R]) func(contracts.RequestContext) {
 	return func(ctx contracts.RequestContext) {
-		// Create a zero-value instance of the request type
-		var param P
-
 		// Load request parameters using RequestModal
+		// RequestLoad never fails - it loads what's available from multiple sources
 		var modal RequestModal[P]
-		loaded, err := modal.RequestLoad(ctx)
-		if err != nil {
-			HandleError(ctx, errors.RequestLoadFailed[P](err))
-			return
-		}
+		loaded, _ := modal.RequestLoad(ctx)
 
 		// Type assert to the concrete type
 		param, ok := loaded.(P)
