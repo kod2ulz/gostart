@@ -74,7 +74,7 @@ func ListResponse(ctx contracts.RequestContext, data any, total *int64, limit, o
 	if ctx, ok := ctx.(RequestContext); ok {
 		envelope := &ResponseEnvelope{
 			Success: true,
-			Type:    getTypeName(data) + "[]",
+			Type:    getTypeName(data),
 			Data:    data,
 			Time:    time.Now().Unix(),
 		}
