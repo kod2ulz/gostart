@@ -255,17 +255,26 @@ func (ca *ContractAnalyzer) getHandlerName(handlerType reflect.Type) string {
 
 // analyzeOperationPattern analyzes the handler name and route path to infer operation patterns
 func (ca *ContractAnalyzer) analyzeOperationPattern(handlerName, routePath string, contract *RequestContract) {
+	// Initialize Body if nil
+	if contract.Body == nil {
+		contract.Body = &BodyContract{
+			ContentType: "application/json",
+		}
+	}
+
 	// Analyze route path for common patterns
 	if strings.Contains(routePath, ":id") || strings.Contains(routePath, "/{id}") {
 		// Single resource operation
 		contract.Body.Required = false // Often no body needed for GET/DELETE by ID
-		contract.Body.Schema = &SchemaContract{
-			Type: "object",
-			Properties: map[string]SchemaContract{
-				"data": {
-					Type: "object",
+		if contract.Body.Schema == nil {
+			contract.Body.Schema = &SchemaContract{
+				Type: "object",
+				Properties: map[string]SchemaContract{
+					"data": {
+						Type: "object",
+					},
 				},
-			},
+			}
 		}
 	} else if strings.HasSuffix(routePath, "/") || strings.Contains(routePath, "/list") {
 		// List operation - add pagination parameters
