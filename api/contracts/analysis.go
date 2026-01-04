@@ -239,8 +239,8 @@ func (ca *ContractAnalyzer) analyzeHandlerFunction(handlerType reflect.Type, con
 	handlerName := ca.getHandlerName(handlerType)
 	ca.analyzeOperationPattern(handlerName, path, contract)
 
-	// Analyze methods that might be called on RequestContext
-	ca.analyzeContextMethods(contextType, contract)
+	// Don't add generic context method parameters - they should be explicitly defined
+	// ca.analyzeContextMethods(contextType, contract)
 }
 
 // getHandlerName attempts to extract the handler function name
@@ -255,28 +255,29 @@ func (ca *ContractAnalyzer) getHandlerName(handlerType reflect.Type) string {
 
 // analyzeOperationPattern analyzes the handler name and route path to infer operation patterns
 func (ca *ContractAnalyzer) analyzeOperationPattern(handlerName, routePath string, contract *RequestContract) {
-	// Initialize Body if nil
-	if contract.Body == nil {
-		contract.Body = &BodyContract{
-			ContentType: "application/json",
-		}
-	}
+	// Only add body if the operation typically needs one (POST, PUT, PATCH)
+	// GET, DELETE, HEAD, OPTIONS typically don't have bodies
+	lowerName := strings.ToLower(handlerName)
+	needsBody := strings.Contains(lowerName, "create") || strings.Contains(lowerName, "add") ||
+		strings.Contains(lowerName, "update") || strings.Contains(lowerName, "edit") ||
+		strings.Contains(lowerName, "patch")
 
-	// Analyze route path for common patterns
-	if strings.Contains(routePath, ":id") || strings.Contains(routePath, "/{id}") {
-		// Single resource operation
-		contract.Body.Required = false // Often no body needed for GET/DELETE by ID
-		if contract.Body.Schema == nil {
-			contract.Body.Schema = &SchemaContract{
-				Type: "object",
-				Properties: map[string]SchemaContract{
-					"data": {
-						Type: "object",
-					},
+	if needsBody {
+		// Initialize Body for operations that need it
+		if contract.Body == nil {
+			contract.Body = &BodyContract{
+				ContentType: "application/json",
+				Required:    true,
+				Schema: &SchemaContract{
+					Type:       "object",
+					Properties: make(map[string]SchemaContract),
 				},
 			}
 		}
-	} else if strings.HasSuffix(routePath, "/") || strings.Contains(routePath, "/list") {
+	}
+
+	// Analyze route path for pagination patterns
+	if strings.HasSuffix(routePath, "/") || strings.Contains(routePath, "/list") {
 		// List operation - add pagination parameters
 		contract.QueryParameters["page"] = ParameterContract{
 			Name:     "page",
@@ -305,19 +306,6 @@ func (ca *ContractAnalyzer) analyzeOperationPattern(handlerName, routePath strin
 			In:       "query",
 			Enum:     []interface{}{"asc", "desc"},
 		}
-	}
-
-	// Analyze handler name patterns
-	lowerName := strings.ToLower(handlerName)
-	if strings.Contains(lowerName, "create") || strings.Contains(lowerName, "add") {
-		// Create operation - body is typically required
-		contract.Body.Required = true
-	} else if strings.Contains(lowerName, "update") || strings.Contains(lowerName, "edit") {
-		// Update operation - body is typically required
-		contract.Body.Required = true
-	} else if strings.Contains(lowerName, "delete") || strings.Contains(lowerName, "remove") {
-		// Delete operation - body is typically not required
-		contract.Body.Required = false
 	}
 }
 
