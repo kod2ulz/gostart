@@ -231,6 +231,63 @@ func (r *GinRouter) HEAD(path string, handler api.HandlerFunc) api.Router {
 	return r
 }
 
+// HTTP Methods with OpenAPI annotations
+func (r *GinRouter) GETWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
+	fullPath := r.buildFullPath(path)
+	mergedAnnotation := r.mergeAnnotation(annotation, "GET", path)
+	r.openAPIRegistry.Register("GET", fullPath, handler, mergedAnnotation)
+	r.currentGroup().GET(path, r.wrapHandler(handler))
+	return r
+}
+
+func (r *GinRouter) POSTWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
+	fullPath := r.buildFullPath(path)
+	mergedAnnotation := r.mergeAnnotation(annotation, "POST", path)
+	r.openAPIRegistry.Register("POST", fullPath, handler, mergedAnnotation)
+	r.currentGroup().POST(path, r.wrapHandler(handler))
+	return r
+}
+
+func (r *GinRouter) PUTWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
+	fullPath := r.buildFullPath(path)
+	mergedAnnotation := r.mergeAnnotation(annotation, "PUT", path)
+	r.openAPIRegistry.Register("PUT", fullPath, handler, mergedAnnotation)
+	r.currentGroup().PUT(path, r.wrapHandler(handler))
+	return r
+}
+
+func (r *GinRouter) DELETEWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
+	fullPath := r.buildFullPath(path)
+	mergedAnnotation := r.mergeAnnotation(annotation, "DELETE", path)
+	r.openAPIRegistry.Register("DELETE", fullPath, handler, mergedAnnotation)
+	r.currentGroup().DELETE(path, r.wrapHandler(handler))
+	return r
+}
+
+func (r *GinRouter) PATCHWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
+	fullPath := r.buildFullPath(path)
+	mergedAnnotation := r.mergeAnnotation(annotation, "PATCH", path)
+	r.openAPIRegistry.Register("PATCH", fullPath, handler, mergedAnnotation)
+	r.currentGroup().PATCH(path, r.wrapHandler(handler))
+	return r
+}
+
+func (r *GinRouter) OPTIONSWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
+	fullPath := r.buildFullPath(path)
+	mergedAnnotation := r.mergeAnnotation(annotation, "OPTIONS", path)
+	r.openAPIRegistry.Register("OPTIONS", fullPath, handler, mergedAnnotation)
+	r.currentGroup().OPTIONS(path, r.wrapHandler(handler))
+	return r
+}
+
+func (r *GinRouter) HEADWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
+	fullPath := r.buildFullPath(path)
+	mergedAnnotation := r.mergeAnnotation(annotation, "HEAD", path)
+	r.openAPIRegistry.Register("HEAD", fullPath, handler, mergedAnnotation)
+	r.currentGroup().HEAD(path, r.wrapHandler(handler))
+	return r
+}
+
 // Grouping
 func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
 	// Create group from the current group, not from engine (to support nesting)
@@ -413,6 +470,27 @@ func (r *GinRouter) GenerateOpenAPIDoc() (*openapi.Document, error) {
 func (r *GinRouter) generateDefaultSummary(method, path string) string {
 	// Simple summary generation
 	return fmt.Sprintf("%s %s", method, path)
+}
+
+// mergeAnnotation merges user-provided annotation with auto-generated defaults
+func (r *GinRouter) mergeAnnotation(annotation openapi.Annotation, method, path string) openapi.Annotation {
+	fullPath := r.buildFullPath(path)
+	defaultTags := r.generateTagsFromPath(fullPath)
+
+	// Start with the user's annotation
+	merged := annotation
+
+	// If no summary provided, use default
+	if merged.Summary == "" {
+		merged.Summary = r.generateDefaultSummary(method, path)
+	}
+
+	// If no tags provided, use auto-generated tags
+	if len(merged.Tags) == 0 {
+		merged.Tags = defaultTags
+	}
+
+	return merged
 }
 
 // buildFullPath builds the full path by combining the prefix with the given path

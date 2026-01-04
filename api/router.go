@@ -19,6 +19,15 @@ type Router interface {
 	OPTIONS(path string, handler HandlerFunc) Router
 	HEAD(path string, handler HandlerFunc) Router
 
+	// HTTP Methods with OpenAPI annotations
+	GETWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+	POSTWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+	PUTWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+	DELETEWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+	PATCHWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+	OPTIONSWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+	HEADWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+
 	// Grouping
 	Group(path string, fn func(Router)) Router
 
