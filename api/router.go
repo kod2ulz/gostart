@@ -133,6 +133,7 @@ type OpenAPIRouter interface {
 	GetOpenAPIHandler() http.Handler
 	GetSwaggerUIHandler() http.Handler
 	GenerateOpenAPIDoc() (*openapi.Document, error)
+	SetOpenAPIInfo(info openapi.Info)
 }
 
 // DefaultRouterConfig creates a router configuration from environment variables

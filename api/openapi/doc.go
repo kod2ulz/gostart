@@ -592,6 +592,26 @@ func (g *Generator) createOperation(route RouteInfo) *Operation {
 		Responses:   g.createDefaultResponses(),
 	}
 
+	// Add custom parameters from annotation
+	for _, paramAnnotation := range annotation.Parameters {
+		operation.Parameters = append(operation.Parameters, Parameter{
+			Name:        paramAnnotation.Name,
+			In:          paramAnnotation.In,
+			Description: paramAnnotation.Description,
+			Required:    paramAnnotation.Required,
+			Schema:      paramAnnotation.Schema,
+			Example:     paramAnnotation.Example,
+			Deprecated:  paramAnnotation.Deprecated,
+		})
+	}
+
+	// Add custom responses from annotation
+	if len(annotation.Responses) > 0 {
+		for statusCode, customResponse := range annotation.Responses {
+			operation.Responses[statusCode] = customResponse
+		}
+	}
+
 	// Use contract information if available
 	if requestContract, ok := route.Annotations["requestContract"].(*contracts.RequestContract); ok {
 		g.enrichOperationFromRequestContract(operation, requestContract)
@@ -603,6 +623,13 @@ func (g *Generator) createOperation(route RouteInfo) *Operation {
 
 	// Analyze handler to extract parameter and response types
 	g.analyzeHandler(route, operation)
+
+	// Register tags in the document
+	if len(annotation.Tags) > 0 {
+		for _, tag := range annotation.Tags {
+			g.addTagIfNotExists(tag)
+		}
+	}
 
 	return operation
 }
@@ -911,6 +938,21 @@ func (g *Generator) extractPathParameters(path string) []Parameter {
 	}
 
 	return params
+}
+
+// addTagIfNotExists adds a tag to the document if it doesn't already exist
+func (g *Generator) addTagIfNotExists(tagName string) {
+	// Check if tag already exists
+	for _, tag := range g.doc.Tags {
+		if tag.Name == tagName {
+			return
+		}
+	}
+
+	// Add the tag
+	g.doc.Tags = append(g.doc.Tags, Tag{
+		Name: tagName,
+	})
 }
 
 // RegisterRoute is a convenience function for adding routes with annotations

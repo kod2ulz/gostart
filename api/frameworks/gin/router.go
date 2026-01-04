@@ -400,6 +400,10 @@ func (r *GinRouter) GenerateOpenAPIDoc() (*openapi.Document, error) {
 	return r.openAPIRegistry.GenerateOpenAPIDoc(*r.openAPIConfig, servers)
 }
 
+func (r *GinRouter) SetOpenAPIInfo(info openapi.Info) {
+	r.openAPIConfig = &info
+}
+
 // generateDefaultSummary generates a default summary for a route
 func (r *GinRouter) generateDefaultSummary(method, path string) string {
 	// Simple summary generation
