@@ -3,6 +3,7 @@ package gin
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/api"
@@ -17,6 +18,7 @@ type GinRouter struct {
 	group           *gin.RouterGroup
 	openAPIRegistry *openapi.RouteRegistry
 	openAPIConfig   *openapi.Info
+	pathPrefix      string // Tracks the current path prefix from groups
 }
 
 // RequestContext implements both contracts.RequestContext and api.RequestContext
@@ -111,84 +113,119 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 
 // HTTP Methods
 func (r *GinRouter) GET(path string, handler api.HandlerFunc) api.Router {
+	// Build full path
+	fullPath := r.buildFullPath(path)
+	// Generate tags from path
+	tags := r.generateTagsFromPath(fullPath)
+
 	// Register with OpenAPI registry
 	annotation := openapi.Annotation{
 		Summary: r.generateDefaultSummary("GET", path),
-		Tags:    []string{"default"},
+		Tags:    tags,
 	}
-	r.openAPIRegistry.Register("GET", path, handler, annotation)
+	r.openAPIRegistry.Register("GET", fullPath, handler, annotation)
 
 	r.currentGroup().GET(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) POST(path string, handler api.HandlerFunc) api.Router {
+	// Build full path
+	fullPath := r.buildFullPath(path)
+	// Generate tags from path
+	tags := r.generateTagsFromPath(fullPath)
+
 	// Register with OpenAPI registry
 	annotation := openapi.Annotation{
 		Summary: r.generateDefaultSummary("POST", path),
-		Tags:    []string{"default"},
+		Tags:    tags,
 	}
-	r.openAPIRegistry.Register("POST", path, handler, annotation)
+	r.openAPIRegistry.Register("POST", fullPath, handler, annotation)
 
 	r.currentGroup().POST(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) PUT(path string, handler api.HandlerFunc) api.Router {
+	// Build full path
+	fullPath := r.buildFullPath(path)
+	// Generate tags from path
+	tags := r.generateTagsFromPath(fullPath)
+
 	// Register with OpenAPI registry
 	annotation := openapi.Annotation{
 		Summary: r.generateDefaultSummary("PUT", path),
-		Tags:    []string{"default"},
+		Tags:    tags,
 	}
-	r.openAPIRegistry.Register("PUT", path, handler, annotation)
+	r.openAPIRegistry.Register("PUT", fullPath, handler, annotation)
 
 	r.currentGroup().PUT(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) DELETE(path string, handler api.HandlerFunc) api.Router {
+	// Build full path
+	fullPath := r.buildFullPath(path)
+	// Generate tags from path
+	tags := r.generateTagsFromPath(fullPath)
+
 	// Register with OpenAPI registry
 	annotation := openapi.Annotation{
 		Summary: r.generateDefaultSummary("DELETE", path),
-		Tags:    []string{"default"},
+		Tags:    tags,
 	}
-	r.openAPIRegistry.Register("DELETE", path, handler, annotation)
+	r.openAPIRegistry.Register("DELETE", fullPath, handler, annotation)
 
 	r.currentGroup().DELETE(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) PATCH(path string, handler api.HandlerFunc) api.Router {
+	// Build full path
+	fullPath := r.buildFullPath(path)
+	// Generate tags from path
+	tags := r.generateTagsFromPath(fullPath)
+
 	// Register with OpenAPI registry
 	annotation := openapi.Annotation{
 		Summary: r.generateDefaultSummary("PATCH", path),
-		Tags:    []string{"default"},
+		Tags:    tags,
 	}
-	r.openAPIRegistry.Register("PATCH", path, handler, annotation)
+	r.openAPIRegistry.Register("PATCH", fullPath, handler, annotation)
 
 	r.currentGroup().PATCH(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) OPTIONS(path string, handler api.HandlerFunc) api.Router {
+	// Build full path
+	fullPath := r.buildFullPath(path)
+	// Generate tags from path
+	tags := r.generateTagsFromPath(fullPath)
+
 	// Register with OpenAPI registry
 	annotation := openapi.Annotation{
 		Summary: r.generateDefaultSummary("OPTIONS", path),
-		Tags:    []string{"default"},
+		Tags:    tags,
 	}
-	r.openAPIRegistry.Register("OPTIONS", path, handler, annotation)
+	r.openAPIRegistry.Register("OPTIONS", fullPath, handler, annotation)
 
 	r.currentGroup().OPTIONS(path, r.wrapHandler(handler))
 	return r
 }
 
 func (r *GinRouter) HEAD(path string, handler api.HandlerFunc) api.Router {
+	// Build full path
+	fullPath := r.buildFullPath(path)
+	// Generate tags from path
+	tags := r.generateTagsFromPath(fullPath)
+
 	// Register with OpenAPI registry
 	annotation := openapi.Annotation{
 		Summary: r.generateDefaultSummary("HEAD", path),
-		Tags:    []string{"default"},
+		Tags:    tags,
 	}
-	r.openAPIRegistry.Register("HEAD", path, handler, annotation)
+	r.openAPIRegistry.Register("HEAD", fullPath, handler, annotation)
 
 	r.currentGroup().HEAD(path, r.wrapHandler(handler))
 	return r
@@ -196,12 +233,32 @@ func (r *GinRouter) HEAD(path string, handler api.HandlerFunc) api.Router {
 
 // Grouping
 func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
-	group := r.engine.Group(path)
+	// Create group from the current group, not from engine (to support nesting)
+	var group *gin.RouterGroup
+	if r.group != nil {
+		group = r.group.Group(path)
+	} else {
+		group = r.engine.Group(path)
+	}
+
+	// Build the new path prefix
+	newPrefix := r.pathPrefix
+	if newPrefix == "" {
+		newPrefix = "/" + path
+	} else {
+		newPrefix = newPrefix + "/" + path
+	}
+	// Ensure path starts with /
+	if !strings.HasPrefix(newPrefix, "/") {
+		newPrefix = "/" + newPrefix
+	}
+
 	subRouter := &GinRouter{
 		engine:          r.engine,
 		group:           group,
 		openAPIRegistry: r.openAPIRegistry,
 		openAPIConfig:   r.openAPIConfig,
+		pathPrefix:      newPrefix,
 	}
 	fn(subRouter)
 	return r
@@ -356,6 +413,40 @@ func (r *GinRouter) GenerateOpenAPIDoc() (*openapi.Document, error) {
 func (r *GinRouter) generateDefaultSummary(method, path string) string {
 	// Simple summary generation
 	return fmt.Sprintf("%s %s", method, path)
+}
+
+// buildFullPath builds the full path by combining the prefix with the given path
+func (r *GinRouter) buildFullPath(path string) string {
+	if r.pathPrefix == "" {
+		return "/" + path
+	}
+	// Remove leading slash from path if present, since prefix already has it
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
+	return r.pathPrefix + "/" + path
+}
+
+// generateTagsFromPath generates tags from the path segments
+func (r *GinRouter) generateTagsFromPath(path string) []string {
+	// Remove leading slash and split
+	path = strings.TrimPrefix(path, "/")
+	parts := strings.Split(path, "/")
+
+	// Filter out empty strings and path parameters (starting with :)
+	tags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" && !strings.HasPrefix(part, ":") {
+			tags = append(tags, part)
+		}
+	}
+
+	// If no tags, use "default"
+	if len(tags) == 0 {
+		return []string{"default"}
+	}
+
+	return tags
 }
 
 // addOpenAPIRoutes adds routes for serving OpenAPI documentation
