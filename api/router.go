@@ -10,23 +10,14 @@ import (
 
 // Router defines a framework-agnostic router interface
 type Router interface {
-	// HTTP Methods
-	GET(path string, handler HandlerFunc) Router
-	POST(path string, handler HandlerFunc) Router
-	PUT(path string, handler HandlerFunc) Router
-	DELETE(path string, handler HandlerFunc) Router
-	PATCH(path string, handler HandlerFunc) Router
-	OPTIONS(path string, handler HandlerFunc) Router
-	HEAD(path string, handler HandlerFunc) Router
-
-	// HTTP Methods with OpenAPI annotations
-	GETWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
-	POSTWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
-	PUTWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
-	DELETEWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
-	PATCHWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
-	OPTIONSWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
-	HEADWithAnnotation(path string, handler HandlerFunc, annotation openapi.Annotation) Router
+	// HTTP Methods (with optional route configuration)
+	GET(path string, handler HandlerFunc, options ...RouteOption) Router
+	POST(path string, handler HandlerFunc, options ...RouteOption) Router
+	PUT(path string, handler HandlerFunc, options ...RouteOption) Router
+	DELETE(path string, handler HandlerFunc, options ...RouteOption) Router
+	PATCH(path string, handler HandlerFunc, options ...RouteOption) Router
+	OPTIONS(path string, handler HandlerFunc, options ...RouteOption) Router
+	HEAD(path string, handler HandlerFunc, options ...RouteOption) Router
 
 	// Grouping
 	Group(path string, fn func(Router)) Router
@@ -50,6 +41,45 @@ type HandlerFunc func(contracts.RequestContext)
 
 // MiddlewareFunc represents a framework-agnostic middleware function
 type MiddlewareFunc func(contracts.RequestContext) (bool, error)
+
+// RouteOption represents an optional route configuration (middleware, annotation, or additional handler)
+type RouteOption interface {
+	isRouteOption()
+}
+
+// RouteMiddleware wraps a MiddlewareFunc as a RouteOption
+type RouteMiddleware struct {
+	Middleware MiddlewareFunc
+}
+
+func (r RouteMiddleware) isRouteOption() {}
+
+// RouteAnnotation wraps an openapi.Annotation as a RouteOption
+type RouteAnnotation struct {
+	Annotation openapi.Annotation
+}
+
+func (r RouteAnnotation) isRouteOption() {}
+
+// RouteHandler wraps an additional HandlerFunc as a RouteOption (for chaining)
+type RouteHandler struct {
+	Handler HandlerFunc
+}
+
+func (r RouteHandler) isRouteOption() {}
+
+// Helper functions to create RouteOptions
+func WithMiddleware(mw MiddlewareFunc) RouteOption {
+	return RouteMiddleware{Middleware: mw}
+}
+
+func WithAnnotation(annotation openapi.Annotation) RouteOption {
+	return RouteAnnotation{Annotation: annotation}
+}
+
+func WithHandler(handler HandlerFunc) RouteOption {
+	return RouteHandler{Handler: handler}
+}
 
 // RequestContext extends the contracts.RequestContext with router-specific methods
 type RequestContext interface {

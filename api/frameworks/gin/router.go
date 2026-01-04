@@ -3,12 +3,16 @@ package gin
 import (
 	"fmt"
 	"net/http"
+	"reflect"
+	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/api/openapi"
 	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/logr"
 )
 
@@ -112,180 +116,32 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 }
 
 // HTTP Methods
-func (r *GinRouter) GET(path string, handler api.HandlerFunc) api.Router {
-	// Build full path
-	fullPath := r.buildFullPath(path)
-	// Generate tags from path
-	tags := r.generateTagsFromPath(fullPath)
-
-	// Register with OpenAPI registry
-	annotation := openapi.Annotation{
-		Summary: r.generateDefaultSummary("GET", path),
-		Tags:    tags,
-	}
-	r.openAPIRegistry.Register("GET", fullPath, handler, annotation)
-
-	r.currentGroup().GET(path, r.wrapHandler(handler))
-	return r
+func (r *GinRouter) GET(path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	return r.registerRoute("GET", path, handler, options...)
 }
 
-func (r *GinRouter) POST(path string, handler api.HandlerFunc) api.Router {
-	// Build full path
-	fullPath := r.buildFullPath(path)
-	// Generate tags from path
-	tags := r.generateTagsFromPath(fullPath)
-
-	// Register with OpenAPI registry
-	annotation := openapi.Annotation{
-		Summary: r.generateDefaultSummary("POST", path),
-		Tags:    tags,
-	}
-	r.openAPIRegistry.Register("POST", fullPath, handler, annotation)
-
-	r.currentGroup().POST(path, r.wrapHandler(handler))
-	return r
+func (r *GinRouter) POST(path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	return r.registerRoute("POST", path, handler, options...)
 }
 
-func (r *GinRouter) PUT(path string, handler api.HandlerFunc) api.Router {
-	// Build full path
-	fullPath := r.buildFullPath(path)
-	// Generate tags from path
-	tags := r.generateTagsFromPath(fullPath)
-
-	// Register with OpenAPI registry
-	annotation := openapi.Annotation{
-		Summary: r.generateDefaultSummary("PUT", path),
-		Tags:    tags,
-	}
-	r.openAPIRegistry.Register("PUT", fullPath, handler, annotation)
-
-	r.currentGroup().PUT(path, r.wrapHandler(handler))
-	return r
+func (r *GinRouter) PUT(path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	return r.registerRoute("PUT", path, handler, options...)
 }
 
-func (r *GinRouter) DELETE(path string, handler api.HandlerFunc) api.Router {
-	// Build full path
-	fullPath := r.buildFullPath(path)
-	// Generate tags from path
-	tags := r.generateTagsFromPath(fullPath)
-
-	// Register with OpenAPI registry
-	annotation := openapi.Annotation{
-		Summary: r.generateDefaultSummary("DELETE", path),
-		Tags:    tags,
-	}
-	r.openAPIRegistry.Register("DELETE", fullPath, handler, annotation)
-
-	r.currentGroup().DELETE(path, r.wrapHandler(handler))
-	return r
+func (r *GinRouter) DELETE(path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	return r.registerRoute("DELETE", path, handler, options...)
 }
 
-func (r *GinRouter) PATCH(path string, handler api.HandlerFunc) api.Router {
-	// Build full path
-	fullPath := r.buildFullPath(path)
-	// Generate tags from path
-	tags := r.generateTagsFromPath(fullPath)
-
-	// Register with OpenAPI registry
-	annotation := openapi.Annotation{
-		Summary: r.generateDefaultSummary("PATCH", path),
-		Tags:    tags,
-	}
-	r.openAPIRegistry.Register("PATCH", fullPath, handler, annotation)
-
-	r.currentGroup().PATCH(path, r.wrapHandler(handler))
-	return r
+func (r *GinRouter) PATCH(path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	return r.registerRoute("PATCH", path, handler, options...)
 }
 
-func (r *GinRouter) OPTIONS(path string, handler api.HandlerFunc) api.Router {
-	// Build full path
-	fullPath := r.buildFullPath(path)
-	// Generate tags from path
-	tags := r.generateTagsFromPath(fullPath)
-
-	// Register with OpenAPI registry
-	annotation := openapi.Annotation{
-		Summary: r.generateDefaultSummary("OPTIONS", path),
-		Tags:    tags,
-	}
-	r.openAPIRegistry.Register("OPTIONS", fullPath, handler, annotation)
-
-	r.currentGroup().OPTIONS(path, r.wrapHandler(handler))
-	return r
+func (r *GinRouter) OPTIONS(path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	return r.registerRoute("OPTIONS", path, handler, options...)
 }
 
-func (r *GinRouter) HEAD(path string, handler api.HandlerFunc) api.Router {
-	// Build full path
-	fullPath := r.buildFullPath(path)
-	// Generate tags from path
-	tags := r.generateTagsFromPath(fullPath)
-
-	// Register with OpenAPI registry
-	annotation := openapi.Annotation{
-		Summary: r.generateDefaultSummary("HEAD", path),
-		Tags:    tags,
-	}
-	r.openAPIRegistry.Register("HEAD", fullPath, handler, annotation)
-
-	r.currentGroup().HEAD(path, r.wrapHandler(handler))
-	return r
-}
-
-// HTTP Methods with OpenAPI annotations
-func (r *GinRouter) GETWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
-	fullPath := r.buildFullPath(path)
-	mergedAnnotation := r.mergeAnnotation(annotation, "GET", path)
-	r.openAPIRegistry.Register("GET", fullPath, handler, mergedAnnotation)
-	r.currentGroup().GET(path, r.wrapHandler(handler))
-	return r
-}
-
-func (r *GinRouter) POSTWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
-	fullPath := r.buildFullPath(path)
-	mergedAnnotation := r.mergeAnnotation(annotation, "POST", path)
-	r.openAPIRegistry.Register("POST", fullPath, handler, mergedAnnotation)
-	r.currentGroup().POST(path, r.wrapHandler(handler))
-	return r
-}
-
-func (r *GinRouter) PUTWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
-	fullPath := r.buildFullPath(path)
-	mergedAnnotation := r.mergeAnnotation(annotation, "PUT", path)
-	r.openAPIRegistry.Register("PUT", fullPath, handler, mergedAnnotation)
-	r.currentGroup().PUT(path, r.wrapHandler(handler))
-	return r
-}
-
-func (r *GinRouter) DELETEWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
-	fullPath := r.buildFullPath(path)
-	mergedAnnotation := r.mergeAnnotation(annotation, "DELETE", path)
-	r.openAPIRegistry.Register("DELETE", fullPath, handler, mergedAnnotation)
-	r.currentGroup().DELETE(path, r.wrapHandler(handler))
-	return r
-}
-
-func (r *GinRouter) PATCHWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
-	fullPath := r.buildFullPath(path)
-	mergedAnnotation := r.mergeAnnotation(annotation, "PATCH", path)
-	r.openAPIRegistry.Register("PATCH", fullPath, handler, mergedAnnotation)
-	r.currentGroup().PATCH(path, r.wrapHandler(handler))
-	return r
-}
-
-func (r *GinRouter) OPTIONSWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
-	fullPath := r.buildFullPath(path)
-	mergedAnnotation := r.mergeAnnotation(annotation, "OPTIONS", path)
-	r.openAPIRegistry.Register("OPTIONS", fullPath, handler, mergedAnnotation)
-	r.currentGroup().OPTIONS(path, r.wrapHandler(handler))
-	return r
-}
-
-func (r *GinRouter) HEADWithAnnotation(path string, handler api.HandlerFunc, annotation openapi.Annotation) api.Router {
-	fullPath := r.buildFullPath(path)
-	mergedAnnotation := r.mergeAnnotation(annotation, "HEAD", path)
-	r.openAPIRegistry.Register("HEAD", fullPath, handler, mergedAnnotation)
-	r.currentGroup().HEAD(path, r.wrapHandler(handler))
-	return r
+func (r *GinRouter) HEAD(path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	return r.registerRoute("HEAD", path, handler, options...)
 }
 
 // Grouping
@@ -363,6 +219,84 @@ func (r *GinRouter) Run(addr string) error {
 }
 
 // Helper methods
+func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, options ...api.RouteOption) api.Router {
+	fullPath := r.buildFullPath(path)
+
+	// Process options
+	var (
+		middlewares []api.MiddlewareFunc
+		annotation  openapi.Annotation
+		handlers    []api.HandlerFunc
+	)
+
+	for _, opt := range options {
+		switch v := opt.(type) {
+		case api.RouteMiddleware:
+			middlewares = append(middlewares, v.Middleware)
+		case api.RouteAnnotation:
+			annotation = v.Annotation
+		case api.RouteHandler:
+			handlers = append(handlers, v.Handler)
+		}
+	}
+
+	// Extract handler name for default summary
+	handlerName := extractHandlerName(handler)
+	if annotation.Summary == "" {
+		annotation.Summary = handlerName
+	}
+
+	// Auto-generate documentation from typed handler using reflection
+	annotation = r.enhanceAnnotationFromHandler(handler, annotation)
+
+	// Merge with defaults (tags, etc.)
+	annotation = r.mergeAnnotation(annotation, method, path)
+
+	// Register with OpenAPI registry
+	r.openAPIRegistry.Register(method, fullPath, handler, annotation)
+
+	// Build the final handler chain
+	finalHandler := handler
+	for i := len(handlers) - 1; i >= 0; i-- {
+		// Wrap handlers in reverse order so they execute in the right order
+		// Use immediate function invocation to avoid closure capture issues
+		currentHandler := handlers[i]
+		nextHandler := finalHandler
+
+		// Create a new closure with properly captured variables
+		wrapped := func(ctx contracts.RequestContext) {
+			currentHandler(ctx)
+			// Note: We can't easily check if context was aborted
+			// Handlers should call ctx.Abort() if they want to stop the chain
+			nextHandler(ctx)
+		}
+		finalHandler = wrapped
+	}
+
+	// Wrap with middleware
+	wrappedHandler := r.wrapHandlerWithMiddleware(finalHandler, middlewares)
+
+	// Register the route with Gin
+	switch method {
+	case "GET":
+		r.currentGroup().GET(path, wrappedHandler)
+	case "POST":
+		r.currentGroup().POST(path, wrappedHandler)
+	case "PUT":
+		r.currentGroup().PUT(path, wrappedHandler)
+	case "DELETE":
+		r.currentGroup().DELETE(path, wrappedHandler)
+	case "PATCH":
+		r.currentGroup().PATCH(path, wrappedHandler)
+	case "OPTIONS":
+		r.currentGroup().OPTIONS(path, wrappedHandler)
+	case "HEAD":
+		r.currentGroup().HEAD(path, wrappedHandler)
+	}
+
+	return r
+}
+
 func (r *GinRouter) currentGroup() *gin.RouterGroup {
 	if r.group != nil {
 		return r.group
@@ -550,6 +484,73 @@ func shouldEnableLogging() bool {
 		}
 	}
 	return true
+}
+
+// extractHandlerName extracts a clean handler name from the function
+func extractHandlerName(handler api.HandlerFunc) string {
+	// Get the function pointer and its name
+	pc := reflect.ValueOf(handler).Pointer()
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return "handler"
+	}
+
+	// Clean up the name
+	name := fn.Name()
+
+	// Remove package path
+	parts := strings.Split(name, ".")
+	if len(parts) > 0 {
+		name = parts[len(parts)-1]
+	}
+
+	// Remove common suffixes like "-fm" (anonymous functions)
+	name = regexp.MustCompile(`-fm\d*$`).ReplaceAllString(name, "")
+
+	// Convert camelCase to Title Case for display
+	name = regexp.MustCompile(`([a-z])([A-Z])`).ReplaceAllString(name, "$1 $2")
+	name = strings.Title(name)
+
+	return name
+}
+
+// enhanceAnnotationFromHandler uses reflection to auto-generate documentation from typed handlers
+func (r *GinRouter) enhanceAnnotationFromHandler(handler api.HandlerFunc, annotation openapi.Annotation) openapi.Annotation {
+	// Try to extract type information from the handler
+	_ = reflect.ValueOf(handler)
+
+	// Check if this is a typed handler (has generic type info embedded)
+	// This is a placeholder for future enhancement where we inspect the handler's
+	// parameter and response types using reflection
+	//
+	// For now, we'll rely on the OpenAPI registry which already does this inspection
+	// when registering routes with typed handlers
+
+	return annotation
+}
+
+// wrapHandlerWithMiddleware wraps a handler with route-specific middleware
+func (r *GinRouter) wrapHandlerWithMiddleware(handler api.HandlerFunc, middlewares []api.MiddlewareFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
+
+		// Execute middleware in order
+		for _, mw := range middlewares {
+			cont, err := mw(ctx)
+			if !cont || err != nil {
+				if err != nil {
+					c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
+						"error": err.Error(),
+					})
+				}
+				c.Abort()
+				return
+			}
+		}
+
+		// Execute the main handler
+		handler(ctx)
+	}
 }
 
 // Factory function for creating Gin routers
