@@ -158,6 +158,28 @@ func NullableBoolValue(val pgtype.Bool, fallback ...bool) *bool {
 	return nil
 }
 
+// UUIDValue converts pgtype.UUID to uuid.UUID
+func UUIDValue(val pgtype.UUID, fallback ...uuid.UUID) uuid.UUID {
+	if val.Valid {
+		return uuid.UUID(val.Bytes)
+	} else if len(fallback) > 0 {
+		return fallback[0]
+	}
+	return uuid.Nil
+}
+
+// NullableUUIDValue converts pgtype.UUID to *uuid.UUID
+func NullableUUIDValue(val pgtype.UUID, fallback ...uuid.UUID) *uuid.UUID {
+	if val.Valid {
+	 uid := uuid.UUID(val.Bytes)
+		return &uid
+	} else if len(fallback) > 0 && fallback[0] != uuid.Nil {
+	 uid := fallback[0]
+		return &uid
+	}
+	return nil
+}
+
 // TextParam converts string to pgtype.Text
 func TextParam(val string) pgtype.Text {
 	return pgtype.Text{String: val, Valid: true}
@@ -339,6 +361,49 @@ func NullableBoolParam(val *bool, fallback ...bool) pgtype.Bool {
 		return pgtype.Bool{Bool: fallback[0], Valid: true}
 	}
 	return pgtype.Bool{}
+}
+
+// UUIDParam converts uuid.UUID to pgtype.UUID
+func UUIDParam(val uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: val, Valid: val != uuid.Nil}
+}
+
+// NullableUUIDParam converts *uuid.UUID to pgtype.UUID
+func NillableUUIDParam(val *uuid.UUID, fallback ...uuid.UUID) pgtype.UUID {
+	if val != nil && *val != uuid.Nil {
+		return pgtype.UUID{Bytes: *val, Valid: true}
+	} else if len(fallback) > 0 && fallback[0] != uuid.Nil {
+		return pgtype.UUID{Bytes: fallback[0], Valid: true}
+	}
+	return pgtype.UUID{}
+}
+
+// NullableUUIDParam converts *uuid.UUID to pgtype.UUID
+func NullableUUIDParam(val uuid.NullUUID, fallback ...uuid.UUID) pgtype.UUID {
+	if val.Valid && val.UUID != uuid.Nil {
+		return pgtype.UUID{Bytes: val.UUID, Valid: true}
+	} else if len(fallback) > 0 && fallback[0] != uuid.Nil {
+		return pgtype.UUID{Bytes: fallback[0], Valid: true}
+	}
+	return pgtype.UUID{}
+}
+
+// OptionalUUIDParam converts optional.String containing a UUID to pgtype.UUID
+func OptionalUUIDParam(val optional.String, fallback ...uuid.UUID) pgtype.UUID {
+	if !val.Present() {
+		if len(fallback) > 0 && fallback[0] != uuid.Nil {
+			return pgtype.UUID{Bytes: fallback[0], Valid: true}
+		}
+		return pgtype.UUID{}
+	}
+
+	if str, err := val.Get(); err == nil {
+		if uid, err := uuid.Parse(str); err == nil {
+			return pgtype.UUID{Bytes: uid, Valid: true}
+		}
+	}
+
+	return pgtype.UUID{}
 }
 
 // ConvertID converts Value to the specified ID type
