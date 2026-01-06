@@ -118,6 +118,12 @@ type RouterConfig struct {
 	EnableLogging    bool
 	LogConfig        *RequestLogConfig
 	CustomMiddleware []MiddlewareFunc
+	NativeMiddleware []any // Native framework middleware (e.g., gin.Recovery(), cors.New())
+
+	// Panic recovery settings
+	PanicRecovery    func(c any, stack []byte) // Custom panic recovery handler
+	// If PanicRecovery is set, EnableRecovery will be set to false to use custom handler instead
+	// You can also pass native gin.Recovery() or gin.CustomRecovery() in NativeMiddleware
 
 	// Static file settings
 	StaticPaths map[string]string

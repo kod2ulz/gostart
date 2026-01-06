@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -23,11 +24,30 @@ type GinRouter struct {
 	openAPIRegistry *openapi.RouteRegistry
 	openAPIConfig   *openapi.Info
 	pathPrefix      string // Tracks the current path prefix from groups
+	config          *api.RouterConfig
 }
 
 // RequestContext implements both contracts.RequestContext and api.RequestContext
 type RequestContext struct {
 	*GinRequestContext
+}
+
+// hasNativeRecovery checks if native recovery middleware is already provided
+func hasNativeRecovery(middlewares []any) bool {
+	for _, mw := range middlewares {
+		// Check if it's gin.Recovery or gin.CustomRecovery by function name
+		mwValue := reflect.ValueOf(mw)
+		if mwValue.Kind() == reflect.Func {
+			fn := runtime.FuncForPC(mwValue.Pointer())
+			if fn != nil {
+				fnName := fn.Name()
+				if strings.Contains(fnName, "Recovery") || strings.Contains(fnName, "CustomRecovery") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // NewGinRouter creates a new Gin-based router
@@ -45,9 +65,34 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 		Version:     "1.0.0",
 	}
 
-	// Apply default middleware
-	if config.EnableRecovery {
-		engine.Use(gin.Recovery())
+	// Apply native middleware first (e.g., gin.Recovery(), cors.New())
+	if len(config.NativeMiddleware) > 0 {
+		for _, mw := range config.NativeMiddleware {
+			if handlerFunc, ok := mw.(gin.HandlerFunc); ok {
+				engine.Use(handlerFunc)
+			} else if handlerFunc, ok := mw.(func(*gin.Context)); ok {
+				engine.Use(handlerFunc)
+			} else {
+				// Try to use it as-is (might be a middleware constructor that returns gin.HandlerFunc)
+				logr.Log().Warn("Native middleware type not supported", "type", fmt.Sprintf("%T", mw))
+			}
+		}
+	}
+
+	// Apply default recovery if enabled and no native recovery middleware is provided
+	hasNativeRecovery := hasNativeRecovery(config.NativeMiddleware)
+	if config.EnableRecovery && !hasNativeRecovery {
+		// If custom panic handler is provided, use custom recovery
+		if config.PanicRecovery != nil {
+			// Wrap custom handler to match gin's RecoveryFunc signature
+			customRecovery := func(c *gin.Context, recovered any) {
+				stack := debug.Stack()
+				config.PanicRecovery(recovered, stack)
+			}
+			engine.Use(gin.CustomRecovery(customRecovery))
+		} else {
+			engine.Use(gin.Recovery())
+		}
 	}
 
 	// Apply automatic logging middleware if enabled
@@ -102,6 +147,7 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 		engine:          engine,
 		openAPIRegistry: openAPIRegistry,
 		openAPIConfig:   openAPIConfig,
+		config:          config,
 	}
 
 	// Configure static paths
@@ -263,8 +309,26 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 		currentHandler := handlers[i]
 		nextHandler := finalHandler
 
-		// Create a new closure with properly captured variables
+		// Create a new closure with properly captured variables and panic recovery
 		wrapped := func(ctx contracts.RequestContext) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					// Call custom panic handler if provided
+					if r.config != nil && r.config.PanicRecovery != nil {
+						stack := debug.Stack()
+						r.config.PanicRecovery(recovered, stack)
+					}
+
+					// Return error response to client if we have a RequestContext
+					if requestCtx, ok := ctx.(*RequestContext); ok {
+						requestCtx.ctx.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
+							"error":   "Internal server error",
+							"message": fmt.Sprintf("Panic recovered: %v", recovered),
+						})
+					}
+				}
+			}()
+
 			currentHandler(ctx)
 			// Note: We can't easily check if context was aborted
 			// Handlers should call ctx.Abort() if they want to stop the chain
@@ -304,11 +368,25 @@ func (r *GinRouter) currentGroup() *gin.RouterGroup {
 	return &r.engine.RouterGroup
 }
 
-func (r *GinRouter) wrapHandler(handler api.HandlerFunc) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
-		handler(ctx)
-	}
+// handlePanic provides centralized panic recovery with optional custom handler
+func (r *GinRouter) handlePanic(c *gin.Context, fn func()) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			// Call custom panic handler if provided
+			if r.config != nil && r.config.PanicRecovery != nil {
+				stack := debug.Stack()
+				r.config.PanicRecovery(recovered, stack)
+			}
+
+			// Return error response to client
+			c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
+				"error":   "Internal server error",
+				"message": fmt.Sprintf("Panic recovered: %v", recovered),
+			})
+		}
+	}()
+
+	fn()
 }
 
 // WrapHandler converts an api.HandlerFunc to gin.HandlerFunc for testing
@@ -536,24 +614,26 @@ func (r *GinRouter) enhanceAnnotationFromHandler(handler api.HandlerFunc, annota
 // wrapHandlerWithMiddleware wraps a handler with route-specific middleware
 func (r *GinRouter) wrapHandlerWithMiddleware(handler api.HandlerFunc, middlewares []api.MiddlewareFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
+		r.handlePanic(c, func() {
+			ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
 
-		// Execute middleware in order
-		for _, mw := range middlewares {
-			cont, err := mw(ctx)
-			if !cont || err != nil {
-				if err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
-						"error": err.Error(),
-					})
+			// Execute middleware in order
+			for _, mw := range middlewares {
+				cont, err := mw(ctx)
+				if !cont || err != nil {
+					if err != nil {
+						c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
+							"error": err.Error(),
+						})
+					}
+					c.Abort()
+					return
 				}
-				c.Abort()
-				return
 			}
-		}
 
-		// Execute the main handler
-		handler(ctx)
+			// Execute the main handler
+			handler(ctx)
+		})
 	}
 }
 
