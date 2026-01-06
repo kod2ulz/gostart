@@ -975,6 +975,7 @@ type Annotation struct {
 	Consumes    []string               `json:"consumes,omitempty"`
 	Produces    []string               `json:"produces,omitempty"`
 	Parameters  []ParameterAnnotation  `json:"parameters,omitempty"`
+	RequestBody *RequestBody           `json:"requestBody,omitempty"`
 	Responses   map[string]Response    `json:"responses,omitempty"`
 	Security    []map[string][]string  `json:"security,omitempty"`
 	External    *ExternalDocs          `json:"externalDocs,omitempty"`

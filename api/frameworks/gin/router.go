@@ -273,6 +273,9 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 		middlewares []api.MiddlewareFunc
 		annotation  openapi.Annotation
 		handlers    []api.HandlerFunc
+		requestType  reflect.Type
+		responseType reflect.Type
+		isList       bool
 	)
 
 	for _, opt := range options {
@@ -283,6 +286,10 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 			annotation = v.Annotation
 		case api.RouteHandler:
 			handlers = append(handlers, v.Handler)
+		case api.RouteType:
+			requestType = v.RequestType
+			responseType = v.ResponseType
+			isList = v.IsList
 		}
 	}
 
@@ -294,6 +301,11 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 
 	// Auto-generate documentation from typed handler using reflection
 	annotation = r.enhanceAnnotationFromHandler(handler, annotation)
+
+	// If we have explicit type information, use it to enhance the annotation
+	if requestType != nil {
+		annotation = r.enhanceAnnotationFromTypes(annotation, requestType, responseType, isList, method, path)
+	}
 
 	// Merge with defaults (tags, etc.)
 	annotation = r.mergeAnnotation(annotation, method, path)
@@ -522,22 +534,56 @@ func (r *GinRouter) buildFullPath(path string) string {
 }
 
 // generateTagsFromPath generates tags from the path segments
+// For grouped routes (like /api/admin/geo/attributes), it creates hierarchical tags
+// that respect the group structure: ["admin", "geo/attributes"]
 func (r *GinRouter) generateTagsFromPath(path string) []string {
 	// Remove leading slash and split
 	path = strings.TrimPrefix(path, "/")
 	parts := strings.Split(path, "/")
 
 	// Filter out empty strings and path parameters (starting with :)
-	tags := make([]string, 0, len(parts))
+	validParts := make([]string, 0, len(parts))
 	for _, part := range parts {
 		if part != "" && !strings.HasPrefix(part, ":") {
-			tags = append(tags, part)
+			validParts = append(validParts, part)
 		}
 	}
 
 	// If no tags, use "default"
-	if len(tags) == 0 {
+	if len(validParts) == 0 {
 		return []string{"default"}
+	}
+
+	// For hierarchical tags, create meaningful tag names based on path segments
+	// Skip common prefixes like "api" and create hierarchical tags
+	tags := make([]string, 0)
+	startIdx := 0
+
+	// Skip "api" prefix if present
+	if len(validParts) > 0 && validParts[0] == "api" {
+		startIdx = 1
+	}
+
+	// Build tags based on remaining path structure
+	if len(validParts) > startIdx {
+		// Use the first meaningful segment (e.g., "admin")
+		tags = append(tags, validParts[startIdx])
+
+		// For nested resources, combine subsequent segments with "/"
+		// e.g., "geo/attributes" instead of ["geo", "attributes"]
+		if len(validParts) > startIdx+2 {
+			// Combine segments after the first one
+			nestedTag := strings.Join(validParts[startIdx+1:], "/")
+			tags = append(tags, nestedTag)
+		} else if len(validParts) > startIdx+1 {
+			// Just one more segment, add it as a separate tag
+			tags = append(tags, validParts[startIdx+1])
+		}
+	}
+
+	// Fallback if we somehow have no tags
+	if len(tags) == 0 {
+		tags = []string{"default"}
 	}
 
 	return tags
@@ -609,6 +655,220 @@ func (r *GinRouter) enhanceAnnotationFromHandler(handler api.HandlerFunc, annota
 	// when registering routes with typed handlers
 
 	return annotation
+}
+
+// enhanceAnnotationFromTypes enhances annotation with explicit type information
+func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, requestType, responseType reflect.Type, isList bool, method, path string) openapi.Annotation {
+	// Extract fields from the request type to generate parameters
+	if requestType != nil {
+		// For GET requests, extract query and path parameters
+		if method == "GET" {
+			// Extract query parameters from request struct fields
+			queryParams := r.extractQueryParams(requestType)
+			if len(queryParams) > 0 {
+				// Append to existing parameters or create new list
+				annotation.Parameters = append(annotation.Parameters, queryParams...)
+			}
+		} else if method == "POST" || method == "PUT" || method == "PATCH" {
+			// For POST/PUT/PATCH, create request body schema from struct fields
+			requestSchema := r.extractRequestBodySchema(requestType)
+			if requestSchema != nil {
+				// Create request body with the schema
+				annotation.RequestBody = &openapi.RequestBody{
+					Content: map[string]openapi.MediaType{
+						"application/json": {
+							Schema: requestSchema,
+						},
+					},
+					Required: true,
+				}
+			}
+		}
+
+		// Extract path parameters (fields with "param" tag)
+		pathParams := r.extractPathParams(requestType)
+		if len(pathParams) > 0 {
+			annotation.Parameters = append(annotation.Parameters, pathParams...)
+		}
+	}
+
+	// For response, we could similarly enhance the annotation
+	// For now, we'll keep the default response structure
+
+	return annotation
+}
+
+// extractRequestBodySchema extracts request body schema from a request struct
+func (r *GinRouter) extractRequestBodySchema(t reflect.Type) *openapi.Schema {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	if t.Kind() != reflect.Struct {
+		return &openapi.Schema{Type: "object"}
+	}
+
+	schema := &openapi.Schema{
+		Type:       "object",
+		Properties: make(map[string]openapi.Schema),
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// Skip unexported fields
+		if field.PkgPath != "" && !field.Anonymous {
+			continue
+		}
+
+		// Get field name from JSON tag
+		fieldName := field.Name
+		if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
+			parts := strings.Split(jsonTag, ",")
+			if parts[0] != "" {
+				fieldName = parts[0]
+			}
+		}
+
+		// Determine field type
+		fieldType := r.openAPITypeFromReflect(field.Type)
+
+		// Create field schema
+		fieldSchema := openapi.Schema{
+			Type: fieldType,
+		}
+
+		// Add description from field name
+		fieldSchema.Description = fieldName
+
+		// Check if field is required
+		if jsonTag := field.Tag.Get("json"); jsonTag != "" && !strings.Contains(jsonTag, "omitempty") {
+			// Field is required unless it has omitempty
+		} else if validateTag := field.Tag.Get("validate"); validateTag != "" && strings.Contains(validateTag, "required") {
+			// Field is required if validate tag says so
+			if schema.Required == nil {
+				schema.Required = []string{}
+			}
+			schema.Required = append(schema.Required, fieldName)
+		}
+
+		schema.Properties[fieldName] = fieldSchema
+	}
+
+	return schema
+}
+
+// extractQueryParams extracts query parameters from a request struct
+func (r *GinRouter) extractQueryParams(t reflect.Type) []openapi.ParameterAnnotation {
+	var params []openapi.ParameterAnnotation
+
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	if t.Kind() != reflect.Struct {
+		return params
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// Skip unexported fields
+		if field.PkgPath != "" && !field.Anonymous {
+			continue
+		}
+
+		// Check for query tag
+		queryTag := field.Tag.Get("query")
+		if queryTag == "" || queryTag == "-" {
+			continue
+		}
+
+		// Get parameter name from query tag
+		paramName := strings.Split(queryTag, ",")[0]
+
+		// Determine if required based on validate tag
+		required := false
+		if validateTag := field.Tag.Get("validate"); validateTag != "" {
+			required = strings.Contains(validateTag, "required")
+		}
+
+		// Determine parameter type from field type
+		paramType := r.openAPITypeFromReflect(field.Type)
+
+		params = append(params, openapi.ParameterAnnotation{
+			Name:     paramName,
+			In:       "query",
+			Required: required,
+			Schema: &openapi.Schema{
+				Type: paramType,
+			},
+		})
+	}
+
+	return params
+}
+
+// extractPathParams extracts path parameters from a request struct
+func (r *GinRouter) extractPathParams(t reflect.Type) []openapi.ParameterAnnotation {
+	var params []openapi.ParameterAnnotation
+
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	if t.Kind() != reflect.Struct {
+		return params
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// Skip unexported fields
+		if field.PkgPath != "" && !field.Anonymous {
+			continue
+		}
+
+		// Check for param tag
+		paramTag := field.Tag.Get("param")
+		if paramTag == "" || paramTag == "-" {
+			continue
+		}
+
+		// Get parameter name from param tag
+		paramName := strings.Split(paramTag, ",")[0]
+
+		// Determine parameter type from field type
+		paramType := r.openAPITypeFromReflect(field.Type)
+
+		params = append(params, openapi.ParameterAnnotation{
+			Name:     paramName,
+			In:       "path",
+			Required: true,
+			Schema: &openapi.Schema{
+				Type: paramType,
+			},
+		})
+	}
+
+	return params
+}
+
+// openAPITypeFromReflect converts a reflect.Type to OpenAPI type string
+func (r *GinRouter) openAPITypeFromReflect(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.String:
+		return "string"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "integer"
+	case reflect.Float32, reflect.Float64:
+		return "number"
+	case reflect.Bool:
+		return "boolean"
+	default:
+		return "string"
+	}
 }
 
 // wrapHandlerWithMiddleware wraps a handler with route-specific middleware

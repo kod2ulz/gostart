@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
@@ -278,6 +279,25 @@ func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFu
 	}
 }
 
+// TypedHandlerWithTypes is like TypedHandler but also returns type information for documentation
+// Use this when you want automatic OpenAPI schema generation
+//
+// Example:
+//   router.GET("/hello", api.TypedHandlerWithTypes(Hello), api.WithAnnotation(...))
+func TypedHandlerWithTypes[P contracts.RequestParam, R any](handler TypedRequestHandlerFunc[P, R]) (HandlerFunc, RouteOption) {
+	// Capture type information for documentation
+	var p P
+	var r R
+
+	typeOption := WithTypes(
+		reflect.TypeOf(p),
+		reflect.TypeOf(r),
+		false, // not a list
+	)
+
+	return TypedHandler[P, R](handler), typeOption
+}
+
 // TypedListHandler creates a list handler with concrete request and response types
 // Automatically loads request parameters and handles pagination
 //
@@ -327,4 +347,24 @@ func TypedListHandler[P contracts.RequestParam, R any](handler TypedListRequestH
 		limit, offset := extractPagination(param)
 		ListResponse(ctx, result, total, limit, offset)
 	}
+}
+
+// TypedListHandlerWithTypes is like TypedListHandler but also returns type information for documentation
+// Use this when you want automatic OpenAPI schema generation
+//
+// Example:
+//   handler, typeOpt := api.TypedListHandlerWithTypes(ListUsers)
+//   router.GET("/users", handler, api.WithAnnotation(...), typeOpt)
+func TypedListHandlerWithTypes[P contracts.RequestParam, R any](handler TypedListRequestHandlerFunc[P, R]) (HandlerFunc, RouteOption) {
+	// Capture type information for documentation
+	var p P
+	var r R
+
+	typeOption := WithTypes(
+		reflect.TypeOf(p),
+		reflect.TypeOf(r),
+		true, // is a list
+	)
+
+	return TypedListHandler[P, R](handler), typeOption
 }

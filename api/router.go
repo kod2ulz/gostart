@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/kod2ulz/gostart/api/openapi"
 	"github.com/kod2ulz/gostart/config"
@@ -68,6 +69,15 @@ type RouteHandler struct {
 
 func (r RouteHandler) isRouteOption() {}
 
+// RouteType captures request/response type information for documentation
+type RouteType struct {
+	RequestType  reflect.Type
+	ResponseType reflect.Type
+	IsList       bool // True if this is a list handler
+}
+
+func (r RouteType) isRouteOption() {}
+
 // Helper functions to create RouteOptions
 func WithMiddleware(mw MiddlewareFunc) RouteOption {
 	return RouteMiddleware{Middleware: mw}
@@ -79,6 +89,15 @@ func WithAnnotation(annotation openapi.Annotation) RouteOption {
 
 func WithHandler(handler HandlerFunc) RouteOption {
 	return RouteHandler{Handler: handler}
+}
+
+// WithTypes captures type information for a route (useful for typed handlers)
+func WithTypes(requestType, responseType reflect.Type, isList bool) RouteOption {
+	return RouteType{
+		RequestType:  requestType,
+		ResponseType: responseType,
+		IsList:       isList,
+	}
 }
 
 // RequestContext extends the contracts.RequestContext with router-specific methods
