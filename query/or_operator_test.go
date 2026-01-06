@@ -6,18 +6,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/query"
 )
 
 var _ = Describe("OR Operator Functionality", func() {
 	It("should handle OR operations with pipe syntax within fields", func() {
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""
@@ -49,11 +49,11 @@ var _ = Describe("OR Operator Functionality", func() {
 
 	It("should handle literal pipe values with tilde wildcard (no OR processing)", func() {
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""

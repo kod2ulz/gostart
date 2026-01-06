@@ -6,18 +6,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/query"
 )
 
 var _ = Describe("OR Operator Across Fields", func() {
 	It("should handle OR operations with star prefix syntax across fields", func() {
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""
@@ -66,11 +66,11 @@ var _ = Describe("OR Operator Across Fields", func() {
 
 	It("should create OR group only when multiple star fields are present", func() {
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""
@@ -105,11 +105,11 @@ var _ = Describe("OR Operator Across Fields", func() {
 
 	It("should not create OR group when only one star field is present", func() {
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""
@@ -157,11 +157,11 @@ var _ = Describe("OR Operator Across Fields", func() {
 
 	It("should remove single OR condition when it's the only condition", func() {
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""

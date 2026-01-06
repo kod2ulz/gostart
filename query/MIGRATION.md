@@ -151,9 +151,9 @@ builder.FromUrlParams(params)
 ```go
 // Enhanced URL search with validation
 urlSearch := query.SearchURL(
-    func(ctx context.Context, name string, _default ...string) config.Value {
+    func(ctx context.Context, name string, _default ...string) contracts.Value {
         // Custom parameter provider
-        return config.Value(r.URL.Query().Get(name))
+        return contracts.Value(r.URL.Query().Get(name))
     },
     defs,
 )
@@ -216,8 +216,8 @@ var CountryFields = query.NewDefinitions(
 func SearchCountries(db sqlc.DBTX, r *http.Request) ([]Country, error) {
     // Enhanced URL search with automatic validation
     urlSearch := query.SearchURL(
-        func(ctx context.Context, name string, _default ...string) config.Value {
-            return config.Value(r.URL.Query().Get(name))
+        func(ctx context.Context, name string, _default ...string) contracts.Value {
+            return contracts.Value(r.URL.Query().Get(name))
         },
         CountryFields,
     )

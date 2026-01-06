@@ -10,11 +10,11 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/kod2ulz/gostart/collections"
-	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 )
 
 // UrlParameterProvider is a function type that reads a value from a URL query.
-type UrlParameterProvider func(ctx context.Context, name string, _default ...string) (out config.Value)
+type UrlParameterProvider func(ctx context.Context, name string, _default ...string) (out contracts.Value)
 
 // ParsedCondition holds a validated and typed condition ready for the SQL builder.
 type ParsedCondition struct {
@@ -132,7 +132,7 @@ func (s *urlSearch) loadFields(ctx context.Context, defs FieldDefinitions, paren
 
 // findFieldValue tries to find a field value by checking different separator variations
 // Only applies separator variations (., -, _) to field names, not word casing
-func (s *urlSearch) findFieldValue(ctx context.Context, fieldName string) config.Value {
+func (s *urlSearch) findFieldValue(ctx context.Context, fieldName string) contracts.Value {
 	// For tilde wildcard patterns, don't apply variations - be exact
 	if strings.HasPrefix(fieldName, "~") || strings.HasSuffix(fieldName, "~") {
 		return s.query(ctx, fieldName)
@@ -171,7 +171,7 @@ func (s *urlSearch) findFieldValue(ctx context.Context, fieldName string) config
 }
 
 // findFieldValueWithOperator finds a field value with separator variations applied only to the field part without operator
-func (s *urlSearch) findFieldValueWithOperator(ctx context.Context, prefix, fieldName, operator string) config.Value {
+func (s *urlSearch) findFieldValueWithOperator(ctx context.Context, prefix, fieldName, operator string) contracts.Value {
 	// Try the original field name first
 	if val := s.query(ctx, prefix+fieldName+"_"+operator); val.Valid() {
 		return val
@@ -185,11 +185,11 @@ func (s *urlSearch) findFieldValueWithOperator(ctx context.Context, prefix, fiel
 		}
 	}
 
-	return config.Value("")
+	return ""
 }
 
 // findFieldValueWithPrefix finds a field value with separator variations applied only to the field part
-func (s *urlSearch) findFieldValueWithPrefix(ctx context.Context, prefix, fieldName string) config.Value {
+func (s *urlSearch) findFieldValueWithPrefix(ctx context.Context, prefix, fieldName string) contracts.Value {
 	// Try the original field name first
 	if val := s.query(ctx, prefix+fieldName); val.Valid() {
 		return val
@@ -203,13 +203,13 @@ func (s *urlSearch) findFieldValueWithPrefix(ctx context.Context, prefix, fieldN
 		}
 	}
 
-	return config.Value("")
+	return ""
 }
 
 // findFieldValueWithSeparatorVariations tries different separator variations
 // Rules: firstName != firstname, but first_name == firstName == first-name
 // For dotted names: apply variations to each part separately
-func (s *urlSearch) findFieldValueWithSeparatorVariations(ctx context.Context, fieldName string) config.Value {
+func (s *urlSearch) findFieldValueWithSeparatorVariations(ctx context.Context, fieldName string) contracts.Value {
 	// Handle dotted names (JSONB fields) - apply variations to each part separately
 	if strings.Contains(fieldName, ".") {
 		return s.findFieldValueWithDotVariations(ctx, fieldName)
@@ -221,10 +221,10 @@ func (s *urlSearch) findFieldValueWithSeparatorVariations(ctx context.Context, f
 
 // findFieldValueWithDotVariations handles field names with dots (JSONB fields)
 // Each part of the dot-separated name gets separator variations applied separately
-func (s *urlSearch) findFieldValueWithDotVariations(ctx context.Context, fieldName string) config.Value {
+func (s *urlSearch) findFieldValueWithDotVariations(ctx context.Context, fieldName string) contracts.Value {
 	parts := strings.Split(fieldName, ".")
 	if len(parts) != 2 {
-		return config.Value("")
+		return ""
 	}
 
 	columnPart := parts[0]
@@ -246,11 +246,11 @@ func (s *urlSearch) findFieldValueWithDotVariations(ctx context.Context, fieldNa
 		}
 	}
 
-	return config.Value("")
+	return ""
 }
 
 // findFieldValueWithSimpleVariations handles field names without dots
-func (s *urlSearch) findFieldValueWithSimpleVariations(ctx context.Context, fieldName string) config.Value {
+func (s *urlSearch) findFieldValueWithSimpleVariations(ctx context.Context, fieldName string) contracts.Value {
 	// Try all separator variations
 	variations := s.generateSeparatorVariations(fieldName)
 	for _, variation := range variations {
@@ -259,7 +259,7 @@ func (s *urlSearch) findFieldValueWithSimpleVariations(ctx context.Context, fiel
 		}
 	}
 
-	return config.Value("")
+	return ""
 }
 
 // generateSeparatorVariations generates all valid separator variations for a field name

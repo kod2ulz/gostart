@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/query"
 )
 
@@ -15,11 +15,11 @@ var _ = Describe("Field Resolution", func() {
 		fmt.Println("=== Testing Field Resolution ===")
 
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""
@@ -54,11 +54,11 @@ var _ = Describe("Field Resolution", func() {
 		fmt.Println("=== Testing Case-Insensitive Separator Variations ===")
 
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""
@@ -93,11 +93,11 @@ var _ = Describe("Field Resolution", func() {
 		fmt.Println("=== Testing Word Casing Preservation ===")
 
 		mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				fmt.Printf("Query called with: '%s'\n", name)
 				if val, ok := params[name]; ok {
 					fmt.Printf("Found value: '%s'\n", val)
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				fmt.Println("No value found")
 				return ""

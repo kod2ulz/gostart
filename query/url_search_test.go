@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/query"
 )
 
@@ -19,10 +19,10 @@ var _ = Describe("URL Search", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		mockProvider = func(ctx context.Context, name string, _default ...string) config.Value {
+		mockProvider = func(ctx context.Context, name string, _default ...string) contracts.Value {
 			// Return empty value by default
 			if len(_default) > 0 {
-				return config.Value(_default[0])
+				return contracts.Value(_default[0])
 			}
 			return ""
 		}
@@ -53,18 +53,18 @@ var _ = Describe("URL Search", func() {
 		})
 
 		It("should load parameters and return URLSearchParam interface", func() {
-			mockProvider = func(ctx context.Context, name string, _default ...string) config.Value {
+			mockProvider = func(ctx context.Context, name string, _default ...string) contracts.Value {
 				switch name {
 				case "name":
-					return config.Value("John Doe")
+					return contracts.Value("John Doe")
 				case "age_gt":
-					return config.Value("25")
+					return contracts.Value("25")
 				case "sort":
-					return config.Value("-name")
+					return contracts.Value("-name")
 				case "limit":
-					return config.Value("10")
+					return contracts.Value("10")
 				default:
-					return config.Value("")
+					return contracts.Value("")
 				}
 			}
 
@@ -100,20 +100,20 @@ var _ = Describe("URL Search", func() {
 				query.Date("created_at", time.RFC3339).Sortable(),
 			)
 
-			mockProvider = func(ctx context.Context, name string, _default ...string) config.Value {
+			mockProvider = func(ctx context.Context, name string, _default ...string) contracts.Value {
 				switch name {
 				case "username_lyk":
-					return config.Value("john%")
+					return contracts.Value("john%")
 				case "age_bt":
-					return config.Value("25:35")
+					return contracts.Value("25:35")
 				case "active":
-					return config.Value("true")
+					return contracts.Value("true")
 				case "sort":
-					return config.Value("-created_at,username")
+					return contracts.Value("-created_at,username")
 				case "limit":
-					return config.Value("50")
+					return contracts.Value("50")
 				default:
-					return config.Value("")
+					return contracts.Value("")
 				}
 			}
 

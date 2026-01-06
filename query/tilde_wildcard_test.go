@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kod2ulz/gostart/collections"
-	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/query"
 )
 
@@ -17,12 +17,12 @@ var _ = Describe("Tilde Wildcard Syntax for LIKE Operations", func() {
 
 	BeforeEach(func() {
 		mockParameterProvider = func(params map[string]string) query.UrlParameterProvider {
-			return func(ctx context.Context, name string, _default ...string) config.Value {
+			return func(ctx context.Context, name string, _default ...string) contracts.Value {
 				if val, ok := params[name]; ok {
-					return config.Value(val)
+					return contracts.Value(val)
 				}
 				if len(_default) > 0 {
-					return config.Value(_default[0])
+					return contracts.Value(_default[0])
 				}
 				return ""
 			}

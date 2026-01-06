@@ -63,12 +63,12 @@ The query library transforms URL parameters into SQL queries through a well-defi
 ```go
 // Simulates reading from a URL query map
 mockParameterProvider := func(params map[string]string) query.UrlParameterProvider {
-    return func(ctx context.Context, name string, _default ...string) config.Value {
+    return func(ctx context.Context, name string, _default ...string) contracts.Value {
         if val, ok := params[name]; ok {
-            return config.Value(val)
+            return contracts.Value(val)
         }
         if len(_default) > 0 {
-            return config.Value(_default[0])
+            return contracts.Value(_default[0])
         }
         return ""
     }
@@ -184,7 +184,7 @@ var TransactionFields = query.NewDefinitions(
 ```go
 // In your service/api layer
 
-func queryReader(ctx context.Context, name string, _default ...string) config.Value {
+func queryReader(ctx context.Context, name string, _default ...string) contracts.Value {
     param, _ := api.ListRequestFrom(ctx)
     return param.Query(ctx, name, _default...)
 }
