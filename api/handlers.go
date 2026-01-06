@@ -260,6 +260,13 @@ func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFu
 			return
 		}
 
+		// Validate the request parameters before calling the handler
+		// This ensures all validation rules are checked before business logic runs
+		if validateErr := modal.Validate(ctx); validateErr != nil {
+			HandleError(ctx, errors.ValidatorError[P](validateErr))
+			return
+		}
+
 		// Call the handler with the properly typed request
 		result, apiErr := handler(ctx, param)
 		if apiErr != nil {

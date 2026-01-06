@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"reflect"
 	"regexp"
+	"strings"
 	"unicode"
 
 	"github.com/go-playground/validator/v10"
@@ -13,6 +15,17 @@ var Validate *validator.Validate
 
 func init() {
 	Validate = validator.New()
+
+	// Register a custom tag name function to use JSON tag names instead of struct field names
+	// This makes validation error messages more user-friendly (e.g., "unitId" instead of "UnitID")
+	Validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+		if name == "-" {
+			return ""
+		}
+		return name
+	})
+
 	Validate.RegisterValidation("password", func(fl validator.FieldLevel) bool {
 		pass, ok := fl.Field().Interface().(string)
 		return ok && Validator.PasswordValid(pass)

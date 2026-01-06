@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/ierrors"
 	"github.com/kod2ulz/gostart/object"
@@ -168,6 +169,11 @@ func RequestLoadFailed[T any](err error) (out ierrors.Error) {
 }
 
 func ValidatorError[T any](err error) (out ierrors.Error) {
+	// Try to parse as go-playground/validator errors (supports multiple errors)
+	if validationErrors, ok := err.(validator.ValidationErrors); ok {
+		return parseValidationErrors[T](validationErrors)
+	}
+
 	// Use enhanced validation error parsing (for backward compatibility with existing error format)
 	if validatorInfo := parseLegacyValidationError(err.Error()); validatorInfo != nil {
 		errorModel := _initError[T](http.StatusBadRequest, ErrorCodeValidatorError, err)
@@ -461,6 +467,53 @@ func getValidationMessage(field, rule, param string) string {
 		// Default message for unknown validation rules
 		return fmt.Sprintf("%s failed validation: %s", field, rule)
 	}
+}
+
+// parseValidationErrors parses go-playground/validator ValidationErrors into a ValidatorErrorInfo
+// This function properly handles multiple validation errors and uses JSON tag names
+func parseValidationErrors[T any](validationErrors validator.ValidationErrors) ierrors.Error {
+	fields := make(map[string]string)
+	details := make(map[string]any)
+	errorMessages := make([]string, 0, len(validationErrors))
+
+	// Iterate through all validation errors
+	for _, err := range validationErrors {
+		fieldName := err.Field()      // JSON tag name (thanks to RegisterTagNameFunc)
+		rule := err.Tag()             // Validation rule that failed
+		param := err.Param()          // Parameter for the rule (e.g., min length)
+
+		// Generate user-friendly error message
+		errorMsg := getValidationMessage(fieldName, rule, param)
+		fields[fieldName] = errorMsg
+		errorMessages = append(errorMessages, errorMsg)
+
+		// Add detailed information
+		details[fieldName] = map[string]any{
+			"rule":    rule,
+			"message": errorMsg,
+			"param":   param,
+		}
+	}
+
+	// Create summary message
+	var summaryMessage string
+	if len(errorMessages) == 1 {
+		summaryMessage = errorMessages[0]
+	} else {
+		summaryMessage = fmt.Sprintf("Validation failed for %d field(s)", len(fields))
+	}
+
+	// Create error model
+	errorModel := _initError[T](http.StatusBadRequest, ErrorCodeValidatorError, validationErrors)
+	errorModel.Message = summaryMessage
+	if len(fields) > 0 {
+		errorModel.Fields = fields
+	}
+	if len(details) > 0 {
+		errorModel.Param = details
+	}
+
+	return &errorModel
 }
 
 // extractRuleFromMessage attempts to extract validation rule from error message
