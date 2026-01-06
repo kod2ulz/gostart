@@ -148,8 +148,8 @@ func HandleError(ctx contracts.RequestContext, err ierrors.Error) {
 		return
 	}
 
-	// Use standard error response for other error types
-	ErrorResponse(ctx, errorCode, errorMessage, httpCode)
+	// Use standard error response for other error types (now with fields support)
+	ErrorResponse(ctx, errorCode, errorMessage, httpCode, fields)
 }
 
 // StreamHandler creates a handler for streaming responses

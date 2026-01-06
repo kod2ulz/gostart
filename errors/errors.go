@@ -47,6 +47,11 @@ func (e *ErrorModel[T]) Error() string {
 	return e.Message
 }
 
+// GetFields returns the validation error fields (if this is a validation error)
+func (e *ErrorModel[T]) GetFields() map[string]string {
+	return e.Fields
+}
+
 func (e *ErrorModel[T]) WithErrorCode(errorCode string) (out ierrors.Error) {
 	e.Code = errorCode
 	return e
@@ -365,6 +370,17 @@ type ValidatorErrorInfo struct {
 func ParseValidatorError(err ierrors.Error) *ValidatorErrorInfo {
 	if err == nil {
 		return nil
+	}
+
+	// Check if it's an ErrorModel with validation errors
+	if errorModel, ok := err.(interface{ GetFields() map[string]string }); ok {
+		if fields := errorModel.GetFields(); len(fields) > 0 {
+			return &ValidatorErrorInfo{
+				Message: err.Error(),
+				Fields:  fields,
+				Details: nil, // Can be enhanced to extract Param if needed
+			}
+		}
 	}
 
 	// Get the underlying error message

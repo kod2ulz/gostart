@@ -127,25 +127,36 @@ func ListResponse(ctx contracts.RequestContext, data any, total *int64, limit, o
 }
 
 // ErrorResponse creates an error response envelope
-func ErrorResponse(ctx contracts.RequestContext, code string, message string, statusCode int) error {
+func ErrorResponse(ctx contracts.RequestContext, code string, message string, statusCode int, fields ...map[string]string) error {
 	if ctx, ok := ctx.(RequestContext); ok {
+		errorInfo := &ErrorInfo{
+			Code:    code,
+			Message: message,
+		}
+
+		// Add fields if provided
+		if len(fields) > 0 && fields[0] != nil {
+			errorInfo.Fields = fields[0]
+		}
+
 		envelope := &ResponseEnvelope{
 			Success: false,
 			Type:    "error",
 			Time:    time.Now().Unix(),
-			Error: &ErrorInfo{
-				Code:    code,
-				Message: message,
-			},
+			Error:   errorInfo,
 		}
 		ctx.JSON(statusCode, envelope)
 		return nil
 	}
 	// Fallback for non-RequestContext implementations
 	if jsonCtx, ok := ctx.(interface{ JSON(int, any) }); ok {
-		jsonCtx.JSON(statusCode, map[string]string{
+		responseData := map[string]interface{}{
 			"error": message,
-		})
+		}
+		if len(fields) > 0 && fields[0] != nil {
+			responseData["fields"] = fields[0]
+		}
+		jsonCtx.JSON(statusCode, responseData)
 		return nil
 	}
 	return nil
