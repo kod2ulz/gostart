@@ -368,3 +368,29 @@ func TypedListHandlerWithTypes[P contracts.RequestParam, R any](handler TypedLis
 
 	return TypedListHandler[P, R](handler), typeOption
 }
+
+// DocumentedHandler creates a typed handler with automatic OpenAPI documentation
+// Returns (path, handler, typeOption) for easy router registration
+//
+// This helper wraps TypedHandlerWithTypes and provides a simple, memorable API
+//
+// Example:
+//   router.POST(api.Documented("", s.CreateCategory))
+//   router.PUT(":id", api.Documented(":id", s.UpdateCategory))
+func DocumentedHandler[P contracts.RequestParam, R any](path string, handler TypedRequestHandlerFunc[P, R]) (string, HandlerFunc, RouteOption) {
+	typedHandler, typeOpt := TypedHandlerWithTypes[P, R](handler)
+	return path, typedHandler, typeOpt
+}
+
+// DocumentedListHandler creates a typed list handler with automatic OpenAPI documentation
+// Returns (path, handler, typeOption) for easy router registration
+//
+// This helper wraps TypedListHandlerWithTypes and provides a simple, memorable API
+//
+// Example:
+//   router.GET(api.DocumentedList("", s.SearchCategories))
+func DocumentedListHandler[P contracts.RequestParam, R any](path string, handler TypedListRequestHandlerFunc[P, R]) (string, HandlerFunc, RouteOption) {
+	typedListHandler, typeOpt := TypedListHandlerWithTypes[P, R](handler)
+	return path, typedListHandler, typeOpt
+}
+

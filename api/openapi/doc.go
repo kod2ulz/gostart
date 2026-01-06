@@ -379,6 +379,14 @@ func (g *Generator) AddRoute(method, path string, handler interface{}, annotatio
 		if deprecated, ok := annotations["deprecated"].(bool); ok {
 			annotation.Deprecated = deprecated
 		}
+		// Extract parameters if present
+		if params, ok := annotations["Parameters"].([]ParameterAnnotation); ok {
+			annotation.Parameters = params
+		}
+		// Extract request body if present
+		if requestBody, ok := annotations["RequestBody"].(*RequestBody); ok {
+			annotation.RequestBody = requestBody
+		}
 		// Store custom annotations
 		annotation.Custom = annotations
 	}
@@ -395,7 +403,7 @@ func (g *Generator) AddRoute(method, path string, handler interface{}, annotatio
 
 	// Analyze request and response contracts
 	if g.contractAnalyzer != nil {
-		requestContract, err := g.contractAnalyzer.AnalyzeRequest(handler, path)
+		requestContract, err := g.contractAnalyzer.AnalyzeRequestWithMethod(handler, path, method)
 		if err == nil {
 			route.Annotations["requestContract"] = requestContract
 		}
@@ -605,6 +613,11 @@ func (g *Generator) createOperation(route RouteInfo) *Operation {
 		})
 	}
 
+	// Add request body from annotation if present
+	if annotation.RequestBody != nil {
+		operation.RequestBody = annotation.RequestBody
+	}
+
 	// Add custom responses from annotation
 	if len(annotation.Responses) > 0 {
 		for statusCode, customResponse := range annotation.Responses {
@@ -624,6 +637,9 @@ func (g *Generator) createOperation(route RouteInfo) *Operation {
 	// Analyze handler to extract parameter and response types
 	g.analyzeHandler(route, operation)
 
+	// Deduplicate parameters (same name + same location)
+	operation.Parameters = g.deduplicateOperationParameters(operation.Parameters)
+
 	// Register tags in the document
 	if len(annotation.Tags) > 0 {
 		for _, tag := range annotation.Tags {
@@ -632,6 +648,24 @@ func (g *Generator) createOperation(route RouteInfo) *Operation {
 	}
 
 	return operation
+}
+
+// deduplicateOperationParameters removes duplicate parameters (same name and location)
+// Keeps the first occurrence of each parameter
+func (g *Generator) deduplicateOperationParameters(params []Parameter) []Parameter {
+	seen := make(map[string]bool)
+	result := make([]Parameter, 0, len(params))
+
+	for _, param := range params {
+		// Create a unique key based on name and location (in)
+		key := param.Name + ":" + param.In
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, param)
+		}
+	}
+
+	return result
 }
 
 // enrichOperationFromRequestContract enriches operation with request contract information
@@ -1126,6 +1160,17 @@ func (r *RouteRegistry) GetRoute(method, path string) (RouteInfo, Annotation, bo
 	annotation, annotationExists := r.annotations[key]
 
 	return route, annotation, routeExists && annotationExists
+}
+
+// AddSchema adds a reusable schema to the components/schemas section
+func (r *RouteRegistry) AddSchema(name string, schema Schema) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.generator.doc.Components.Schemas == nil {
+		r.generator.doc.Components.Schemas = make(map[string]Schema)
+	}
+	r.generator.doc.Components.Schemas[name] = schema
 }
 
 // GetAllRoutes returns all registered routes

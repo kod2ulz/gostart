@@ -20,6 +20,7 @@ type RequestContract struct {
 	ContentType     string                       `json:"contentType,omitempty"`
 	Accept          string                       `json:"accept,omitempty"`
 	Authorization   *AuthorizationContract       `json:"authorization,omitempty"`
+	HTTPMethod      string                       `json:"httpMethod,omitempty"`
 }
 
 // ResponseContract represents the complete response specification
@@ -155,11 +156,17 @@ func NewContractAnalyzer() *ContractAnalyzer {
 
 // AnalyzeRequest analyzes a request contract from handler function and route path
 func (ca *ContractAnalyzer) AnalyzeRequest(handler interface{}, path string) (*RequestContract, error) {
+	return ca.AnalyzeRequestWithMethod(handler, path, "GET")
+}
+
+// AnalyzeRequestWithMethod analyzes a request contract with explicit HTTP method
+func (ca *ContractAnalyzer) AnalyzeRequestWithMethod(handler interface{}, path, method string) (*RequestContract, error) {
 	contract := &RequestContract{
 		PathParameters:  make(map[string]ParameterContract),
 		QueryParameters: make(map[string]ParameterContract),
 		Headers:         make(map[string]ParameterContract),
 		Cookies:         make(map[string]ParameterContract),
+		HTTPMethod:      method,
 	}
 
 	// Extract path parameters from route path
@@ -255,6 +262,11 @@ func (ca *ContractAnalyzer) getHandlerName(handlerType reflect.Type) string {
 
 // analyzeOperationPattern analyzes the handler name and route path to infer operation patterns
 func (ca *ContractAnalyzer) analyzeOperationPattern(handlerName, routePath string, contract *RequestContract) {
+	// Only add pagination for GET requests
+	if contract.HTTPMethod != "GET" {
+		return
+	}
+
 	// Only add body if the operation typically needs one (POST, PUT, PATCH)
 	// GET, DELETE, HEAD, OPTIONS typically don't have bodies
 	lowerName := strings.ToLower(handlerName)
@@ -276,7 +288,7 @@ func (ca *ContractAnalyzer) analyzeOperationPattern(handlerName, routePath strin
 		}
 	}
 
-	// Analyze route path for pagination patterns
+	// Analyze route path for pagination patterns - only for GET
 	if strings.HasSuffix(routePath, "/") || strings.Contains(routePath, "/list") {
 		// List operation - add pagination parameters
 		contract.QueryParameters["page"] = ParameterContract{

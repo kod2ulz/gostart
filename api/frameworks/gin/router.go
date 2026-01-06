@@ -25,6 +25,7 @@ type GinRouter struct {
 	openAPIConfig   *openapi.Info
 	pathPrefix      string // Tracks the current path prefix from groups
 	config          *api.RouterConfig
+	schemas         map[string]*openapi.Schema // Registry for reusable schemas
 }
 
 // RequestContext implements both contracts.RequestContext and api.RequestContext
@@ -148,6 +149,7 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 		openAPIRegistry: openAPIRegistry,
 		openAPIConfig:   openAPIConfig,
 		config:          config,
+		schemas:         make(map[string]*openapi.Schema),
 	}
 
 	// Configure static paths
@@ -218,6 +220,8 @@ func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
 		openAPIRegistry: r.openAPIRegistry,
 		openAPIConfig:   r.openAPIConfig,
 		pathPrefix:      newPrefix,
+		schemas:         r.schemas, // Share the schemas map
+		config:          r.config,
 	}
 	fn(subRouter)
 	return r
@@ -293,6 +297,12 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 		}
 	}
 
+	// Try to extract type information from the handler if it's a TypedHandlerFunc or TypedListHandlerFunc
+	// This works even when TypedHandlerWithTypes is not used
+	if requestType == nil {
+		requestType, responseType, isList = r.extractTypesFromHandler(handler)
+	}
+
 	// Extract handler name for default summary
 	handlerName := extractHandlerName(handler)
 	if annotation.Summary == "" {
@@ -306,6 +316,9 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 	if requestType != nil {
 		annotation = r.enhanceAnnotationFromTypes(annotation, requestType, responseType, isList, method, path)
 	}
+
+	// Deduplicate parameters by name (e.g., prevent ID from appearing twice)
+	annotation.Parameters = r.deduplicateParameters(annotation.Parameters)
 
 	// Merge with defaults (tags, etc.)
 	annotation = r.mergeAnnotation(annotation, method, path)
@@ -487,7 +500,23 @@ func (r *GinRouter) GenerateOpenAPIDoc() (*openapi.Document, error) {
 			Description: "Development server",
 		},
 	}
-	return r.openAPIRegistry.GenerateOpenAPIDoc(*r.openAPIConfig, servers)
+
+	doc, err := r.openAPIRegistry.GenerateOpenAPIDoc(*r.openAPIConfig, servers)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add all registered schemas to components/schemas
+	if len(r.schemas) > 0 {
+		if doc.Components.Schemas == nil {
+			doc.Components.Schemas = make(map[string]openapi.Schema)
+		}
+		for name, schema := range r.schemas {
+			doc.Components.Schemas[name] = *schema
+		}
+	}
+
+	return doc, nil
 }
 
 func (r *GinRouter) SetOpenAPIInfo(info openapi.Info) {
@@ -657,38 +686,155 @@ func (r *GinRouter) enhanceAnnotationFromHandler(handler api.HandlerFunc, annota
 	return annotation
 }
 
+// extractTypesFromHandler extracts request and response types from TypedHandlerFunc or TypedListHandlerFunc
+func (r *GinRouter) extractTypesFromHandler(handler api.HandlerFunc) (requestType, responseType reflect.Type, isList bool) {
+	handlerValue := reflect.ValueOf(handler)
+
+	// Check if it's a TypedHandlerFunc or TypedListHandlerFunc by trying to call .Handler()
+	if handlerValue.MethodByName("Handler").IsValid() {
+		// This is likely a TypedHandlerFunc or TypedListHandlerFunc
+		// Use reflection to extract the requestType, responseType, and isList fields
+		typeField := handlerValue.Elem().FieldByName("requestType")
+		respField := handlerValue.Elem().FieldByName("responseType")
+		listField := handlerValue.Elem().FieldByName("isList")
+
+		if typeField.IsValid() && respField.IsValid() && listField.IsValid() {
+			// Extract the interface{} from reflect.Value and convert to reflect.Type
+			if reqType, ok := typeField.Interface().(reflect.Type); ok {
+				requestType = reqType
+			}
+			if resType, ok := respField.Interface().(reflect.Type); ok {
+				responseType = resType
+			}
+			if isListVal, ok := listField.Interface().(bool); ok {
+				isList = isListVal
+			}
+		}
+	}
+
+	// Try to extract type information from the handler function's signature
+	// This works for TypedHandler closures that capture RequestModal[T]
+	if requestType == nil && handlerValue.Kind() == reflect.Func {
+		// Use runtime reflection to inspect the closure
+		// Note: This is limited by Go's closure implementation
+		// We can try to find captured RequestModal variables
+		// but Go doesn't expose this easily
+
+		// Alternative: Try to call the handler with a mock context to see what types it uses
+		// This is complex and may have side effects
+
+		// For now, we'll rely on TypedHandlerWithTypes for explicit type information
+	}
+
+	return
+}
+
+// deduplicateParameters removes duplicate parameters by name
+// Keeps the first occurrence of each parameter
+func (r *GinRouter) deduplicateParameters(params []openapi.ParameterAnnotation) []openapi.ParameterAnnotation {
+	seen := make(map[string]bool)
+	result := make([]openapi.ParameterAnnotation, 0, len(params))
+
+	for _, param := range params {
+		if !seen[param.Name] {
+			seen[param.Name] = true
+			result = append(result, param)
+		}
+	}
+
+	return result
+}
+
+// registerSchema creates a reusable schema from a struct type and returns a $ref reference
+func (r *GinRouter) registerSchema(t reflect.Type) *openapi.Schema {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+
+	// Generate schema name from type name
+	typeName := t.Name()
+	if typeName == "" {
+		// Anonymous struct, generate a name based on path or hash
+		typeName = fmt.Sprintf("Anonymous_%x", reflect.ValueOf(t).Pointer())
+	}
+
+	// Check if schema already exists in router's schema registry
+	if _, exists := r.schemas[typeName]; exists {
+		// Return existing schema reference
+		return &openapi.Schema{
+			Ref: "#/components/schemas/" + typeName,
+		}
+	}
+
+	// Extract schema properties
+	schema := r.extractRequestBodySchema(t)
+	if schema == nil || len(schema.Properties) == 0 {
+		return nil
+	}
+
+	// Store the schema in router
+	r.schemas[typeName] = schema
+
+	// Also add the schema directly to the OpenAPI generator's document
+	// This ensures it's included when the JSON is served
+	r.addSchemaToGenerator(typeName, schema)
+
+	// Return a reference to the schema
+	return &openapi.Schema{
+		Ref: "#/components/schemas/" + typeName,
+	}
+}
+
+// addSchemaToGenerator adds a schema to the OpenAPI generator's document
+func (r *GinRouter) addSchemaToGenerator(name string, schema *openapi.Schema) {
+	// Use the registry's AddSchema method to add the schema
+	if r.openAPIRegistry != nil {
+		r.openAPIRegistry.AddSchema(name, *schema)
+	}
+}
+
 // enhanceAnnotationFromTypes enhances annotation with explicit type information
 func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, requestType, responseType reflect.Type, isList bool, method, path string) openapi.Annotation {
 	// Extract fields from the request type to generate parameters
 	if requestType != nil {
 		// For GET requests, extract query and path parameters
-		if method == "GET" {
+		// Only extract if annotation doesn't already have parameters (e.g., from SearchableRouteDocs)
+		if method == "GET" && len(annotation.Parameters) == 0 {
 			// Extract query parameters from request struct fields
 			queryParams := r.extractQueryParams(requestType)
 			if len(queryParams) > 0 {
 				// Append to existing parameters or create new list
 				annotation.Parameters = append(annotation.Parameters, queryParams...)
 			}
-		} else if method == "POST" || method == "PUT" || method == "PATCH" {
-			// For POST/PUT/PATCH, create request body schema from struct fields
-			requestSchema := r.extractRequestBodySchema(requestType)
-			if requestSchema != nil {
-				// Create request body with the schema
+		}
+
+		// Extract path parameters (fields with "param" tag)
+		// Always extract these as they're not typically in annotations
+		pathParams := r.extractPathParams(requestType)
+		if len(pathParams) > 0 {
+			annotation.Parameters = append(annotation.Parameters, pathParams...)
+		}
+
+		// For POST/PUT/PATCH, create request body schema from struct fields
+		if method == "POST" || method == "PUT" || method == "PATCH" {
+			// Register schema and get $ref
+			schemaRef := r.registerSchema(requestType)
+
+			if schemaRef != nil {
+				// Create request body with the schema reference
 				annotation.RequestBody = &openapi.RequestBody{
 					Content: map[string]openapi.MediaType{
 						"application/json": {
-							Schema: requestSchema,
+							Schema: schemaRef,
 						},
 					},
 					Required: true,
 				}
 			}
-		}
-
-		// Extract path parameters (fields with "param" tag)
-		pathParams := r.extractPathParams(requestType)
-		if len(pathParams) > 0 {
-			annotation.Parameters = append(annotation.Parameters, pathParams...)
 		}
 	}
 
@@ -699,6 +845,7 @@ func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, re
 }
 
 // extractRequestBodySchema extracts request body schema from a request struct
+// Returns a schema with inline properties, skipping RequestModal[T] fields and path parameters
 func (r *GinRouter) extractRequestBodySchema(t reflect.Type) *openapi.Schema {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
@@ -721,31 +868,62 @@ func (r *GinRouter) extractRequestBodySchema(t reflect.Type) *openapi.Schema {
 			continue
 		}
 
+		// Skip RequestModal[T] embedded fields specifically
+		if field.Anonymous && strings.HasPrefix(field.Type.String(), "api.RequestModal[") {
+			continue
+		}
+
+		// Skip path parameters (fields with "param" tag)
+		if paramTag := field.Tag.Get("param"); paramTag != "" && paramTag != "-" {
+			continue
+		}
+
 		// Get field name from JSON tag
 		fieldName := field.Name
-		if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
+		jsonTag := field.Tag.Get("json")
+		if jsonTag != "" && jsonTag != "-" {
 			parts := strings.Split(jsonTag, ",")
 			if parts[0] != "" {
 				fieldName = parts[0]
 			}
+		} else if jsonTag == "-" {
+			// Skip fields explicitly marked with "-"
+			continue
 		}
 
-		// Determine field type
-		fieldType := r.openAPITypeFromReflect(field.Type)
+		// Determine field type and format
+		fieldType, fieldFormat := r.openAPITypeFromReflect(field.Type)
 
 		// Create field schema
 		fieldSchema := openapi.Schema{
 			Type: fieldType,
 		}
 
-		// Add description from field name
-		fieldSchema.Description = fieldName
+		// Add format if present (e.g., "uuid" for UUID fields)
+		if fieldFormat != "" {
+			fieldSchema.Format = fieldFormat
+		}
+
+		// Extract description from description tag
+		if descTag := field.Tag.Get("description"); descTag != "" {
+			fieldSchema.Description = descTag
+		} else {
+			// Fallback to field name if no description
+			fieldSchema.Description = fieldName
+		}
+
+		// Extract example from example tag
+		if exampleTag := field.Tag.Get("example"); exampleTag != "" {
+			fieldSchema.Example = r.parseExampleValue(exampleTag, field.Type)
+		}
 
 		// Check if field is required
-		if jsonTag := field.Tag.Get("json"); jsonTag != "" && !strings.Contains(jsonTag, "omitempty") {
-			// Field is required unless it has omitempty
-		} else if validateTag := field.Tag.Get("validate"); validateTag != "" && strings.Contains(validateTag, "required") {
-			// Field is required if validate tag says so
+		isRequired := false
+		if validateTag := field.Tag.Get("validate"); validateTag != "" && strings.Contains(validateTag, "required") {
+			isRequired = true
+		}
+
+		if isRequired {
 			if schema.Required == nil {
 				schema.Required = []string{}
 			}
@@ -778,6 +956,11 @@ func (r *GinRouter) extractQueryParams(t reflect.Type) []openapi.ParameterAnnota
 			continue
 		}
 
+		// Skip RequestModal[T] embedded fields
+		if field.Anonymous && strings.HasPrefix(field.Type.String(), "api.RequestModal[") {
+			continue
+		}
+
 		// Check for query tag
 		queryTag := field.Tag.Get("query")
 		if queryTag == "" || queryTag == "-" {
@@ -794,15 +977,35 @@ func (r *GinRouter) extractQueryParams(t reflect.Type) []openapi.ParameterAnnota
 		}
 
 		// Determine parameter type from field type
-		paramType := r.openAPITypeFromReflect(field.Type)
+		paramType, paramFormat := r.openAPITypeFromReflect(field.Type)
+
+		// Create schema for parameter
+		schema := &openapi.Schema{
+			Type: paramType,
+		}
+
+		// Add format if present
+		if paramFormat != "" {
+			schema.Format = paramFormat
+		}
+
+		// Extract description from description tag
+		description := ""
+		if descTag := field.Tag.Get("description"); descTag != "" {
+			description = descTag
+		}
+
+		// Extract example from example tag
+		if exampleTag := field.Tag.Get("example"); exampleTag != "" {
+			schema.Example = r.parseExampleValue(exampleTag, field.Type)
+		}
 
 		params = append(params, openapi.ParameterAnnotation{
-			Name:     paramName,
-			In:       "query",
-			Required: required,
-			Schema: &openapi.Schema{
-				Type: paramType,
-			},
+			Name:        paramName,
+			In:          "query",
+			Required:    required,
+			Description: description,
+			Schema:      schema,
 		})
 	}
 
@@ -829,6 +1032,11 @@ func (r *GinRouter) extractPathParams(t reflect.Type) []openapi.ParameterAnnotat
 			continue
 		}
 
+		// Skip RequestModal[T] embedded fields
+		if field.Anonymous && strings.HasPrefix(field.Type.String(), "api.RequestModal[") {
+			continue
+		}
+
 		// Check for param tag
 		paramTag := field.Tag.Get("param")
 		if paramTag == "" || paramTag == "-" {
@@ -839,35 +1047,160 @@ func (r *GinRouter) extractPathParams(t reflect.Type) []openapi.ParameterAnnotat
 		paramName := strings.Split(paramTag, ",")[0]
 
 		// Determine parameter type from field type
-		paramType := r.openAPITypeFromReflect(field.Type)
+		paramType, paramFormat := r.openAPITypeFromReflect(field.Type)
+
+		// Create schema for parameter
+		schema := &openapi.Schema{
+			Type: paramType,
+		}
+
+		// Add format if present
+		if paramFormat != "" {
+			schema.Format = paramFormat
+		}
+
+		// Extract description from description tag
+		description := ""
+		if descTag := field.Tag.Get("description"); descTag != "" {
+			description = descTag
+		}
+
+		// Extract example from example tag
+		if exampleTag := field.Tag.Get("example"); exampleTag != "" {
+			schema.Example = r.parseExampleValue(exampleTag, field.Type)
+		}
 
 		params = append(params, openapi.ParameterAnnotation{
-			Name:     paramName,
-			In:       "path",
-			Required: true,
-			Schema: &openapi.Schema{
-				Type: paramType,
-			},
+			Name:        paramName,
+			In:          "path",
+			Required:    true,
+			Description: description,
+			Schema:      schema,
 		})
 	}
 
 	return params
 }
 
-// openAPITypeFromReflect converts a reflect.Type to OpenAPI type string
-func (r *GinRouter) openAPITypeFromReflect(t reflect.Type) string {
+// openAPITypeFromReflect converts a reflect.Type to OpenAPI type and format
+// Returns (type, format) where format can be "uuid", "int64", "double", etc.
+func (r *GinRouter) openAPITypeFromReflect(t reflect.Type) (string, string) {
+	// Handle pointer types
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	// Check for UUID type
+	typeStr := t.String()
+	if strings.HasSuffix(typeStr, "uuid.UUID") || strings.Contains(typeStr, "uuid.UUID]") {
+		return "string", "uuid"
+	}
+
+	// Check for optional types from github.com/markphelps/optional
+	if strings.HasPrefix(typeStr, "optional.") {
+		// Extract the underlying type from optional.String, optional.Int, etc.
+		typeName := t.Name()
+		switch typeName {
+		case "String":
+			return "string", ""
+		case "Int", "Int8", "Int16", "Int32", "Int64":
+			return "integer", "int64"
+		case "Uint", "Uint8", "Uint16", "Uint32", "Uint64":
+			return "integer", "int64"
+		case "Float32", "Float64":
+			return "number", "double"
+		case "Bool":
+			return "boolean", ""
+		default:
+			// Try to extract underlying type from generic optional
+			if t.Kind() == reflect.Struct {
+				// optional types are structs, try to get the element type
+				return "string", ""
+			}
+		}
+	}
+
+	// Check for pgtype types (nullable database types)
+	if strings.HasPrefix(typeStr, "pgtype.") {
+		typeName := t.Name()
+		switch typeName {
+		case "UUID":
+			return "string", "uuid"
+		case "Int4", "Int8":
+			return "integer", "int64"
+		case "Numeric":
+			return "number", "double"
+		case "Text", "Varchar":
+			return "string", ""
+		case "Bool":
+			return "boolean", ""
+		default:
+			return "string", ""
+		}
+	}
+
+	// Handle standard types
 	switch t.Kind() {
 	case reflect.String:
-		return "string"
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "integer"
-	case reflect.Float32, reflect.Float64:
-		return "number"
+		return "string", ""
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return "integer", "int64"
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "integer", "int64"
+	case reflect.Float32:
+		return "number", "float"
+	case reflect.Float64:
+		return "number", "double"
 	case reflect.Bool:
-		return "boolean"
+		return "boolean", ""
 	default:
-		return "string"
+		return "string", ""
+	}
+}
+
+// parseExampleValue parses an example tag string and converts it to the appropriate type
+func (r *GinRouter) parseExampleValue(example string, fieldType reflect.Type) interface{} {
+	// Handle pointer types
+	if fieldType.Kind() == reflect.Ptr {
+		fieldType = fieldType.Elem()
+	}
+
+	// Parse based on the underlying type
+	switch fieldType.Kind() {
+	case reflect.String:
+		return example
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// Try to parse as integer
+		var result int64
+		if _, err := fmt.Sscanf(example, "%d", &result); err == nil {
+			return result
+		}
+		return example
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		// Try to parse as unsigned integer
+		var result uint64
+		if _, err := fmt.Sscanf(example, "%d", &result); err == nil {
+			return result
+		}
+		return example
+	case reflect.Float32, reflect.Float64:
+		// Try to parse as float
+		var result float64
+		if _, err := fmt.Sscanf(example, "%f", &result); err == nil {
+			return result
+		}
+		return example
+	case reflect.Bool:
+		// Parse as boolean
+		if example == "true" {
+			return true
+		} else if example == "false" {
+			return false
+		}
+		return example
+	default:
+		// For complex types or unknown types, return as string
+		return example
 	}
 }
 
