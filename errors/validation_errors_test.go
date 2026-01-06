@@ -67,6 +67,57 @@ var _ = Describe("Validation Error Handling", func() {
 				ContainSubstring("Email"),
 			), "Error message should NOT use Go struct field names (PascalCase)")
 		})
+
+		It("should extract fields from Response map in ParseValidatorError", func() {
+			req := TestValidationRequest{
+				// All fields are missing/invalid
+			}
+
+			err := utils.Validate.Struct(req)
+			Expect(err).To(HaveOccurred())
+
+			validationErr := errors.ValidatorError[TestValidationRequest](err)
+			Expect(validationErr).NotTo(BeNil())
+
+			// This simulates what happens in HandleAPIError -> HandleValidationError -> ParseValidatorError
+			validatorInfo := errors.ParseValidatorError(validationErr)
+			Expect(validatorInfo).NotTo(BeNil(), "ParseValidatorError should extract validation info")
+			Expect(validatorInfo.Fields).NotTo(BeNil(), "Should have fields map")
+			Expect(len(validatorInfo.Fields)).To(BeNumerically(">", 1),
+				"Should have multiple validation errors in fields")
+
+			// Verify field names use JSON tags (camelCase)
+			Expect(validatorInfo.Fields).To(HaveKey("id"))
+			Expect(validatorInfo.Fields).To(HaveKey("name"))
+			Expect(validatorInfo.Fields).To(HaveKey("email"))
+		})
+
+		It("should populate fields in HandleAPIError flow", func() {
+			req := TestValidationRequest{
+				// All fields are missing/invalid
+			}
+
+			err := utils.Validate.Struct(req)
+			Expect(err).To(HaveOccurred())
+
+			validationErr := errors.ValidatorError[TestValidationRequest](err)
+			Expect(validationErr).NotTo(BeNil())
+
+			// This simulates what happens in HandleError
+			errorCode, errorMessage, httpCode, fields := errors.HandleAPIError(validationErr)
+
+			// Verify the error info
+			Expect(errorCode).To(Equal("ValidationError"))
+			Expect(httpCode).To(Equal(400))
+			Expect(errorMessage).To(ContainSubstring("Validation failed"))
+
+			// Most importantly: fields should be populated!
+			Expect(fields).NotTo(BeNil(), "Fields should not be nil")
+			Expect(len(fields)).To(BeNumerically(">", 1), "Should have multiple validation errors")
+			Expect(fields).To(HaveKey("id"))
+			Expect(fields).To(HaveKey("name"))
+			Expect(fields).To(HaveKey("email"))
+		})
 	})
 
 	Describe("Single Validation Error", func() {

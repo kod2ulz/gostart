@@ -85,7 +85,21 @@ func (e *ErrorModel[T]) WithCause(err ierrors.Error) (out ierrors.Error) {
 }
 
 func (e *ErrorModel[T]) Response() (out interface{}) {
-	return nil
+	// Return error details as a map for easy access
+	response := map[string]any{
+		"code":    e.Code,
+		"message": e.Message,
+	}
+	if e.Fields != nil {
+		response["fields"] = e.Fields
+	}
+	if e.Param != nil {
+		response["params"] = e.Param
+	}
+	if e.Errors != nil {
+		response["errors"] = e.Errors
+	}
+	return response
 }
 
 func _initError[T any](httpCode int, statusCode string, err error) (out ErrorModel[T]) {
@@ -372,13 +386,39 @@ func ParseValidatorError(err ierrors.Error) *ValidatorErrorInfo {
 		return nil
 	}
 
-	// Check if it's an ErrorModel with validation errors
-	if errorModel, ok := err.(interface{ GetFields() map[string]string }); ok {
-		if fields := errorModel.GetFields(); len(fields) > 0 {
-			return &ValidatorErrorInfo{
-				Message: err.Error(),
-				Fields:  fields,
-				Details: nil, // Can be enhanced to extract Param if needed
+	// Try to extract fields from the error's Response map (works for ErrorModel[T])
+	if response := err.Response(); response != nil {
+		if resp, ok := response.(map[string]any); ok {
+			// Extract fields from response map
+			var fields map[string]string
+			if fieldsVal, ok := resp["fields"]; ok && fieldsVal != nil {
+				// Convert map[string]any to map[string]string
+				if fieldsAny, ok := fieldsVal.(map[string]string); ok {
+					fields = fieldsAny
+				} else if fieldsAny, ok := fieldsVal.(map[string]any); ok {
+					// Convert map[string]any to map[string]string
+					fields = make(map[string]string)
+					for k, v := range fieldsAny {
+						if str, ok := v.(string); ok {
+							fields[k] = str
+						}
+					}
+				}
+			}
+
+			// If we found fields, return the info
+			if len(fields) > 0 {
+				info := &ValidatorErrorInfo{
+					Message: err.Error(),
+					Fields:  fields,
+				}
+				// Extract details/params if present
+				if detailsVal, ok := resp["params"]; ok && detailsVal != nil {
+					if detailsAny, ok := detailsVal.(map[string]any); ok {
+						info.Details = detailsAny
+					}
+				}
+				return info
 			}
 		}
 	}
