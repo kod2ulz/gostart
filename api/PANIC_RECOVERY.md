@@ -1,10 +1,18 @@
 # Panic Recovery Implementation
 
-## Problem Identified
+## Important Note: Stack Overflow vs Panic
+
+**Stack overflow from infinite recursion CANNOT be caught by panic recovery.** This is a fundamental limitation of Go's runtime - when the stack overflows, the runtime immediately terminates the goroutine before any `defer` statements can run.
+
+If you're seeing "runtime: goroutine stack exceeds limit" errors, that's **infinite recursion**, not a panic. See [REQUEST_MODAL_FIX.md](./REQUEST_MODAL_FIX.md) for details on fixing infinite recursion in `RequestModal`.
+
+## Panic Recovery in Handlers
+
+### Problem Identified
 
 The server was crashing when panics occurred in handlers because the handler chaining logic created plain Go closures that bypassed Gin's built-in recovery middleware.
 
-## Solution Implemented
+### Solution Implemented
 
 ### 1. **Centralized Panic Recovery** (`api/frameworks/gin/router.go:328-347`)
 

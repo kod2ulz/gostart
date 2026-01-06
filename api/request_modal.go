@@ -43,12 +43,6 @@ func (r RequestModal[T]) Validate(ctx contracts.RequestContext) error {
 func (r RequestModal[T]) RequestLoad(ctx contracts.RequestContext) (param contracts.RequestParam, err error) {
 	t := new(T)
 
-	// Check if the underlying type has its own RequestLoad method
-	// This allows types like ListRequest to provide custom loading logic
-	if loader, ok := interface{}(t).(interface{ RequestLoad(contracts.RequestContext) (contracts.RequestParam, error) }); ok {
-		return loader.RequestLoad(ctx)
-	}
-
 	// Tag-driven cascading load order:
 	// 1. JSON body (if any field has `json:` tags)
 	// 2. Query params (if any field has `query:` tags) - overrides JSON
