@@ -367,16 +367,16 @@ func (g *Generator) AddRoute(method, path string, handler interface{}, annotatio
 	// Convert annotations to our format
 	annotation := Annotation{}
 	if annotations != nil {
-		if summary, ok := annotations["summary"].(string); ok {
+		if summary, ok := annotations["Summary"].(string); ok {
 			annotation.Summary = summary
 		}
-		if description, ok := annotations["description"].(string); ok {
+		if description, ok := annotations["Description"].(string); ok {
 			annotation.Description = description
 		}
-		if tags, ok := annotations["tags"].([]string); ok {
+		if tags, ok := annotations["Tags"].([]string); ok {
 			annotation.Tags = tags
 		}
-		if deprecated, ok := annotations["deprecated"].(bool); ok {
+		if deprecated, ok := annotations["Deprecated"].(bool); ok {
 			annotation.Deprecated = deprecated
 		}
 		// Extract parameters if present
