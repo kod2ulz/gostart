@@ -319,10 +319,15 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 		requestType, responseType, isList = r.extractTypesFromHandler(handler)
 	}
 
-	// Extract handler name for default summary
+	// Extract handler name for default summary and operationId
 	handlerName := extractHandlerName(handler)
 	if annotation.Summary == "" {
 		annotation.Summary = handlerName
+	}
+
+	// Set operationId from handler name if not already provided
+	if annotation.OperationID == "" {
+		annotation.OperationID = toOperationID(handlerName)
 	}
 
 	// Auto-generate documentation from typed handler using reflection
@@ -736,6 +741,30 @@ func extractHandlerName(handler api.HandlerFunc) string {
 	return name
 }
 
+// toOperationID converts a handler name to an OpenAPI operationId format
+// Converts "Search Categories" to "searchCategories"
+func toOperationID(handlerName string) string {
+	// Remove spaces and convert to camelCase
+	words := strings.Fields(handlerName)
+	if len(words) == 0 {
+		return "operation"
+	}
+
+	// First word is lowercase
+	result := strings.ToLower(words[0])
+
+	// Subsequent words are capitalized (camelCase)
+	for i := 1; i < len(words); i++ {
+		word := words[i]
+		if len(word) > 0 {
+			// Capitalize first letter, lowercase the rest
+			result += strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
+		}
+	}
+
+	return result
+}
+
 // enhanceAnnotationFromHandler uses reflection to auto-generate documentation from typed handlers
 func (r *GinRouter) enhanceAnnotationFromHandler(handler api.HandlerFunc, annotation openapi.Annotation) openapi.Annotation {
 	// Try to extract type information from the handler
@@ -864,6 +893,9 @@ func (r *GinRouter) addSchemaToGenerator(name string, schema *openapi.Schema) {
 
 // enhanceAnnotationFromTypes enhances annotation with explicit type information
 func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, requestType, responseType reflect.Type, isList bool, method, path string) openapi.Annotation {
+	// Ensure response envelope schemas are registered
+	r.registerResponseEnvelopeSchemas()
+
 	// Extract fields from the request type to generate parameters
 	if requestType != nil {
 		// For GET requests, extract query and path parameters
@@ -926,19 +958,21 @@ func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, re
 				r.schemas[arraySchemaName] = arraySchema
 				r.addSchemaToGenerator(arraySchemaName, arraySchema)
 
-				// Add or update the 200 response with the array schema
+				// Wrap in ResponseEnvelope with pagination metadata
+				dataRef := "#/components/schemas/" + arraySchemaName
+				wrappedSchema := r.wrapResponseEnvelope(dataRef, true)
+
+				// Add or update the 200 response with the wrapped schema
 				if annotation.Responses == nil {
 					annotation.Responses = make(map[string]openapi.Response)
 				}
 
-				// Create success response with array schema
+				// Create success response with wrapped schema
 				annotation.Responses["200"] = openapi.Response{
 					Description: "Successful response",
 					Content: map[string]openapi.MediaType{
 						"application/json": {
-							Schema: &openapi.Schema{
-								Ref: "#/components/schemas/" + arraySchemaName,
-							},
+							Schema: wrappedSchema,
 						},
 					},
 				}
@@ -948,17 +982,20 @@ func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, re
 			responseSchemaRef := r.registerSchema(responseType)
 
 			if responseSchemaRef != nil {
+				// Wrap in ResponseEnvelope
+				wrappedSchema := r.wrapResponseEnvelope(responseSchemaRef.Ref, false)
+
 				// Add or update the 200 response with the schema
 				if annotation.Responses == nil {
 					annotation.Responses = make(map[string]openapi.Response)
 				}
 
-				// Create success response with schema reference
+				// Create success response with wrapped schema
 				annotation.Responses["200"] = openapi.Response{
 					Description: "Successful response",
 					Content: map[string]openapi.MediaType{
 						"application/json": {
-							Schema: responseSchemaRef,
+							Schema: wrappedSchema,
 						},
 					},
 				}
@@ -966,7 +1003,235 @@ func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, re
 		}
 	}
 
+	// Add common error responses
+	r.addErrorResponseSchemas(&annotation)
+
 	return annotation
+}
+
+// registerResponseEnvelopeSchemas registers the response envelope wrapper schemas
+func (r *GinRouter) registerResponseEnvelopeSchemas() {
+	// Only register once
+	if _, exists := r.schemas["ResponseEnvelope"]; exists {
+		return
+	}
+
+	// Meta schema (pagination metadata)
+	metaSchema := &openapi.Schema{
+		Type: "object",
+		Properties: map[string]openapi.Schema{
+			"total": {
+				Type:        "integer",
+				Description: "Total number of items",
+				Format:      "int64",
+			},
+			"limit": {
+				Type:        "integer",
+				Description: "Number of items per page",
+			},
+			"offset": {
+				Type:        "integer",
+				Description: "Number of items to skip",
+			},
+		},
+	}
+	r.schemas["Meta"] = metaSchema
+	r.addSchemaToGenerator("Meta", metaSchema)
+
+	// ErrorInfo schema
+	errorInfoSchema := &openapi.Schema{
+		Type: "object",
+		Properties: map[string]openapi.Schema{
+			"code": {
+				Type:        "string",
+				Description: "Error code",
+			},
+			"message": {
+				Type:        "string",
+				Description: "Error message",
+			},
+			"fields": {
+				Type:        "object",
+				Description: "Validation error fields",
+				AdditionalProperties: &openapi.AdditionalProperties{
+					Schema: &openapi.Schema{
+						Type: "string",
+					},
+				},
+			},
+			"details": {
+				Type:        "object",
+				Description: "Additional error details",
+			},
+		},
+		Required: []string{"code", "message"},
+	}
+	r.schemas["ErrorInfo"] = errorInfoSchema
+	r.addSchemaToGenerator("ErrorInfo", errorInfoSchema)
+
+	// ResponseEnvelope schema
+	responseEnvelopeSchema := &openapi.Schema{
+		Type: "object",
+		Properties: map[string]openapi.Schema{
+			"success": {
+				Type:        "boolean",
+				Description: "Whether the request was successful",
+			},
+			"type": {
+				Type:        "string",
+				Description: "Type of the response data",
+			},
+			"data": {
+				Type:        "object",
+				Description: "Response data (present on success)",
+			},
+			"references": {
+				Type:        "object",
+				Description: "Related entities",
+			},
+			"meta": {
+				Description: "Pagination metadata",
+				Ref:         "#/components/schemas/Meta",
+			},
+			"time": {
+				Type:        "integer",
+				Description: "Response timestamp",
+				Format:      "int64",
+			},
+			"error": {
+				Description: "Error information (present on failure)",
+				Ref:         "#/components/schemas/ErrorInfo",
+			},
+		},
+		Required: []string{"success", "type", "time"},
+	}
+	r.schemas["ResponseEnvelope"] = responseEnvelopeSchema
+	r.addSchemaToGenerator("ResponseEnvelope", responseEnvelopeSchema)
+}
+
+// wrapResponseEnvelope wraps a data schema reference in a ResponseEnvelope
+func (r *GinRouter) wrapResponseEnvelope(dataRef string, isList bool) *openapi.Schema {
+	// Create an allOf schema that includes the ResponseEnvelope and the data schema
+	// We'll use properties to create a proper wrapped schema
+
+	wrappedSchema := &openapi.Schema{
+		Type: "object",
+		Properties: map[string]openapi.Schema{
+			"success": {
+				Type:        "boolean",
+				Description: "Whether the request was successful",
+				Example:     true,
+			},
+			"type": {
+				Type:        "string",
+				Description: "Type of the response data",
+			},
+			"data": {
+				Ref: dataRef,
+			},
+			"time": {
+				Type:        "integer",
+				Description: "Response timestamp (Unix epoch)",
+				Format:      "int64",
+			},
+		},
+		Required: []string{"success", "type", "data", "time"},
+	}
+
+	// Add meta property for list responses (pagination)
+	if isList {
+		wrappedSchema.Properties["meta"] = openapi.Schema{
+			Description: "Pagination metadata",
+			Ref:         "#/components/schemas/Meta",
+		}
+		wrappedSchema.Required = append(wrappedSchema.Required, "meta")
+	}
+
+	return wrappedSchema
+}
+
+// addErrorResponseSchemas adds common error responses to the annotation
+func (r *GinRouter) addErrorResponseSchemas(annotation *openapi.Annotation) {
+	if annotation.Responses == nil {
+		annotation.Responses = make(map[string]openapi.Response)
+	}
+
+	// Create error response schema (ResponseEnvelope with error field)
+	errorResponseSchema := &openapi.Schema{
+		Type: "object",
+		Properties: map[string]openapi.Schema{
+			"success": {
+				Type:        "boolean",
+				Description: "Whether the request was successful",
+				Example:     false,
+			},
+			"type": {
+				Type:        "string",
+				Description: "Response type (error)",
+				Example:     "error",
+			},
+			"time": {
+				Type:        "integer",
+				Description: "Response timestamp (Unix epoch)",
+				Format:      "int64",
+			},
+			"error": {
+				Description: "Error information",
+				Ref:         "#/components/schemas/ErrorInfo",
+			},
+		},
+		Required: []string{"success", "type", "error", "time"},
+	}
+
+	// 400 Bad Request (validation errors, invalid input)
+	annotation.Responses["400"] = openapi.Response{
+		Description: "Bad Request - Invalid input or validation error",
+		Content: map[string]openapi.MediaType{
+			"application/json": {
+				Schema: errorResponseSchema,
+			},
+		},
+	}
+
+	// 401 Unauthorized (authentication required)
+	annotation.Responses["401"] = openapi.Response{
+		Description: "Unauthorized - Authentication required",
+		Content: map[string]openapi.MediaType{
+			"application/json": {
+				Schema: errorResponseSchema,
+			},
+		},
+	}
+
+	// 403 Forbidden (insufficient permissions)
+	annotation.Responses["403"] = openapi.Response{
+		Description: "Forbidden - Insufficient permissions",
+		Content: map[string]openapi.MediaType{
+			"application/json": {
+				Schema: errorResponseSchema,
+			},
+		},
+	}
+
+	// 404 Not Found
+	annotation.Responses["404"] = openapi.Response{
+		Description: "Not Found - Resource not found",
+		Content: map[string]openapi.MediaType{
+			"application/json": {
+				Schema: errorResponseSchema,
+			},
+		},
+	}
+
+	// 500 Internal Server Error
+	annotation.Responses["500"] = openapi.Response{
+		Description: "Internal Server Error",
+		Content: map[string]openapi.MediaType{
+			"application/json": {
+				Schema: errorResponseSchema,
+			},
+		},
+	}
 }
 
 // extractRequestBodySchema extracts request body schema from a request struct
