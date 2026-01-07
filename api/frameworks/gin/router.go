@@ -24,8 +24,10 @@ type GinRouter struct {
 	openAPIRegistry *openapi.RouteRegistry
 	openAPIConfig   *openapi.Info
 	pathPrefix      string // Tracks the current path prefix from groups
+	groupHierarchy  []string // Tracks the nested group structure for tag generation
 	config          *api.RouterConfig
 	schemas         map[string]*openapi.Schema // Registry for reusable schemas
+	groupAnnotation *openapi.Annotation // Annotation for the current group level
 }
 
 // RequestContext implements both contracts.RequestContext and api.RequestContext
@@ -150,6 +152,7 @@ func NewGinRouter(config *api.RouterConfig) (api.Router, error) {
 		openAPIConfig:   openAPIConfig,
 		config:          config,
 		schemas:         make(map[string]*openapi.Schema),
+		groupHierarchy:  []string{},
 	}
 
 	// Configure static paths
@@ -214,6 +217,11 @@ func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
 		newPrefix = "/" + newPrefix
 	}
 
+	// Build the new group hierarchy by appending this path segment
+	newHierarchy := make([]string, len(r.groupHierarchy)+1)
+	copy(newHierarchy, r.groupHierarchy)
+	newHierarchy[len(newHierarchy)-1] = path
+
 	subRouter := &GinRouter{
 		engine:          r.engine,
 		group:           group,
@@ -222,8 +230,16 @@ func (r *GinRouter) Group(path string, fn func(api.Router)) api.Router {
 		pathPrefix:      newPrefix,
 		schemas:         r.schemas, // Share the schemas map
 		config:          r.config,
+		groupHierarchy:  newHierarchy,
 	}
 	fn(subRouter)
+	return r
+}
+
+// AnnotateGroup sets an annotation for the current group level
+// This annotation will be merged with all routes in this group
+func (r *GinRouter) AnnotateGroup(annotation openapi.Annotation) api.Router {
+	r.groupAnnotation = &annotation
 	return r
 }
 
@@ -529,13 +545,39 @@ func (r *GinRouter) generateDefaultSummary(method, path string) string {
 	return fmt.Sprintf("%s %s", method, path)
 }
 
-// mergeAnnotation merges user-provided annotation with auto-generated defaults
+// mergeAnnotation merges user-provided annotation with group annotation and auto-generated defaults
 func (r *GinRouter) mergeAnnotation(annotation openapi.Annotation, method, path string) openapi.Annotation {
 	fullPath := r.buildFullPath(path)
 	defaultTags := r.generateTagsFromPath(fullPath)
 
-	// Start with the user's annotation
-	merged := annotation
+	// Start with group annotation if present
+	merged := openapi.Annotation{}
+	if r.groupAnnotation != nil {
+		merged = *r.groupAnnotation
+	}
+
+	// Merge route annotation (route annotation takes precedence)
+	if annotation.Summary != "" {
+		merged.Summary = annotation.Summary
+	}
+	if annotation.Description != "" {
+		merged.Description = annotation.Description
+	}
+	if len(annotation.Tags) > 0 {
+		merged.Tags = annotation.Tags
+	}
+	if annotation.Deprecated {
+		merged.Deprecated = annotation.Deprecated
+	}
+	if len(annotation.Parameters) > 0 {
+		merged.Parameters = annotation.Parameters
+	}
+	if annotation.RequestBody != nil {
+		merged.RequestBody = annotation.RequestBody
+	}
+	if len(annotation.Responses) > 0 {
+		merged.Responses = annotation.Responses
+	}
 
 	// If no summary provided, use default
 	if merged.Summary == "" {
@@ -562,11 +604,42 @@ func (r *GinRouter) buildFullPath(path string) string {
 	return r.pathPrefix + "/" + path
 }
 
-// generateTagsFromPath generates tags from the path segments
-// For grouped routes (like /api/admin/geo/attributes), it creates hierarchical tags
-// that respect the group structure: ["admin", "geo/attributes"]
+// generateTagsFromPath generates tags from the group hierarchy
+// For grouped routes, this creates hierarchical tags that respect the group structure
+// e.g., ["admin", "geo/attributes"] for router.Group("api", func(api) {
+//   api.Group("admin", func(admin) {
+//     admin.Group("geo", func(geo) {
+//       geo.Group("attributes", ...)
 func (r *GinRouter) generateTagsFromPath(path string) []string {
-	// Remove leading slash and split
+	// Use the group hierarchy if available
+	if len(r.groupHierarchy) > 0 {
+		// Skip "api" prefix if it's the first element
+		startIdx := 0
+		if len(r.groupHierarchy) > 0 && r.groupHierarchy[0] == "api" {
+			startIdx = 1
+		}
+
+		// If we have groups after skipping "api", use them
+		if len(r.groupHierarchy) > startIdx {
+			// Use the first meaningful group as the primary tag (e.g., "admin")
+			tags := []string{r.groupHierarchy[startIdx]}
+
+			// For nested groups, combine subsequent groups with "/"
+			// e.g., ["admin", "geo/attributes"] instead of ["admin", "geo", "attributes"]
+			if len(r.groupHierarchy) > startIdx+2 {
+				// Combine all groups after the first one
+				nestedTag := strings.Join(r.groupHierarchy[startIdx+1:], "/")
+				tags = append(tags, nestedTag)
+			} else if len(r.groupHierarchy) > startIdx+1 {
+				// Just one more group, add it as a separate tag
+				tags = append(tags, r.groupHierarchy[startIdx+1])
+			}
+
+			return tags
+		}
+	}
+
+	// Fallback to path-based tag generation for routes without groups
 	path = strings.TrimPrefix(path, "/")
 	parts := strings.Split(path, "/")
 
@@ -583,29 +656,21 @@ func (r *GinRouter) generateTagsFromPath(path string) []string {
 		return []string{"default"}
 	}
 
-	// For hierarchical tags, create meaningful tag names based on path segments
-	// Skip common prefixes like "api" and create hierarchical tags
-	tags := make([]string, 0)
-	startIdx := 0
-
 	// Skip "api" prefix if present
+	startIdx := 0
 	if len(validParts) > 0 && validParts[0] == "api" {
 		startIdx = 1
 	}
 
 	// Build tags based on remaining path structure
+	tags := make([]string, 0)
 	if len(validParts) > startIdx {
-		// Use the first meaningful segment (e.g., "admin")
 		tags = append(tags, validParts[startIdx])
 
-		// For nested resources, combine subsequent segments with "/"
-		// e.g., "geo/attributes" instead of ["geo", "attributes"]
 		if len(validParts) > startIdx+2 {
-			// Combine segments after the first one
 			nestedTag := strings.Join(validParts[startIdx+1:], "/")
 			tags = append(tags, nestedTag)
 		} else if len(validParts) > startIdx+1 {
-			// Just one more segment, add it as a separate tag
 			tags = append(tags, validParts[startIdx+1])
 		}
 	}

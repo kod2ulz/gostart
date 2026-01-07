@@ -23,6 +23,9 @@ type Router interface {
 	// Grouping
 	Group(path string, fn func(Router)) Router
 
+	// Group-level annotation (for OpenAPI documentation)
+	AnnotateGroup(annotation openapi.Annotation) Router
+
 	// Middleware
 	Use(middleware ...MiddlewareFunc) Router
 
