@@ -387,6 +387,10 @@ func (g *Generator) AddRoute(method, path string, handler interface{}, annotatio
 		if requestBody, ok := annotations["RequestBody"].(*RequestBody); ok {
 			annotation.RequestBody = requestBody
 		}
+		// Extract responses if present
+		if responses, ok := annotations["Responses"].(map[string]Response); ok {
+			annotation.Responses = responses
+		}
 		// Store custom annotations
 		annotation.Custom = annotations
 	}
@@ -770,7 +774,11 @@ func (g *Generator) enrichOperationFromResponseContract(operation *Operation, co
 		}
 	}
 
-	operation.Responses[statusCode] = response
+	// Only set the response if it doesn't already exist from annotation
+	// Annotation responses take precedence over contract responses
+	if _, exists := operation.Responses[statusCode]; !exists {
+		operation.Responses[statusCode] = response
+	}
 
 	// Add error responses if available
 	for statusCode, errorResponse := range contract.ErrorResponses {

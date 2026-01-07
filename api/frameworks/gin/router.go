@@ -838,8 +838,68 @@ func (r *GinRouter) enhanceAnnotationFromTypes(annotation openapi.Annotation, re
 		}
 	}
 
-	// For response, we could similarly enhance the annotation
-	// For now, we'll keep the default response structure
+	// Register response schema and enhance response documentation
+	if responseType != nil {
+		// For list responses, we need to create an array schema
+		if isList {
+			// responseType is the element type (R), not the slice ([]R)
+			// Register the item type schema
+			itemSchemaRef := r.registerSchema(responseType)
+
+			if itemSchemaRef != nil {
+				// Create array schema with $ref to items
+				arraySchema := &openapi.Schema{
+					Type:  "array",
+					Items: itemSchemaRef,
+				}
+
+				// Register the array schema itself
+				arraySchemaName := responseType.Name() + "List"
+				if arraySchemaName == "List" {
+					arraySchemaName = "AnonymousList"
+				}
+				r.schemas[arraySchemaName] = arraySchema
+				r.addSchemaToGenerator(arraySchemaName, arraySchema)
+
+				// Add or update the 200 response with the array schema
+				if annotation.Responses == nil {
+					annotation.Responses = make(map[string]openapi.Response)
+				}
+
+				// Create success response with array schema
+				annotation.Responses["200"] = openapi.Response{
+					Description: "Successful response",
+					Content: map[string]openapi.MediaType{
+						"application/json": {
+							Schema: &openapi.Schema{
+								Ref: "#/components/schemas/" + arraySchemaName,
+							},
+						},
+					},
+				}
+			}
+		} else {
+			// For single responses, register the response type schema
+			responseSchemaRef := r.registerSchema(responseType)
+
+			if responseSchemaRef != nil {
+				// Add or update the 200 response with the schema
+				if annotation.Responses == nil {
+					annotation.Responses = make(map[string]openapi.Response)
+				}
+
+				// Create success response with schema reference
+				annotation.Responses["200"] = openapi.Response{
+					Description: "Successful response",
+					Content: map[string]openapi.MediaType{
+						"application/json": {
+							Schema: responseSchemaRef,
+						},
+					},
+				}
+			}
+		}
+	}
 
 	return annotation
 }
