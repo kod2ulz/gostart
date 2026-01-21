@@ -141,3 +141,52 @@ func parseVaultKey(key string) (path, secretKey string) {
 	}
 	return "", ""
 }
+
+// InspectCache returns all cached Vault secrets with their metadata
+func (s *VaultSource) InspectCache() []ConfigEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.cache == nil {
+		return []ConfigEntry{}
+	}
+
+	// Type assert to access the memoryCache's Inspect method
+	if mc, ok := s.cache.(interface{Inspect() []collections.CacheEntry[string, configValue] }); ok {
+		entries := mc.Inspect()
+		result := make([]ConfigEntry, 0, len(entries))
+
+		for _, e := range entries {
+			result = append(result, ConfigEntry{
+				Key:        e.Key,
+				Value:      e.Value.value,
+				Source:     "vault",
+				Type:       inferTypeFromValue(e.Value.value),
+				ExpiresAt:  &e.ExpiresAt,
+				TimeToLive: e.TimeToLive,
+				IsStale:    e.IsStale,
+			})
+		}
+
+		return result
+	}
+
+	return []ConfigEntry{}
+}
+
+// CacheSize returns the number of items in the Vault cache
+func (s *VaultSource) CacheSize() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.cache == nil {
+		return 0
+	}
+
+	// Type assert to access the memoryCache's Size method
+	if mc, ok := s.cache.(interface{Size() int }); ok {
+		return mc.Size()
+	}
+
+	return 0
+}

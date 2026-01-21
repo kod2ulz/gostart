@@ -206,3 +206,52 @@ func (s *DBSource) seedToDB(ctx context.Context, key, value string) (string, err
 
 	return value, nil
 }
+
+// InspectCache returns all cached DB config values with their metadata
+func (s *DBSource) InspectCache() []ConfigEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.cache == nil {
+		return []ConfigEntry{}
+	}
+
+	// Type assert to access the memoryCache's Inspect method
+	if mc, ok := s.cache.(interface{Inspect() []collections.CacheEntry[string, configValue] }); ok {
+		entries := mc.Inspect()
+		result := make([]ConfigEntry, 0, len(entries))
+
+		for _, e := range entries {
+			result = append(result, ConfigEntry{
+				Key:        e.Key,
+				Value:      e.Value.value,
+				Source:     "database",
+				Type:       inferTypeFromValue(e.Value.value),
+				ExpiresAt:  &e.ExpiresAt,
+				TimeToLive: e.TimeToLive,
+				IsStale:    e.IsStale,
+			})
+		}
+
+		return result
+	}
+
+	return []ConfigEntry{}
+}
+
+// CacheSize returns the number of items in the DB cache
+func (s *DBSource) CacheSize() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.cache == nil {
+		return 0
+	}
+
+	// Type assert to access the memoryCache's Size method
+	if mc, ok := s.cache.(interface{Size() int }); ok {
+		return mc.Size()
+	}
+
+	return 0
+}

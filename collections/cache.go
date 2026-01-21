@@ -269,3 +269,41 @@ func (c *memoryCache[K, T, E]) zeroErr() E {
 	var zero E
 	return zero
 }
+
+// CacheEntry represents a cached item with its metadata
+type CacheEntry[K comparable, T any] struct {
+	Key        K
+	Value      T
+	ExpiresAt  time.Time
+	TimeToLive time.Duration
+	IsStale    bool
+}
+
+// Inspect returns all cached items with their metadata
+func (c *memoryCache[K, T, E]) Inspect() []CacheEntry[K, T] {
+	keys := c.data.Keys()
+	entries := make([]CacheEntry[K, T], 0, len(keys))
+
+	for _, key := range keys {
+		if obj := c.data.Get(key); obj != nil {
+			value := obj.data
+			if value != nil {
+				entry := CacheEntry[K, T]{
+					Key:       key,
+					ExpiresAt: obj.expiry,
+					Value:     *value,
+					IsStale:   !obj.valid(),
+				}
+				entry.TimeToLive = time.Until(obj.expiry)
+				entries = append(entries, entry)
+			}
+		}
+	}
+
+	return entries
+}
+
+// Size returns the number of items in the cache
+func (c *memoryCache[K, T, E]) Size() int {
+	return c.data.Size()
+}
