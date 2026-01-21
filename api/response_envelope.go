@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/logr"
 )
 
 // ResponseEnvelope represents the standardized response format
@@ -25,6 +26,7 @@ type Meta struct {
 	Total  *int64 `json:"total,omitempty"`
 	Limit  *int   `json:"limit,omitempty"`
 	Offset *int   `json:"offset,omitempty"`
+	Page   *int   `json:"page,omitempty"`
 }
 
 // ErrorInfo contains error details
@@ -71,6 +73,11 @@ func SuccessResponse(ctx contracts.RequestContext, data any) error {
 
 // ListResponse creates a list response envelope
 func ListResponse(ctx contracts.RequestContext, data any, total *int64, limit, offset *int) error {
+	logr.Log().Debug("ListResponse called",
+		"total", total,
+		"limit", limit,
+		"offset", offset)
+
 	if ctx, ok := ctx.(RequestContext); ok {
 		envelope := &ResponseEnvelope{
 			Success: true,
@@ -90,6 +97,12 @@ func ListResponse(ctx contracts.RequestContext, data any, total *int64, limit, o
 			}
 			if offset != nil {
 				envelope.Meta.Offset = offset
+			}
+			// Calculate page from offset and limit
+			if limit != nil && offset != nil && *limit > 0 {
+				page := (*offset / *limit) + 1
+				envelope.Meta.Page = &page
+				logr.Log().Debug("ListResponse: calculated page", "page", page)
 			}
 		}
 

@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 
 	"github.com/kod2ulz/gostart/ierrors"
@@ -40,6 +41,12 @@ type RequestContext interface {
 
 	// Context returns the underlying standard Go context.Context
 	Context() context.Context
+
+	// RequestID returns the unique identifier for this request
+	RequestID() string
+
+	// Request returns the underlying HTTP request
+	Request() *http.Request
 }
 
 // Value represents a parameter value that can be converted to various types

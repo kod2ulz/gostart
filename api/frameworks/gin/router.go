@@ -1033,6 +1033,10 @@ func (r *GinRouter) registerResponseEnvelopeSchemas() {
 				Type:        "integer",
 				Description: "Number of items to skip",
 			},
+			"page": {
+				Type:        "integer",
+				Description: "Current page number (1-indexed)",
+			},
 		},
 	}
 	r.schemas["Meta"] = metaSchema

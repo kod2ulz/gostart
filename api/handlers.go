@@ -8,6 +8,7 @@ import (
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/ierrors"
+	"github.com/kod2ulz/gostart/logr"
 )
 
 // This package provides simplified, type-safe handler functions for common API patterns.
@@ -47,13 +48,17 @@ func extractPagination(param contracts.RequestParam) (limit, offset *int) {
 	if listParam, ok := param.(interface{ GetLimit() int }); ok {
 		if l := listParam.GetLimit(); l > 0 {
 			limit = &l
+			logr.Log().Debug("extractPagination: extracted limit", "limit", l)
 		}
 	}
 	if listParam, ok := param.(interface{ GetOffset() int }); ok {
-		if o := listParam.GetOffset(); o > 0 {
+		// Get the offset value (0 is valid - it means the first page)
+		if o := listParam.GetOffset(); o >= 0 {
 			offset = &o
+			logr.Log().Debug("extractPagination: extracted offset", "offset", o)
 		}
 	}
+	logr.Log().Debug("extractPagination: result", "limit", limit, "offset", offset)
 	return
 }
 

@@ -2,6 +2,7 @@ package gin
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kod2ulz/gostart/contracts"
@@ -50,6 +51,37 @@ func (g *GinRequestContext) ShouldBindJSON(obj interface{}) error {
 // Context returns the underlying standard Go context.Context.
 func (g *GinRequestContext) Context() context.Context {
 	return g.ctx
+}
+
+// RequestID returns the unique identifier for this request.
+// It checks the gin.Context first (set by middleware), then falls back to headers.
+func (g *GinRequestContext) RequestID() string {
+	// First try to get from context (set by logging middleware)
+	if requestID, exists := g.ctx.Get("request_id"); exists {
+		if id, ok := requestID.(string); ok {
+			return id
+		}
+	}
+
+	// Fallback to checking headers directly
+	if requestID := g.ctx.GetHeader("X-Request-Id"); requestID != "" {
+		return requestID
+	}
+	// Try alternative header casings
+	if requestID := g.ctx.GetHeader("X-Request-ID"); requestID != "" {
+		return requestID
+	}
+	if requestID := g.ctx.GetHeader("Request-Id"); requestID != "" {
+		return requestID
+	}
+
+	// Last resort: generate a new ID (shouldn't normally happen if middleware is running)
+	return "unknown"
+}
+
+// Request returns the underlying HTTP request.
+func (g *GinRequestContext) Request() *http.Request {
+	return g.ctx.Request
 }
 
 // Value returns the value associated with this context for key.

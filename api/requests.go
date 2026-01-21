@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/logr"
 	"golang.org/x/exp/constraints"
 )
 
@@ -51,9 +52,18 @@ func (r ListRequest) RequestLoad(ctx contracts.RequestContext) (param contracts.
 	// This should be implemented based on your authentication strategy
 	out.Limit = query("limit", 20)
 	out.Offset = query("offset", 0)
-	if page := query("page", 1); page > 1 && out.Offset == 0 {
+	page := query("page", 1)
+	if page > 1 && out.Offset == 0 {
 		out.Offset = out.Limit * (page - 1)
 	}
+
+	// Debug logging
+	logr.Log().Debug("ListRequest loaded",
+		"limit", out.Limit,
+		"offset", out.Offset,
+		"page", page,
+		"calculated_offset", out.Offset)
+
 	if ctxSetter, ok := ctx.(interface{ Set(string, interface{}) }); ok {
 		ctxSetter.Set(out.ContextKey(), &out)
 	}
