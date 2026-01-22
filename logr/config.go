@@ -2,6 +2,8 @@ package logr
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -59,10 +61,77 @@ func (h *MultiHandler) WithGroup(name string) slog.Handler {
 	return NewMultiHandler(newHandlers...)
 }
 
+// NewPrettyJSONHandler creates a handler that writes formatted JSON to stdout
+func NewPrettyJSONHandler(opts *slog.HandlerOptions) slog.Handler {
+	return &prettyJSONHandlerWrapper{opts: opts}
+}
+
+// prettyJSONHandlerWrapper wraps the slog.Handler to produce pretty JSON output
+type prettyJSONHandlerWrapper struct {
+	opts *slog.HandlerOptions
+}
+
+func (h *prettyJSONHandlerWrapper) Enabled(ctx context.Context, level slog.Level) bool {
+	if h.opts == nil || h.opts.Level == nil {
+		return true
+	}
+	return level >= h.opts.Level.Level()
+}
+
+func (h *prettyJSONHandlerWrapper) Handle(ctx context.Context, record slog.Record) error {
+	// Build a map from the record
+	attrs := make(map[string]interface{})
+
+	// Add time
+	attrs["time"] = record.Time.Format(time.RFC3339)
+
+	// Add level
+	attrs["level"] = record.Level.String()
+
+	// Add message
+	attrs["msg"] = record.Message
+
+	// Add source if requested
+	if h.opts != nil && h.opts.AddSource {
+		source := record.Source()
+		attrs["source"] = map[string]string{
+			"function": source.Function,
+			"file":     source.File,
+			"line":     fmt.Sprintf("%d", source.Line),
+		}
+	}
+
+	// Add all attributes
+	record.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.Any()
+		return true
+	})
+
+	// Marshal to pretty JSON
+	jsonBytes, err := json.MarshalIndent(attrs, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// Write to stdout with newline
+	os.Stdout.Write(append(jsonBytes, '\n'))
+	return nil
+}
+
+func (h *prettyJSONHandlerWrapper) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &prettyJSONHandlerWrapper{opts: h.opts}
+}
+
+func (h *prettyJSONHandlerWrapper) WithGroup(name string) slog.Handler {
+	return &prettyJSONHandlerWrapper{opts: h.opts}
+}
+
 // NewConsoleHandler creates a handler that writes to stdout.
-// If pretty is true, it uses a colorized, human-friendly format.
-// Otherwise, it writes minified JSON.
-func NewConsoleHandler(pretty bool) slog.Handler {
+// Supported formats:
+//   - "text" or "pretty": colored, human-friendly format (tint)
+//   - "json": minified JSON
+//   - "pretty-json" or "json-pretty": formatted/indented JSON
+func NewConsoleHandler(format string) slog.Handler {
 
 	level := _getLogLevel(logrEnv.GetString("LOG_LEVEL", "info"))
 	opts := &slog.HandlerOptions{
@@ -70,14 +139,22 @@ func NewConsoleHandler(pretty bool) slog.Handler {
 		Level:     level,
 	}
 
-	if pretty {
+	switch strings.ToLower(format) {
+	case "text", "pretty":
 		return tint.NewHandler(os.Stdout, &tint.Options{
 			AddSource:  true,
 			Level:      level,
 			TimeFormat: time.Kitchen,
 		})
+	case "json", "":
+		return slog.NewJSONHandler(os.Stdout, opts)
+	case "pretty-json", "json-pretty":
+		// Pretty JSON with indentation
+		return NewPrettyJSONHandler(opts)
+	default:
+		// Default to JSON if format not recognized
+		return slog.NewJSONHandler(os.Stdout, opts)
 	}
-	return slog.NewJSONHandler(os.Stdout, opts)
 }
 
 // NewFileHandler creates a handler that writes to a file with rotation.
@@ -111,12 +188,18 @@ func NewFileHandler(path string, rotation *RotationConfig) slog.Handler {
 
 // Config initializes the logger.
 // It can take multiple handlers, which will all receive log entries.
-// If no handlers are provided, it defaults to a JSON handler to stdout.
+// If no handlers are provided, it uses the LOG_FORMAT environment variable.
+// Supported LOG_FORMAT values:
+//   - "json" (default): minified JSON
+//   - "pretty-json": formatted/indented JSON
+//   - "text" or "pretty": colored, human-friendly format
 func Config(handlers ...slog.Handler) error {
 	var finalHandler slog.Handler
 
 	if len(handlers) == 0 {
-		finalHandler = NewConsoleHandler(false) // Default to minified JSON
+		// Check LOG_FORMAT environment variable (default to "json")
+		format := logrEnv.GetString("LOG_FORMAT", "json")
+		finalHandler = NewConsoleHandler(format)
 	} else if len(handlers) == 1 {
 		finalHandler = handlers[0]
 	} else {

@@ -17,7 +17,13 @@ var _ = Describe("Config", func() {
 		})
 
 		It("should initialize with a pretty console handler", func() {
-			consoleHandler := logr.NewConsoleHandler(true)
+			consoleHandler := logr.NewConsoleHandler("pretty")
+			Expect(logr.Config(consoleHandler)).To(Succeed())
+			Expect(logr.Log()).NotTo(BeNil())
+		})
+
+		It("should initialize with a JSON console handler", func() {
+			consoleHandler := logr.NewConsoleHandler("json")
 			Expect(logr.Config(consoleHandler)).To(Succeed())
 			Expect(logr.Log()).NotTo(BeNil())
 		})
@@ -39,7 +45,7 @@ var _ = Describe("Config", func() {
 		})
 
 		It("should initialize with multiple handlers", func() {
-			consoleHandler := logr.NewConsoleHandler(false)
+			consoleHandler := logr.NewConsoleHandler("json")
 
 			tempFile, err := os.CreateTemp("", "multi-*.log")
 			Expect(err).NotTo(HaveOccurred())

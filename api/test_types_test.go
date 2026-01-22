@@ -56,6 +56,32 @@ func (g *ginContextAdapter) Context() context.Context {
 	return g.ctx
 }
 
+func (g *ginContextAdapter) RequestID() string {
+	// First try to get from context (set by logging middleware)
+	if requestID, exists := g.ctx.Get("request_id"); exists {
+		if id, ok := requestID.(string); ok {
+			return id
+		}
+	}
+
+	// Fallback to checking headers directly
+	if requestID := g.ctx.GetHeader("X-Request-Id"); requestID != "" {
+		return requestID
+	}
+	if requestID := g.ctx.GetHeader("X-Request-ID"); requestID != "" {
+		return requestID
+	}
+	if requestID := g.ctx.GetHeader("Request-Id"); requestID != "" {
+		return requestID
+	}
+
+	return "unknown"
+}
+
+func (g *ginContextAdapter) Request() *http.Request {
+	return g.ctx.Request
+}
+
 func (g *ginContextAdapter) Value(key interface{}) interface{} {
 	return g.ctx.Value(key)
 }

@@ -359,10 +359,18 @@ func (r *GinRouter) registerRoute(method, path string, handler api.HandlerFunc, 
 		wrapped := func(ctx contracts.RequestContext) {
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					// Call custom panic handler if provided
+					// Get stack trace
+					stack := debug.Stack()
+
+					// Call custom panic handler if provided, otherwise log it ourselves
 					if r.config != nil && r.config.PanicRecovery != nil {
-						stack := debug.Stack()
 						r.config.PanicRecovery(recovered, stack)
+					} else {
+						// Default panic logging when no custom handler is provided
+						logr.Log().Error("Handler panic recovered",
+							"panic", fmt.Sprintf("%v", recovered),
+							"stack", string(stack),
+						)
 					}
 
 					// Return error response to client if we have a RequestContext
@@ -418,10 +426,18 @@ func (r *GinRouter) currentGroup() *gin.RouterGroup {
 func (r *GinRouter) handlePanic(c *gin.Context, fn func()) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			// Call custom panic handler if provided
+			// Get stack trace
+			stack := debug.Stack()
+
+			// Call custom panic handler if provided, otherwise log it ourselves
 			if r.config != nil && r.config.PanicRecovery != nil {
-				stack := debug.Stack()
 				r.config.PanicRecovery(recovered, stack)
+			} else {
+				// Default panic logging when no custom handler is provided
+				logr.Log().Error("Handler panic recovered",
+					"panic", fmt.Sprintf("%v", recovered),
+					"stack", string(stack),
+				)
 			}
 
 			// Return error response to client
