@@ -252,12 +252,17 @@ func SimpleHandler(handler func(contracts.RequestContext)) func(contracts.Reques
 func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFunc[P, R]) func(contracts.RequestContext) {
 	return func(ctx contracts.RequestContext) {
 		// Set handler name for logging (get the calling function's name)
-		SetHandlerName(ctx, GetCallersHandlerName(1))
+		handlerName := GetCallersHandlerName(1)
+		SetHandlerName(ctx, handlerName)
 
-		// Load request parameters using RequestModal
-		// RequestLoad never fails - it loads what's available from multiple sources
-		var modal RequestModal[P]
-		loaded, _ := modal.RequestLoad(ctx)
+		// Load request parameters using the concrete type's RequestLoad method
+		var param P
+		loaded, loadErr := param.RequestLoad(ctx)
+		if loadErr != nil {
+			logr.Log().Debug("RequestLoad failed", "error", loadErr, "handler", handlerName)
+			HandleError(ctx, errors.RequestLoadFailed[P](loadErr))
+			return
+		}
 
 		// Type assert to the concrete type
 		param, ok := loaded.(P)
@@ -267,7 +272,7 @@ func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFu
 		}
 
 		// Validate the request parameters before calling the handler
-		// This ensures all validation rules are checked before business logic runs
+		var modal RequestModal[P]
 		if validateErr := modal.Validate(ctx); validateErr != nil {
 			HandleError(ctx, errors.ValidatorError[P](validateErr))
 			return

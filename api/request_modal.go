@@ -52,7 +52,13 @@ func (r RequestModal[T]) RequestLoad(ctx contracts.RequestContext) (param contra
 
 	// Step 1: Check if we should load JSON body
 	if r.hasTag("json") {
-		_ = r.LoadFromJsonBody(ctx, t) // Ignore errors - might be GET with no body
+		if err = r.LoadFromJsonBody(ctx, t); err != nil {
+			// Only fail if we expected JSON but couldn't load it
+			// GET requests with no body are ok
+			if ctx.Request().Method != "GET" && ctx.Request().Method != "HEAD" {
+				return *t, err
+			}
+		}
 	}
 
 	// Step 2: Load from query params (overrides JSON)
