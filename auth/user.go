@@ -3,17 +3,13 @@ package auth
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/ierrors"
 )
-
-type User interface {
-	ID() uuid.UUID
-	// GetUsername() string
-}
 
 // Mock types for testing
 type SignupRequest struct {
@@ -33,16 +29,47 @@ type TokenResponse struct {
 
 // Mock types for testing
 type UserData struct {
-	UserID uuid.UUID
-	Email  string
-}
-
-func (u UserData) ID() uuid.UUID {
-	return u.UserID
+	UserID      uuid.UUID
+	Email       string
+	Roles       []string
+	Realms      []string
+	Permissions []string
+	ActiveRealm string
 }
 
 func (u UserData) GetID() uuid.UUID {
 	return u.UserID
+}
+
+func (u UserData) HasRole(roles ...string) bool {
+	for _, role := range roles {
+		if slices.Contains(u.Roles, role) {
+			return true
+		}
+	}
+	return false
+}
+
+func (u UserData) HasRealm(realms ...string) bool {
+	for _, realm := range realms {
+		if slices.Contains(u.Realms, realm) {
+			return true
+		}
+	}
+	return false
+}
+
+func (u UserData) HasPermission(permissions ...string) bool {
+	for _, permission := range permissions {
+		if slices.Contains(u.Permissions, permission) {
+			return true
+		}
+	}
+	return false
+}
+
+func (u UserData) GetRealm() string {
+	return u.ActiveRealm
 }
 
 func InMemoryUserStore() any {
@@ -55,11 +82,6 @@ func SessionService(a any, b any) *GenericSessionService[uuid.UUID, UserData] {
 
 func (s *GenericSessionService[ID, U]) Auther() any {
 	return "mock-auther"
-}
-
-type SessionUser[ID comparable] interface {
-	User
-	GetID() ID
 }
 
 type GenericSessionService[ID comparable, U SessionUser[ID]] struct{}

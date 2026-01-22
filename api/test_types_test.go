@@ -130,7 +130,7 @@ func (r CreateBookRequest) RequestLoad(ctx contracts.RequestContext) (param cont
 func (r *CreateBookRequest) book(id uuid.UUID) (out *Book) {
 	out = &Book{ID: id, Name: r.Name, Author: r.Author, Pages: r.Pages}
 	if r.User != nil {
-		out.CreatedBy = utils.PointerTo(r.User.ID())
+		out.CreatedBy = utils.PointerTo(r.User.GetID())
 	}
 	return
 }
@@ -195,7 +195,7 @@ func (s *_bookService) seed(size int, user auth.User) (out []*Book, err error) {
 	if size < 1 {
 		return out, gerrors.Errorf("seed size is required and cannot be 0")
 	} else if user != nil {
-		creatorId = utils.PointerTo(user.ID())
+		creatorId = utils.PointerTo(user.GetID())
 	}
 	out = make([]*Book, size)
 	for i := 0; i < size; i++ {

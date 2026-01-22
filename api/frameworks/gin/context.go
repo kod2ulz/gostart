@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	gstartAuth "github.com/kod2ulz/gostart/auth"
 	"github.com/kod2ulz/gostart/contracts"
 )
 
@@ -97,4 +98,14 @@ func (g *GinRequestContext) Set(key string, value interface{}) {
 // GinContext returns the underlying gin.Context.
 func (g *GinRequestContext) GinContext() *gin.Context {
 	return g.ctx
+}
+
+// GetUser retrieves the authenticated user from context.
+// Returns the user stored in context by authentication middleware.
+// Returns nil if no user is authenticated or user is not found in context.
+func (g *GinRequestContext) GetUser() any {
+	if user := g.ctx.Value(gstartAuth.ContextAuthUserKey); user != nil {
+		return user
+	}
+	return nil
 }

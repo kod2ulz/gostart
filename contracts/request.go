@@ -47,6 +47,19 @@ type RequestContext interface {
 
 	// Request returns the underlying HTTP request
 	Request() *http.Request
+
+	// GetUser retrieves the authenticated user from context
+	// Returns the user stored in context by authentication middleware
+	// Returns nil if no user is authenticated or user is not found in context
+	//
+	// Usage:
+	//   if user := ctx.GetUser(); user != nil {
+	//       userID := user.GetID()  // Access user ID
+	//   }
+	//
+	// For typed user retrieval, use your auth package's GetCurrentUser[ID, U] helper:
+	//   user, err := auth.GetCurrentUser[uuid.UUID, id.Staff](ctx)
+	GetUser() any
 }
 
 // Value represents a parameter value that can be converted to various types

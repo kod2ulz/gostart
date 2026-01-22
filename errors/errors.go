@@ -25,6 +25,7 @@ var (
 	ErrorCodeValidatorError          string = "ValidationError"
 	ErrorCodeSQLError                string = "SQLError"
 	ErrorCodeUnauthorized            string = "InvalidCredentials"
+	ErrorCodeForbidden               string = "Forbidden"
 	ErrorCodeInvalidOperation        string = "InvalidOperation"
 )
 
@@ -133,6 +134,11 @@ func ServiceFailure(err error) (out ierrors.Error) {
 func ServiceUnauthorised(err error) (out ierrors.Error) {
 	return GeneralFailure[any](err).
 		WithErrorCodeAndHttpStatusCode(ErrorCodeUnauthorized, http.StatusUnauthorized)
+}
+
+func ServiceForbidden(err error) (out ierrors.Error) {
+	return GeneralFailure[any](err).
+		WithErrorCodeAndHttpStatusCode(ErrorCodeForbidden, http.StatusForbidden)
 }
 
 func GeneralFailure[T any](err error) (out ierrors.Error) {

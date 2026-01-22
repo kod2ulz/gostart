@@ -225,8 +225,11 @@ func getUserID(ctx contracts.RequestContext) string {
 	if ctxValue, ok := ctx.(interface{ Value(string) any }); ok {
 		if user := ctxValue.Value("auth.User"); user != nil {
 			// We can't import auth here due to potential cycles, so we just return the string representation
-			if userObj, ok := user.(interface{ ID() string }); ok {
-				return userObj.ID()
+			if userObj, ok := user.(interface{ GetID() string }); ok {
+				return userObj.GetID()
+			}
+			if userObj, ok := user.(interface{ GetID() uuid.UUID }); ok {
+				return userObj.GetID().String()
 			}
 		}
 	}
