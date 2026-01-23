@@ -9,9 +9,58 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/tracelog"
+	"github.com/kod2ulz/gostart/auth"
 	"github.com/kod2ulz/gostart/logr"
 )
+
+// GetUserInfo extracts user ID and user type from context
+// Returns (userID, userType) where userType is the type name of the user (e.g., "id.Staff", "id.SubscriberUser")
+// This is similar to api/middleware.go's getUserInfo but adapted for the storage package
+func GetUserInfo(ctx context.Context) (string, string) {
+	if ctx == nil {
+		return "", ""
+	}
+
+	// Try to get user from context using gostart's standard context key
+	val := ctx.Value(auth.ContextAuthUserKey)
+	if val == nil {
+		return "", ""
+	}
+
+	// Try to get ID as UUID (most common case)
+	type UUIDGetter interface{ GetID() uuid.UUID }
+	if userObj, ok := val.(UUIDGetter); ok {
+		return userObj.GetID().String(), fmt.Sprintf("%T", val)
+	}
+
+	// Try to get ID as string (for non-UUID user IDs)
+	type StringGetter interface{ GetID() string }
+	if userObj, ok := val.(StringGetter); ok {
+		return userObj.GetID(), fmt.Sprintf("%T", val)
+	}
+
+	// Return type name even if we couldn't get the ID
+	return "", fmt.Sprintf("%T", val)
+}
+
+// getRequestID extracts the request ID from context
+// Returns the request ID if present, empty string otherwise
+func getRequestID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+
+	// Try to get request_id from context (set by logging middleware)
+	if val := ctx.Value("request_id"); val != nil {
+		if requestID, ok := val.(string); ok {
+			return requestID
+		}
+	}
+
+	return ""
+}
 
 // pgxLoggerAdapter implements the pgx/v5 tracelog.Logger interface.
 // It adapts pgx log messages to our structured logr.Logger.
@@ -52,7 +101,7 @@ func (p *pgxLoggerAdapter) Log(ctx context.Context, level tracelog.LogLevel, msg
 	pc := p.findUserCaller()
 
 	// Build slog.Attr from data with camelCase keys
-	attrs := make([]slog.Attr, 0, len(data))
+	attrs := make([]slog.Attr, 0, len(data)+3) // +3 for potential request_id, user_id and user_type
 
 	// Add source information at the beginning so it appears early in logs
 	if pc != 0 {
@@ -66,6 +115,19 @@ func (p *pgxLoggerAdapter) Log(ctx context.Context, level tracelog.LogLevel, msg
 				slog.Int("line", line),
 			))
 		}
+	}
+
+	// Add request ID if available in context
+	if requestID := getRequestID(ctx); requestID != "" {
+		attrs = append(attrs, slog.String("request_id", requestID))
+	}
+
+	// Add user information if available in context
+	if userID, userType := GetUserInfo(ctx); userID != "" {
+		attrs = append(attrs,
+			slog.String("user_id", userID),
+			slog.String("user_type", userType),
+		)
 	}
 
 	for k, v := range data {
@@ -166,3 +228,4 @@ func NewPgxLogger(log *logr.Logger) *tracelog.TraceLog {
 		LogLevel: tracelog.LogLevelInfo, // You can make this configurable
 	}
 }
+

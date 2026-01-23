@@ -159,8 +159,11 @@ func logRequest(ctx contracts.RequestContext, log *logr.Logger, config *RequestL
 
 	// Add user information if enabled and available
 	if config.LogUser {
-		if userID := getUserID(ctx); userID != "" {
+		if userID, userType := getUserInfo(ctx); userID != "" {
 			args = append(args, "user_id", userID)
+			if userType != "" {
+				args = append(args, "user_type", userType)
+			}
 		}
 	}
 
@@ -222,18 +225,39 @@ func getResponseSize(ctx contracts.RequestContext) int64 {
 }
 
 func getUserID(ctx contracts.RequestContext) string {
+	userID, _ := getUserInfo(ctx)
+	return userID
+}
+
+// getUserInfo extracts both user ID and user type from context
+// Returns (userID, userType) where userType is the type name of the user (e.g., "id.Staff", "id.SubscriberUser")
+func getUserInfo(ctx contracts.RequestContext) (string, string) {
+	// First try using the RequestContext.GetUser() method (preferred way)
+	if user := ctx.GetUser(); user != nil {
+		// Try to get ID as string
+		if userObj, ok := user.(interface{ GetID() string }); ok {
+			return userObj.GetID(), getTypeName(user)
+		}
+		// Try to get ID as UUID
+		if userObj, ok := user.(interface{ GetID() uuid.UUID }); ok {
+			return userObj.GetID().String(), getTypeName(user)
+		}
+		// Fallback: just return type name
+		return "", getTypeName(user)
+	}
+
+	// Fallback: Try direct context access (for backwards compatibility)
 	if ctxValue, ok := ctx.(interface{ Value(string) any }); ok {
 		if user := ctxValue.Value("auth.User"); user != nil {
-			// We can't import auth here due to potential cycles, so we just return the string representation
 			if userObj, ok := user.(interface{ GetID() string }); ok {
-				return userObj.GetID()
+				return userObj.GetID(), getTypeName(user)
 			}
 			if userObj, ok := user.(interface{ GetID() uuid.UUID }); ok {
-				return userObj.GetID().String()
+				return userObj.GetID().String(), getTypeName(user)
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 func shouldDebugLog(ctx contracts.RequestContext, config *RequestLogConfig) bool {
