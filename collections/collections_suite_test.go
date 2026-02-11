@@ -31,6 +31,14 @@ func (o Org) ParentIdentifier() *uuid.UUID {
 	return o.ParentID
 }
 
+func (o Org) ToMap() map[string]any {
+	return map[string]any{
+		"id":       o.ID.String(),
+		"name":     o.Name,
+		"parentId": o.ParentID,
+	}
+}
+
 var unitedNations []Org // Declare orgs as an empty slice
 
 func init() {
@@ -73,4 +81,4 @@ func init() {
 	unitedNations = append(unitedNations, Org{ID: uuid.New(), Name: "PAP", ParentID: &unitedNations[26].ID})        // Pan-African Parliament
 	unitedNations = append(unitedNations, Org{ID: uuid.New(), Name: "AU-IBAR", ParentID: &unitedNations[26].ID})    // African Union - Interafrican Bureau for Animal Resources
 	unitedNations = append(unitedNations, Org{ID: uuid.New(), Name: "AUDA-NEPAD", ParentID: &unitedNations[26].ID}) // African Union Development Agency - New Partnership for Africa's Development
-} 
+}

@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type ResponseHandler[T any] func(resp *http.Response) (T, error)
@@ -17,17 +16,17 @@ func LogSimpleGetRequest[T any](ctx context.Context, log *logr.Logger, url strin
 	start := time.Now()
 	var resp *http.Response = &http.Response{}
 	defer func(st time.Time) {
-		fields, msg := logrus.Fields{
-			"url":      url,
-			"method":   http.MethodGet,
-			"latency":  time.Since(st).Milliseconds(),
-		}, ""
+		args := []interface{}{
+			"url", url,
+			"method", http.MethodGet,
+			"latency", time.Since(st).Milliseconds(),
+		}
+		msg := ""
 		if resp != nil {
-			fields["size"] = resp.ContentLength
-			fields["status"] = resp.StatusCode
+			args = append(args, "size", resp.ContentLength, "status", resp.StatusCode)
 			msg = resp.Status
 		}
-		log.WithFields(fields).Info(msg)
+		log.With(args...).Info(msg)
 	}(start)
 	if resp, err = http.Get(url); err != nil {
 		return out, errors.Wrapf(err, "error fetching from %s", url)
@@ -40,7 +39,7 @@ func LogSimpleGetRequest[T any](ctx context.Context, log *logr.Logger, url strin
 }
 
 type Payload struct {
-	body io.Reader
+	body   io.Reader
 	params map[string][]string
 }
 

@@ -1,53 +1,62 @@
-package logr 
+package logr
 
 import (
+	"context"
+	"log/slog"
+	"os"
+
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 )
 
-const version = 1
-const processIdField = "process_id"
-const traceIdField = "trace_id"
-
-var log *Logger
+var (
+	log         *Logger
+	auditLogger *AuditLogger
+)
 
 type Logger struct {
-	*logrus.Entry
+	*slog.Logger
 	host      string
 	processID string
 	traceID   string
 }
 
-func loggerCopy() *Logger {
-	e := *log.Entry
-	return &Logger{
-		Entry: &e,
-		host:  log.host,
+type AuditLogger struct {
+	writer AuditWriter
+}
+
+func (l *AuditLogger) Log(entry map[string]interface{}) {
+	if l.writer != nil {
+		_ = l.writer.Write(entry)
 	}
 }
 
 func Log() *Logger {
-	return loggerCopy()
+	return log
 }
 
-func SetUpLogger(l *logrus.Entry) error {
-	host, level := _getHost(), _getLogLevel()
+func Audit() *AuditLogger {
+	return auditLogger
+}
+
+func SetAuditWriter(w AuditWriter) {
+	if auditLogger != nil {
+		// Ensure the writer is non-blocking.
+		auditEnv := logrEnv.Extend("AUDIT_LOG")
+		auditLogger.writer = NewNonBlockingAuditWriter(w, auditEnv.Get("ASYNC_WRITER_BUFFER_MAX_SIZE", 1000).Int()) // Default buffer size of 1000
+	}
+}
+
+func SetUpLogger(l *slog.Logger, w AuditWriter) {
+	host, _ := os.Hostname()
 
 	log = &Logger{
-		Entry: l,
-		host:  host,
+		Logger: l.With("host", host),
+		host:   host,
 	}
-
-	log.Entry = l.WithField("host", host)
-	log.Logger.SetReportCaller(true)
-	log.Logger.SetLevel(level)
-
-	return nil
-}
-
-// SetFormatterJSON set JSON output format
-func SetFormatterJSON() {
-	log.Logger.SetFormatter(&logrus.JSONFormatter{})
+	auditLogger = &AuditLogger{}
+	if w != nil {
+		SetAuditWriter(w)
+	}
 }
 
 // TID add trace_id field to log output
@@ -55,7 +64,7 @@ func (l *Logger) TID() *Logger {
 	if l.traceID == "" {
 		l.traceID = uuid.New().String()
 	}
-	l.Entry = l.WithField(traceIdField, l.traceID)
+	l.Logger = l.With("trace_id", l.traceID)
 	return l
 }
 
@@ -64,49 +73,26 @@ func (l *Logger) GetTID() string {
 	return l.traceID
 }
 
-// TID generate trace_id field to log output
-func TID() *Logger {
-	Log := loggerCopy()
-	if Log.traceID == "" {
-		Log.traceID = uuid.New().String()
-	}
-	Log.Entry = Log.WithField(traceIdField, Log.traceID)
-	return Log
-}
-
-// WithTID set trace_id field to log output
-func WithTID(tid string) *Logger {
-	Log := loggerCopy()
-	Log.Entry = Log.WithField(traceIdField, tid)
-	return Log
-}
-
 // WithTID set trace_id field to log output
 func (l *Logger) WithTID(tid string) *Logger {
-	l.Entry = l.WithField(traceIdField, tid)
+	l.Logger = l.With("trace_id", tid)
 	return l
 }
 
-// ExtendWithTID set trace_id field to log output
+// ExtendWithTID returns a new logger with the trace_id field
 func (l *Logger) ExtendWithTID(tid string) *Logger {
-	e := *l.Entry
-	out := &Logger{
-		Entry: &e,
-		host:  log.host,
+	return &Logger{
+		Logger: l.Logger.With("trace_id", tid),
+		host:   l.host,
 	}
-	out.Entry = l.WithField(traceIdField, tid)
-	return out
 }
 
-// ExtendWithField set trace_id field to log output
-func (l *Logger) ExtendWithField(field, value string) *Logger {
-	e := *l.Entry
-	out := &Logger{
-		Entry: &e,
-		host:  log.host,
+// ExtendWithField returns a new logger with the given field
+func (l *Logger) ExtendWithField(field string, value interface{}) *Logger {
+	return &Logger{
+		Logger: l.Logger.With(field, value),
+		host:   l.host,
 	}
-	out.Entry = l.WithField(field, value)
-	return out
 }
 
 // PID add process_id field to log output
@@ -114,57 +100,12 @@ func (l *Logger) PID() *Logger {
 	if l.processID == "" {
 		l.processID = uuid.New().String()
 	}
-	l.Entry = l.WithField(processIdField, l.processID)
+	l.Logger = l.With("process_id", l.processID)
 	return l
 }
 
-// PID generate process_id field to log output
-func PID() *Logger {
-	Log := loggerCopy()
-	if Log.processID == "" {
-		Log.processID = uuid.New().String()
-	}
-	Log.Entry = Log.WithField(processIdField, Log.processID)
-	return Log
-}
-
-// InReqURL add incoming request url to log output
-func (l *Logger) InReqURL(incomeRequestURL string) *Logger {
-	l.Entry = l.WithField("income_request_url", incomeRequestURL)
+// Ctx returns a new logger with context values
+func (l *Logger) Ctx(ctx context.Context) *Logger {
+	// This is a placeholder for context-aware logging if needed in the future
 	return l
 }
-
-// InReqURL add incoming request url to log output
-func InReqURL(incomeRequestURL string) *Logger {
-	Log := loggerCopy()
-	Log.Entry = Log.WithField("income_request_url", incomeRequestURL)
-	return Log
-}
-
-// OutReqURL add outcoming request url to log output
-func (l *Logger) OutReqURL(outcomeRequestURL string) *Logger {
-	l.Entry = l.WithField("outcome_request_url", outcomeRequestURL)
-	return l
-}
-
-// OutReqURL add outcoming request url to log output
-func OutReqURL(outcomeRequestURL string) *Logger {
-	Log := loggerCopy()
-	Log.Entry = Log.WithField("outcome_request_url", outcomeRequestURL)
-	return Log
-}
-
-// FMsg full log message to log output
-func (l Logger) FMsg(fullMsg string) Logger {
-	l.Entry = l.WithField("full_message", fullMsg)
-	return l
-}
-
-// FMsg full log message to log output
-func FMsg(fullMsg string) Logger {
-	Log := loggerCopy()
-	Log.Entry = Log.WithField("full_message", fullMsg)
-	return *Log
-}
-
-

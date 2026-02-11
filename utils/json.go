@@ -1,11 +1,11 @@
 package utils
 
 import (
+	"fmt"
 
+	json "github.com/json-iterator/go"
 	"github.com/kod2ulz/gostart/collections"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/sirupsen/logrus"
-	json "github.com/json-iterator/go"
 )
 
 type jsonUtils struct{}
@@ -14,7 +14,7 @@ var JSON jsonUtils
 
 func (u jsonUtils) PrettyString(log *logr.Logger, obj interface{}) string {
 	if data, err := json.MarshalIndent(obj, "", "  "); err != nil {
-		log.Printf("%T: data marshalling of %T failed. %v", u, obj, err)
+		log.Error("data marshalling failed", "object_type", fmt.Sprintf("%T", obj), "error", err)
 	} else {
 		return string(data)
 	}
@@ -24,25 +24,25 @@ func (u jsonUtils) PrettyString(log *logr.Logger, obj interface{}) string {
 func (u jsonUtils) Bytes(log *logr.Logger, obj interface{}) (data []byte) {
 	var err error
 	if data, err = json.Marshal(obj); err != nil {
-		log.Printf("data marshalling of %T failed. %v", obj, err)
+		log.Error("data marshalling failed", "object_type", fmt.Sprintf("%T", obj), "error", err)
 	}
 	return
 }
 
-func (u jsonUtils) String(log *logrus.Entry, obj interface{}) string {
+func (u jsonUtils) String(log *logr.Logger, obj interface{}) string {
 	if data, err := json.Marshal(obj); err != nil {
-		log.Printf("data marshalling of %T failed. %v", obj, err)
+		log.Error("data marshalling failed", "object_type", fmt.Sprintf("%T", obj), "error", err)
 	} else {
 		return string(data)
 	}
 	return ""
 }
 
-func (u jsonUtils) Decode(log *logrus.Entry, data []byte) (obj interface{}) {
-	if err := json.Unmarshal(data, obj); err != nil {
-		log.Printf("data un marshalling of %T failed. %v", obj, err)
+func (u jsonUtils) Decode(log *logr.Logger, data []byte, obj interface{}) interface{} {
+	if err := json.Unmarshal(data, &obj); err != nil {
+		log.Error("data un-marshalling failed", "object_type", fmt.Sprintf("%T", obj), "error", err)
 	}
-	return
+	return obj
 }
 
 func (u jsonUtils) ToMap(obj interface{}) (out collections.Map[string, interface{}]) {

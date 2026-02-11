@@ -2,12 +2,12 @@ package http
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 
 	"github.com/goccy/go-json"
-	"github.com/pkg/errors"
 )
 
 func setUrlQueryParams(_url *url.URL, params map[string][]string) {
@@ -34,7 +34,7 @@ func toReader(body interface{}) (out io.Reader, err error) {
 	} else if out, ok = body.(io.Reader); ok {
 		return out, nil
 	} else if data, err = json.Marshal(body); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal request body to json")
+		return nil, fmt.Errorf("failed to marshal request body to json: %w", err)
 	}
 	return bytes.NewReader(data), nil
 }
@@ -42,7 +42,7 @@ func toReader(body interface{}) (out io.Reader, err error) {
 func newHttpRequest(_url *url.URL, method string, body interface{}) (request *http.Request, err error) {
 	var payload io.Reader
 	if payload, err = toReader(body); err != nil {
-		return nil, errors.Wrap(err, "failed to encode body into reader")
-	} 
+		return nil, fmt.Errorf("failed to encode body into reader: %w", err)
+	}
 	return http.NewRequest(method, _url.String(), payload)
 }

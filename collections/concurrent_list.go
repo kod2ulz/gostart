@@ -2,7 +2,6 @@ package collections
 
 import "sync"
 
-
 func ConcurrentList[T any]() *concurrentList[T] {
 	return &concurrentList[T]{data: make(List[T], 0)}
 }
@@ -51,21 +50,21 @@ func (l *concurrentList[T]) Clear() bool {
 func (l *concurrentList[T]) Add(args ...T) *concurrentList[T] {
 	l.mx.Lock()
 	defer l.mx.Unlock()
-  l.data.Add(args...)
+	l.data.Add(args...)
 	return l
 }
 
 func (l *concurrentList[T]) Of(args ...T) *concurrentList[T] {
 	l.mx.Lock()
 	defer l.mx.Unlock()
-  l.data.Of(args...)
+	l.data.Of(args...)
 	return l
 }
 
 func (l *concurrentList[T]) Append(args ...T) *concurrentList[T] {
 	l.mx.Lock()
 	defer l.mx.Unlock()
-  l.data.Append(args...)
+	l.data.Append(args...)
 	return l
 }
 
@@ -87,10 +86,16 @@ func (l *concurrentList[T]) Iterate(fn func(int, T) error) (err error) {
 	return l.data.Iterate(fn)
 }
 
-func (l *concurrentList[T]) Filter(filterFn func(i int, val T) bool) (out List[T]) {
+func (l *concurrentList[T]) Filter(filterFn func(val T) bool) (out List[T]) {
 	l.mx.RLock()
 	defer l.mx.RUnlock()
 	return l.data.Filter(filterFn)
+}
+
+func (l *concurrentList[T]) Find(filterFn func(i int, val T) bool) (out List[T]) {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
+	return l.data.Find(filterFn)
 }
 
 func (l *concurrentList[T]) ForEach(fn func(i int, val T) T) (out []T) {

@@ -1,0 +1,121 @@
+package contracts
+
+import (
+	"context"
+	"net/http"
+	"strconv"
+
+	"github.com/kod2ulz/gostart/ierrors"
+)
+
+// RequestParam defines the interface for request parameter structs.
+// Implementations should embed contracts.RequestModal[T] for default behavior.
+type RequestParam interface {
+	// Validate validates the request parameters using struct tags
+	Validate(ctx RequestContext) error
+
+	// RequestLoad loads and populates the request from the HTTP context
+	RequestLoad(ctx RequestContext) (RequestParam, error)
+
+	// ContextKey returns the key used to store this parameter in context
+	ContextKey() string
+
+	// ContextLoad retrieves the parameter from a standard Go context
+	ContextLoad(ctx context.Context) (RequestParam, error)
+}
+
+// RequestContext defines the interface for accessing request data in a framework-agnostic way.
+// This interface abstracts away the underlying web framework's context.
+type RequestContext interface {
+	// Query returns the value of a URL query parameter with optional default
+	Query(key string, defaultValue ...string) Value
+
+	// Param returns the value of a URL path parameter with optional default
+	Param(key string, defaultValue ...string) Value
+
+	// Header returns the value of an HTTP header
+	Header(key string) string
+
+	// ShouldBindJSON binds the request body to the given object
+	ShouldBindJSON(obj interface{}) error
+
+	// Context returns the underlying standard Go context.Context
+	Context() context.Context
+
+	// RequestID returns the unique identifier for this request
+	RequestID() string
+
+	// Request returns the underlying HTTP request
+	Request() *http.Request
+
+	// GetUser retrieves the authenticated user from context
+	// Returns the user stored in context by authentication middleware
+	// Returns nil if no user is authenticated or user is not found in context
+	//
+	// Usage:
+	//   if user := ctx.GetUser(); user != nil {
+	//       userID := user.GetID()  // Access user ID
+	//   }
+	//
+	// For typed user retrieval, use your auth package's GetCurrentUser[ID, U] helper:
+	//   user, err := auth.GetCurrentUser[uuid.UUID, id.Staff](ctx)
+	GetUser() any
+}
+
+// Value represents a parameter value that can be converted to various types
+type Value string
+
+func (v Value) Valid() bool {
+	return v != ""
+}
+
+func (v Value) String() string {
+	return string(v)
+}
+
+func (v Value) Int() int {
+	if v == "" {
+		return 0
+	}
+	if i, err := strconv.Atoi(string(v)); err == nil {
+		return i
+	}
+	return 0
+}
+
+func (v Value) Int64() int64 {
+	if v == "" {
+		return 0
+	}
+	if i, err := strconv.ParseInt(string(v), 10, 64); err == nil {
+		return i
+	}
+	return 0
+}
+
+func (v Value) Float64() float64 {
+	if v == "" {
+		return 0
+	}
+	if f, err := strconv.ParseFloat(string(v), 64); err == nil {
+		return f
+	}
+	return 0
+}
+
+func (v Value) Bool() bool {
+	if v == "" {
+		return false
+	}
+	if b, err := strconv.ParseBool(string(v)); err == nil {
+		return b
+	}
+	return false
+}
+
+// ParamsFromContext retrieves a RequestParam from a standard Go context
+func ParamsFromContext[P RequestParam](ctx context.Context) (P, ierrors.Error) {
+	// Implementation needed - will be filled later
+	var zero P
+	return zero, nil
+}

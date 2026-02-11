@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/sqlc"
-	"github.com/kod2ulz/gostart/utils"
 )
 
-var env = utils.Env.Helper("SQL_QUERY_BUILDER")
+var env = config.Env.Helper("SQL_QUERY_BUILDER")
 
 var (
 	SELECT_COUNT_FIELDS = env.Get("SELECT_COUNT_FIELDS", "*").StringList()
@@ -47,7 +47,7 @@ type SqlBuild[T any] struct {
 	rowScanner   RowScanFunc[T]
 	where        *WhereCriteria
 	noSort       bool
-	noLimit       bool
+	noLimit      bool
 	dbtx         sqlc.DBTX
 }
 

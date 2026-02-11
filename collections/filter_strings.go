@@ -10,8 +10,8 @@ type filters struct {
 	Strings stringFilters
 }
 
-type stringFilters struct {}
+type stringFilters struct{}
 
 func (stringFilters) NotBlank(_ int, str string) bool {
-	return strings.Trim(str, " ") != "" 
+	return strings.Trim(str, " ") != ""
 }

@@ -72,9 +72,9 @@ func (l List[T]) Sort(lessFn func(t1, t2 T) bool) (out []T) {
 	return
 }
 
-func (l List[T]) SortStable(comp func(t1, t2 T) int)  {
+func (l List[T]) SortStable(comp func(t1, t2 T) int) {
 	if l.Empty() {
-		return 
+		return
 	}
 	slices.SortStableFunc(l, comp)
 }
@@ -95,13 +95,26 @@ func (l List[T]) Iterate(fn func(int, T) error) (err error) {
 	return
 }
 
-func (l List[T]) Filter(filterFn func(i int, val T) bool) (out List[T]) {
+func (l List[T]) Find(filterFn func(i int, val T) bool) (out List[T]) {
 	if l.Empty() {
 		return l
 	}
 	out = make([]T, 0)
 	for i := range l {
 		if filterFn(i, l[i]) {
+			out = append(out, l[i])
+		}
+	}
+	return
+}
+
+func (l List[T]) Filter(filterFn func(val T) bool) (out List[T]) {
+	if l.Empty() {
+		return l
+	}
+	out = make([]T, 0)
+	for i := range l {
+		if filterFn(l[i]) {
 			out = append(out, l[i])
 		}
 	}

@@ -63,5 +63,30 @@ var _ = Describe("TreeNode", func() {
 			Expect(un.Find(uca.ID)).To(BeNil())
 			Expect(un.Get(au.ID).Get(eac.ID).Get(uca.ID)).To(BeNil())
 		})
+
+		It("can flatten the tree into a list", func() {
+			flatList := un.Flatten()
+			Expect(flatList.Size()).To(Equal(39))
+			// Further checks can be added to verify the content of the list
+		})
+
+		It("can walk the tree and visit each node", func() {
+			visited := make(map[uuid.UUID]bool)
+			un.Walk(func(node *colx.TreeNode[uuid.UUID, Org]) {
+				visited[node.Value().ID] = true
+			})
+			Expect(len(visited)).To(Equal(39))
+			for _, org := range unitedNations {
+				Expect(visited[org.ID]).To(BeTrue())
+			}
+		})
+
+		It("can marshal the tree to JSON", func() {
+			jsonData, err := un.Json()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(jsonData).NotTo(BeEmpty())
+			// Here you could unmarshal the JSON and verify its structure,
+			// but for this test, we'll just ensure it doesn't error and is not empty.
+		})
 	})
 })

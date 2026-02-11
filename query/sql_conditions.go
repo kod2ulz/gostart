@@ -20,13 +20,15 @@ const (
 	CompareNil                CompareOperator = "nil"
 	CompareLike               CompareOperator = "lyk"
 	CompareIn                 CompareOperator = "in"
-	CompareAny                 CompareOperator = "any"
+	CompareAny                CompareOperator = "any"
 	CompareBetween            CompareOperator = "bt"
 	CompareExists             CompareOperator = "exz"
 	CompareRaw                CompareOperator = "-"
+	CompareOr                 CompareOperator = "or"
 )
 
-func (op CompareOperator) Eval(field string, argCount int) string {
+func (op CompareOperator) Eval(path []string, argCount int) string {
+	field := formatPath(path)
 	switch op {
 	case CompareEqual:
 		return field + " = " + ARG_PLACEHOLDER
@@ -47,7 +49,7 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 		for i := 0; i < argCount; i++ {
 			args[i] = ARG_PLACEHOLDER
 		}
-		return field + " in (" + strings.Join(args, ",") + ")"
+		return field + " in (" + strings.Join(args, ", ") + ")"
 	case CompareAny:
 		args := make([]string, argCount)
 		for i := 0; i < argCount; i++ {
@@ -71,6 +73,28 @@ func (op CompareOperator) Eval(field string, argCount int) string {
 	}
 }
 
+func formatPath(path []string) string {
+	if len(path) == 0 {
+		return ""
+	}
+	if len(path) == 1 {
+		return path[0]
+	}
+	var sb strings.Builder
+	sb.WriteString("(")
+	sb.WriteString(path[0])
+	for i := 1; i < len(path); i++ {
+		if i == len(path)-1 {
+			sb.WriteString(" ->> ")
+		} else {
+			sb.WriteString(" -> ")
+		}
+		sb.WriteString(fmt.Sprintf("'%s'", path[i]))
+	}
+	sb.WriteString(")")
+	return sb.String()
+}
+
 type Constraint string
 
 const (
@@ -79,16 +103,16 @@ const (
 )
 
 var (
-	ARG_PLACEHOLDER = "????"
+	ARG_PLACEHOLDER = "?"
 )
 
 type Condition func(*WhereCriteria)
 
-func doLeafCompare(op CompareOperator, field string, value interface{}) Condition {
+func doLeafCompare(op CompareOperator, path []string, value any) Condition {
 	return func(cr *WhereCriteria) {
 		wc := &WhereCriteria{
 			operator: op,
-			field:    field,
+			path:     path,
 			value:    value,
 			leaf:     true,
 		}
@@ -106,9 +130,9 @@ func doLeafNullCompare(null bool, fields ...string) Condition {
 		}
 		for i := range fields {
 			cr.Append(cr.constraint, &WhereCriteria{
-				field: fields[i],
-				null:  null,
-				leaf:  true,
+				path: []string{fields[i]},
+				null: null,
+				leaf: true,
 			})
 		}
 	}
@@ -129,78 +153,96 @@ func doNode(constraint Constraint, conditions ...Condition) Condition {
 
 func Null(fields ...string) Condition    { return Condition(doLeafNullCompare(true, fields...)) }
 func NotNull(fields ...string) Condition { return Condition(doLeafNullCompare(false, fields...)) }
-func Equal(field string, value interface{}) Condition {
-	return Condition(doLeafCompare(CompareEqual, field, value))
+func Equal(field string, value any) Condition {
+	return Condition(doLeafCompare(CompareEqual, []string{field}, value))
 }
-func Like(field string, value interface{}) Condition {
-	return Condition(doLeafCompare(CompareLike, field, value))
+func Like(field string, value any) Condition {
+	return Condition(doLeafCompare(CompareLike, []string{field}, value))
 }
-func NotEqual(field string, value interface{}) Condition {
-	return Condition(doLeafCompare(CompareNotEqual, field, value))
+func NotEqual(field string, value any) Condition {
+	return Condition(doLeafCompare(CompareNotEqual, []string{field}, value))
 }
-func LessThan(field string, value interface{}) Condition {
-	return Condition(doLeafCompare(CompareLessThan, field, value))
+func LessThan(field string, value any) Condition {
+	return Condition(doLeafCompare(CompareLessThan, []string{field}, value))
 }
-func GreaterThan(field string, value interface{}) Condition {
-	return Condition(doLeafCompare(CompareGreaterThan, field, value))
+func GreaterThan(field string, value any) Condition {
+	return Condition(doLeafCompare(CompareGreaterThan, []string{field}, value))
 }
-func LessThanOrEqual(field string, value interface{}) Condition {
-	return Condition(doLeafCompare(CompareLessThanOrEqual, field, value))
+func LessThanOrEqual(field string, value any) Condition {
+	return Condition(doLeafCompare(CompareLessThanOrEqual, []string{field}, value))
 }
-func GreaterThanOrEqual(field string, value interface{}) Condition {
-	return Condition(doLeafCompare(CompareGreaterThanOrEqual, field, value))
+func GreaterThanOrEqual(field string, value any) Condition {
+	return Condition(doLeafCompare(CompareGreaterThanOrEqual, []string{field}, value))
 }
 func In[T any](field string, values ...T) Condition {
-	return Condition(doLeafCompare(CompareIn, field, values))
+	return Condition(doLeafCompare(CompareIn, []string{field}, values))
 }
 func Any[T any](field string, values ...T) Condition {
-	return Condition(doLeafCompare(CompareAny, field, values))
+	return Condition(doLeafCompare(CompareAny, []string{field}, values))
 }
 func Between[T any](field string, low, high T) Condition {
-	return Condition(doLeafCompare(CompareBetween, field, []T{low, high}))
+	return Condition(doLeafCompare(CompareBetween, []string{field}, []T{low, high}))
 }
 func Exists[T any](subQuery string, args ...T) Condition {
-	return Condition(doLeafCompare(CompareExists, subQuery, args))
+	return Condition(doLeafCompare(CompareExists, []string{subQuery}, args))
 }
-
-// func Raw(queryStr string) Condition {
-// 	return Condition(doLeafCompare(CompareIn, field, values))
-// }
 
 func And(conditions ...Condition) Condition { return doNode(WhereAnd, conditions...) }
 func Or(conditions ...Condition) Condition  { return doNode(WhereOr, conditions...) }
 
 func UrlFieldParams(p URLSearchParam) Condition {
 	conditions := make([]Condition, 0)
-	if len(p.GetFieldValues()) > 0 {
-		for field, value := range p.GetFieldValues() {
-			conditions = append(conditions, Equal(field, value))
-		}
-	}
-	if len(p.GetFieldNullables()) > 0 {
-		for field, null := range p.GetFieldNullables() {
-			if null {
-				conditions = append(conditions, Null(field))
-			} else {
-				conditions = append(conditions, NotNull(field))
-			}
-		}
-	}
-	if len(p.GetFieldComparisons()) > 0 {
-		for field, compare := range p.GetFieldComparisons() {
-			for op, val := range compare {
-				conditions = append(conditions, doLeafCompare(op, field, val))
-			}
-		}
+	for _, cond := range p.GetConditions() {
+		conditions = append(conditions, doLeafCompare(cond.Operator, cond.DBPath, cond.Value))
+		// if cond.Operator == CompareOr {
+		// 	// Handle OR conditions
+		// 	conditions = append(conditions, createOrCondition(cond.DBPath, cond.Value))
+		// } else {
+		// 	conditions = append(conditions, doLeafCompare(cond.Operator, cond.DBPath, cond.Value))
+		// }
 	}
 	return And(conditions...)
+}
+
+func createOrCondition(path []string, value any) Condition {
+	return func(cr *WhereCriteria) {
+		if orData, ok := value.(map[string]any); ok {
+			// Handle within-field OR (originalOperator + values)
+			if originalOp, ok := orData["originalOperator"].(CompareOperator); ok {
+				if values, ok := orData["values"].([]any); ok {
+					// Create multiple conditions for OR
+					orConditions := make([]Condition, 0, len(values))
+					for _, val := range values {
+						orConditions = append(orConditions, doLeafCompare(originalOp, path, val))
+					}
+					// Use the Or function to combine them
+					orCondition := Or(orConditions...)
+					orCondition(cr)
+				}
+			}
+			// Handle across-field OR (conditions)
+			if conditions, ok := orData["conditions"].([]ParsedCondition); ok {
+				// Create conditions for each across-field OR condition
+				orConditions := make([]Condition, 0, len(conditions))
+				for _, cond := range conditions {
+					orConditions = append(orConditions, doLeafCompare(cond.Operator, cond.DBPath, cond.Value))
+				}
+				// Use the Or function to combine them
+				orCondition := Or(orConditions...)
+				orCondition(cr)
+			}
+		} else {
+			// Fallback to regular comparison - should not happen with CompareOr
+			doLeafCompare(CompareEqual, path, value)(cr)
+		}
+	}
 }
 
 type WhereCriteria struct {
 	constraint Constraint
 	operator   CompareOperator
-	field      string
-	value      interface{}
+	path       []string
+	value      any
 	null       bool
 	leaf       bool
 
@@ -217,26 +259,17 @@ func (wc *WhereCriteria) Append(cs Constraint, cr *WhereCriteria) {
 	wc.criteria[cs] = append(wc.criteria[cs], cr)
 }
 
-func (wc *WhereCriteria) finalise(do bool, sb *strings.Builder, val string, args ...interface{}) {
-	if !do || val == "" || len(args) == 0 {
-		sb.WriteString(val)
-		return
-	}
-	var out string = val
-	for i := range args {
-		out = strings.Replace(out, ARG_PLACEHOLDER, fmt.Sprintf("$%d", i+1), 1)
-	}
-	sb.WriteString(out)
-}
-
-func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interface{}) {
+func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []any) {
 	if !wc.leaf {
 		if len(wc.criteria) == 0 {
 			return
 		}
-		args = make([]interface{}, 0)
+		args = make([]any, 0)
 		queries0 := make([]string, 0)
-		for cs := range wc.criteria {
+		for _, cs := range []Constraint{WhereOr, WhereAnd} {
+			if _, ok := wc.criteria[cs]; !ok {
+				continue
+			}
 			if len(wc.criteria[cs]) == 0 {
 				continue
 			}
@@ -261,30 +294,41 @@ func (wc *WhereCriteria) Build(finalise bool) (sb strings.Builder, args []interf
 				queries0 = append(queries0, "("+strings.Join(queries1, fmt.Sprintf(") %s (", cs))+")")
 			}
 		}
+		var query string
 		switch len(queries0) {
 		case 0:
 			return
 		case 1:
-			wc.finalise(finalise, &sb, queries0[0], args...)
+			query = queries0[0]
 		default:
-			wc.finalise(finalise, &sb, "("+strings.Join(queries0, fmt.Sprintf(") %s (", wc.constraint))+")", args...)
+			query = "(" + strings.Join(queries0, fmt.Sprintf(") %s (", wc.constraint)) + ")"
+		}
+		if finalise {
+			finalQuery := query
+			for i := range args {
+				finalQuery = strings.Replace(finalQuery, ARG_PLACEHOLDER, fmt.Sprintf("$%d", i+1), 1)
+			}
+			sb.WriteString(finalQuery)
+		} else {
+			sb.WriteString(query)
 		}
 		return
 	}
 	if wc.value == nil {
+		field := formatPath(wc.path)
 		if !wc.null {
-			sb.WriteString(fmt.Sprintf("%s is not null", wc.field))
+			sb.WriteString(fmt.Sprintf("%s is not null", field))
 		} else {
-			sb.WriteString(fmt.Sprintf("%s is null", wc.field))
+			sb.WriteString(fmt.Sprintf("%s is null", field))
 		}
 		return
 	}
-	switch wc.operator{
+	switch wc.operator {
 	case CompareIn, CompareBetween:
 		utils.StructCopy(wc.value, &args)
 	default:
-		args = []interface{}{wc.value}
+		args = []any{wc.value}
 	}
-	sb.WriteString(wc.operator.Eval(wc.field, len(args)))
+	sb.WriteString(wc.operator.Eval(wc.path, len(args)))
 	return
 }

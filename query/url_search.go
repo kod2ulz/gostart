@@ -3,80 +3,83 @@ package query
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iancoleman/strcase"
-	"github.com/kod2ulz/gostart/object"
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/collections"
+	"github.com/kod2ulz/gostart/contracts"
 )
 
-var (
-// _ URLSearchParam  = (nil).(*urlSearch)
-// _ URLSearchLoader = (*urlSearch).(nil)
-)
+// UrlParameterProvider is a function type that reads a value from a URL query.
+type UrlParameterProvider func(ctx context.Context, name string, _default ...string) (out contracts.Value)
 
-type UrlFieldReader func(ctx context.Context, name string, _default ...string) (out utils.Value)
+// ParsedCondition holds a validated and typed condition ready for the SQL builder.
+type ParsedCondition struct {
+	DBPath   []string
+	Operator CompareOperator
+	Value    any
+}
 
+// ParsedSort holds a validated sort instruction.
+type ParsedSort struct {
+	DBName string
+	Type   SortType
+}
+
+// URLSearchParam is the interface for accessing parsed URL search parameters.
 type URLSearchParam interface {
-	GetFieldValues() map[string]any
-	GetFieldNullables() map[string]bool
-	GetFieldSort() map[string]SortType
-	GetFieldComparisons() map[string]map[CompareOperator]any
+	GetConditions() []ParsedCondition
+	GetSorts() []ParsedSort
 	GetLimit() int64
 	GetOffset() int64
-	HasFieldParams() bool
-	HasField(field string) bool
-	HasComparison(field string, comparator CompareOperator) bool
-	HasAnyComparison(field string, comparator ...CompareOperator) bool
-	WithField(field string, val any) URLSearchParam
-	WithTimeFormat(format string, fields ...string) URLSearchParam
-	WithComparison(field string, comparator CompareOperator, val any) URLSearchParam
+
+	// Parameter override methods for service/data layer
+	AddCondition(field string, operator CompareOperator, value any) URLSearchParam
+	AddField(field string, value any) URLSearchParam
+	AddSort(field string, sortType SortType) URLSearchParam
+	SetLimit(limit int64) URLSearchParam
+	SetOffset(offset int64) URLSearchParam
 }
 
-type URLSearchLoader interface {
-	Load(ctx context.Context, fields ...string) URLSearchLoader
-	LoadBoundaries(ctx context.Context) URLSearchLoader
-	LoadFieldSort(ctx context.Context, fields ...string) URLSearchLoader
-	LoadFieldLookups(ctx context.Context, fields ...string) URLSearchLoader
-	LoadFieldComparisons(ctx context.Context, fields ...string) URLSearchLoader
-}
-
-func SearchUrl(queryReader UrlFieldReader) *urlSearch {
-	return &urlSearch{query: queryReader}
+// SearchURL initializes a new URL search parser.
+func SearchURL(queryReader UrlParameterProvider, defs FieldDefinitions) *urlSearch {
+	return &urlSearch{
+		query:      queryReader,
+		defs:       defs,
+		conditions: make([]ParsedCondition, 0),
+		sorts:      make([]ParsedSort, 0),
+	}
 }
 
 type urlSearch struct {
-	limit       int64
-	offset      int64
-	fields      map[string]any
-	sort        map[string]SortType
-	null        map[string]bool
-	comparisons map[string]map[CompareOperator]any
-	query       UrlFieldReader
+	limit      int64
+	offset     int64
+	conditions []ParsedCondition
+	sorts      []ParsedSort
+	query      UrlParameterProvider
+	defs       FieldDefinitions
 }
 
-func (s *urlSearch) Load(ctx context.Context, fields ...string) *urlSearch {
-	return s.LoadBoundaries(ctx).
-		LoadFieldSort(ctx, fields...).
-		LoadFieldLookups(ctx, fields...).
-		LoadFieldComparisons(ctx, fields...)
-}
+// Load parses the URL query parameters based on the provided field definitions.
+func (s *urlSearch) Load(ctx context.Context) *urlSearch {
+	s.loadSort(ctx)
+	s.loadBoundaries(ctx)
+	s.loadFields(ctx, s.defs, []string{}, "")
+	s.loadOrFields(ctx)
 
-func (s *urlSearch) LoadFieldSort(ctx context.Context, fields ...string) *urlSearch {
-	if len(fields) == 0 {
-		return s
-	} else if s.sort == nil {
-		s.sort = make(map[string]SortType)
+	// If we have only one condition and it's an OR condition, remove it
+	// Or conditions only make sense when there are multiple fields to compare with
+	if len(s.conditions) == 1 && s.conditions[0].Operator == CompareOr {
+		s.conditions = []ParsedCondition{}
 	}
-	for i := range fields {
-		if val := s.query(ctx, "sort_"+fields[i]); val.Valid() && sortTypeValid(val.String()) {
-			s.sort[fields[i]] = SortType(val.String())
-		}
-	}
+
 	return s
 }
 
-func (s *urlSearch) LoadBoundaries(ctx context.Context) *urlSearch {
+func (s *urlSearch) loadBoundaries(ctx context.Context) {
 	s.limit = s.query(ctx, "limit", fmt.Sprint(SELECT_LIMIT)).Int64()
 	s.offset = s.query(ctx, "offset", "0").Int64()
 	if s.offset == 0 {
@@ -84,243 +87,571 @@ func (s *urlSearch) LoadBoundaries(ctx context.Context) *urlSearch {
 			s.offset = (page - 1) * s.limit
 		}
 	}
-	return s
 }
 
-func (s *urlSearch) LoadFieldLookups(ctx context.Context, fields ...string) *urlSearch {
-	if len(fields) == 0 {
-		return s
-	} else if s.fields == nil {
-		s.fields = make(map[string]any)
-	}
-	for i := range fields {
-		if val := s.query(ctx, fields[i]); val.Valid() {
-			s.fields[fields[i]] = val
-		} else if val = s.query(ctx, strcase.ToCamel(fields[i])); val.Valid() {
-			s.fields[fields[i]] = val
+func (s *urlSearch) loadFields(ctx context.Context, defs FieldDefinitions, parentDBPath []string, parentAPIPath string) {
+	for name, def := range defs {
+		apiPath := name
+		if parentAPIPath != "" {
+			apiPath = parentAPIPath + "." + name
 		}
+
+		dbPath := append(parentDBPath, def.DBName)
+
+		if def.Type == TypeJSON && def.Schema != nil {
+			s.loadFields(ctx, def.Schema, dbPath, apiPath)
+		}
+
+		if def.Sort {
+			s.loadLegacySort(ctx, apiPath, def.DBName)
+		}
+
+		// Load tilde wildcard syntax for LIKE operations
+		if slices.Contains(def.Operators, CompareLike) {
+			s.loadTildeWildcard(ctx, apiPath, dbPath, def)
+		}
+
+		for _, op := range def.Operators {
+			if op == CompareBetween { // Skip between, as it's handled separately
+				continue
+			}
+			s.loadComparison(ctx, apiPath, dbPath, def, op)
+		}
+
+		// Special handling for 'between' operator
+		if hasBetween := slices.Contains(def.Operators, CompareBetween); hasBetween {
+			s.loadBetweenComparison(ctx, apiPath, dbPath, def)
+		}
+
+		// Special handling for 'in' operator
+		// if hasIn := slices.Contains(def.Operators, CompareIn); hasIn {
+		// 	s.loadInComparison(ctx, apiPath, dbPath, def)
+		// }
 	}
-	return s
 }
 
-func (s *urlSearch) LoadFieldComparisons(ctx context.Context, fields ...string) *urlSearch {
-	if len(fields) == 0 {
-		return s
+// findFieldValue tries to find a field value by checking different separator variations
+// Only applies separator variations (., -, _) to field names, not word casing
+func (s *urlSearch) findFieldValue(ctx context.Context, fieldName string) contracts.Value {
+	// For tilde wildcard patterns, don't apply variations - be exact
+	if strings.HasPrefix(fieldName, "~") || strings.HasSuffix(fieldName, "~") {
+		return s.query(ctx, fieldName)
 	}
-	if s.comparisons == nil {
-		s.comparisons = make(map[string]map[CompareOperator]any)
+
+	// For star-prefixed parameters, apply variations to the field name part (without star)
+	if strings.HasPrefix(fieldName, "*") {
+		fieldOnly := fieldName[1:] // Remove the star prefix
+		return s.findFieldValueWithPrefix(ctx, "*", fieldOnly)
 	}
-	if s.null == nil {
-		s.null = make(map[string]bool)
+
+	// For sort parameters, handle the field name part with separator variations
+	if realName, ok := strings.CutPrefix(fieldName, "sort_"); ok {
+		fieldOnly := realName
+		return s.findFieldValueWithPrefix(ctx, "sort_", fieldOnly)
 	}
-	for i := range fields {
-		if val := s.query(ctx, fmt.Sprintf("%s_null", fields[i])); val.Valid() {
-			s.null[fields[i]] = val.Bool()
-		} else if val = s.query(ctx, fmt.Sprintf("%s_null", strcase.ToCamel(fields[i]))); val.Valid() {
-			s.fields[fields[i]] = val
-		}
-		if _, ok := s.comparisons[fields[i]]; !ok {
-			s.comparisons[fields[i]] = make(map[CompareOperator]any)
-		}
-		for _, cp := range []CompareOperator{
-			CompareGreaterThan, CompareGreaterThanOrEqual, CompareLessThan, CompareGreaterThanOrEqual, CompareNot, CompareNotEqual} {
-			if val := s.query(ctx, fmt.Sprintf("%s_%s", fields[i], string(cp))); val.Valid() {
-				s.comparisons[fields[i]][cp] = val
-			} else if val = s.query(ctx, fmt.Sprintf("%s_%s", strcase.ToCamel(fields[i]), string(cp))); val.Valid() {
-				s.fields[fields[i]] = val
+
+	// For field names with operators (like field_gt, field_lt), handle the field part
+	if strings.Contains(fieldName, "_") {
+		parts := strings.Split(fieldName, "_")
+		if len(parts) >= 2 {
+			operator, fieldPart := parts[1], parts[0]
+			if len(parts) > 2 {
+				operator, fieldPart = parts[len(parts)-1], strings.Join(parts[:len(parts)-1], "_")
+			}
+			// Check if this is a known operator
+			switch operator {
+			case "gt", "lt", "gte", "lte", "neq", "bt", "in", "lk":
+				return s.findFieldValueWithOperator(ctx, "", fieldPart, operator)
 			}
 		}
-		for _, field := range object.String(fields[i]).Variations("~%s", "~%s~", "%s~") {
-			var val utils.Value
-			if val = s.query(ctx, field); !val.Valid() {
-				val = s.query(ctx, strcase.ToCamel(field))
-			}
-			if val.Valid() {
-				s.comparisons[fields[i]][CompareLike] = utils.Value(strings.Replace(strings.ReplaceAll(field, "~", "%"), fields[i], val.String(), 1))
-				break
-			}
-		}
 	}
-	return s
+
+	// For plain field names, apply separator variations (but preserve word casing)
+	return s.findFieldValueWithSeparatorVariations(ctx, fieldName)
 }
 
-func (r *urlSearch) GetFieldNullables() (out map[string]bool) {
-	if len(r.fields) == 0 {
-		return map[string]bool{}
+// findFieldValueWithOperator finds a field value with separator variations applied only to the field part without operator
+func (s *urlSearch) findFieldValueWithOperator(ctx context.Context, prefix, fieldName, operator string) contracts.Value {
+	// Try the original field name first
+	if val := s.query(ctx, prefix+fieldName+"_"+operator); val.Valid() {
+		return val
 	}
-	return r.null
-}
 
-func (r *urlSearch) GetFieldValues() (out map[string]any) {
-	if len(r.fields) == 0 {
-		return map[string]any{}
-	}
-	return r.fields
-}
-
-func (r *urlSearch) GetFieldSort() (out map[string]SortType) {
-	if len(r.sort) == 0 {
-		return map[string]SortType{}
-	}
-	return r.sort
-}
-
-func (r *urlSearch) GetFieldComparisons() (out map[string]map[CompareOperator]any) {
-	if len(r.comparisons) == 0 {
-		return map[string]map[CompareOperator]any{}
-	}
-	return r.comparisons
-}
-
-func (r *urlSearch) GetField(name string) (out any) {
-	return r.GetFieldValues()[name]
-}
-
-func (r *urlSearch) GetAnyQueryField(names ...string) (out any) {
-	if len(r.fields) == 0 {
-		return
-	}
-	for i := range names {
-		if val, ok := r.fields[names[i]]; ok {
+	// Try separator variations on the field name part only
+	fieldVariations := s.generateSeparatorVariations(fieldName)
+	for _, variation := range fieldVariations {
+		if val := s.query(ctx, prefix+variation+"_"+operator); val.Valid() {
 			return val
 		}
 	}
-	return
+
+	return ""
 }
 
-func (r *urlSearch) GetLimit() int64 {
-	return r.limit
-}
-
-func (r *urlSearch) GetOffset() int64 {
-	return r.offset
-}
-
-func (r *urlSearch) HasFieldParams() bool {
-	return len(r.fields)+len(r.sort)+len(r.comparisons) > 0
-}
-
-func (r *urlSearch) HasField(field string) bool {
-	if !r.HasFieldParams() {
-		return false
+// findFieldValueWithPrefix finds a field value with separator variations applied only to the field part
+func (s *urlSearch) findFieldValueWithPrefix(ctx context.Context, prefix, fieldName string) contracts.Value {
+	// Try the original field name first
+	if val := s.query(ctx, prefix+fieldName); val.Valid() {
+		return val
 	}
-	_, ok := r.fields[field]
-	return ok
-}
 
-func (r *urlSearch) HasComparison(field string, comparator CompareOperator) (ok bool) {
-	if _, ok = r.comparisons[field]; !ok {
-		return
-	}
-	_, ok = r.comparisons[field][comparator]
-	return
-}
-
-func (r *urlSearch) HasAnyComparison(field string, comparators ...CompareOperator) (ok bool) {
-	if len(comparators) == 0 {
-		return
-	} else if _, ok = r.comparisons[field]; !ok {
-		return
-	}
-	for _, c := range comparators {
-		if _, ok = r.comparisons[field][c]; ok {
-			return
+	// Try separator variations on the field name part only
+	fieldVariations := s.generateSeparatorVariations(fieldName)
+	for _, variation := range fieldVariations {
+		if val := s.query(ctx, prefix+variation); val.Valid() {
+			return val
 		}
 	}
-	return
+
+	return ""
 }
 
-func (r *urlSearch) WithTimeFormat(format string, fields ...string) URLSearchParam {
-	if len(fields) == 0 {
-		return r
+// findFieldValueWithSeparatorVariations tries different separator variations
+// Rules: firstName != firstname, but first_name == firstName == first-name
+// For dotted names: apply variations to each part separately
+func (s *urlSearch) findFieldValueWithSeparatorVariations(ctx context.Context, fieldName string) contracts.Value {
+	// Handle dotted names (JSONB fields) - apply variations to each part separately
+	if strings.Contains(fieldName, ".") {
+		return s.findFieldValueWithDotVariations(ctx, fieldName)
 	}
-	for _, f := range fields {
-		if _, ok := r.comparisons[f]; ok {
-			if _, ok = r.comparisons[f][CompareLike]; ok {
-				delete(r.comparisons[f], CompareLike)
+
+	// Handle simple field names - apply separator variations
+	return s.findFieldValueWithSimpleVariations(ctx, fieldName)
+}
+
+// findFieldValueWithDotVariations handles field names with dots (JSONB fields)
+// Each part of the dot-separated name gets separator variations applied separately
+func (s *urlSearch) findFieldValueWithDotVariations(ctx context.Context, fieldName string) contracts.Value {
+	parts := strings.Split(fieldName, ".")
+	if len(parts) != 2 {
+		return ""
+	}
+
+	columnPart := parts[0]
+	fieldPart := parts[1]
+
+	// Generate variations for the column part
+	columnVariations := s.generateSeparatorVariations(columnPart)
+
+	// Generate variations for the field part
+	fieldVariations := s.generateSeparatorVariations(fieldPart)
+
+	// Try all combinations
+	for _, colVar := range columnVariations {
+		for _, fieldVar := range fieldVariations {
+			combined := colVar + "." + fieldVar
+			if val := s.query(ctx, combined); val.Valid() {
+				return val
 			}
 		}
-		r.replaceField(f, func(v any) any {
-			if s1, ok := v.(string); ok {
-				if _, ok := r.comparisons[f]; ok {
-					if _, ok = r.comparisons[f][CompareLike]; ok {
-						r.comparisons[f][CompareEqual] = utils.Value(s1).Time(format).UTC()
-					}
-				}
-				return utils.Value(s1).Time(format).UTC()
-			} else if v1, ok := v.(utils.Value); ok {
-				if _, ok := r.comparisons[f]; ok {
-					if _, ok = r.comparisons[f][CompareLike]; ok {
-						r.comparisons[f][CompareEqual] = v1.Time(format).UTC()
-					}
-				}
-				return v1.Time(format).UTC()
+	}
+
+	return ""
+}
+
+// findFieldValueWithSimpleVariations handles field names without dots
+func (s *urlSearch) findFieldValueWithSimpleVariations(ctx context.Context, fieldName string) contracts.Value {
+	// Try all separator variations
+	variations := s.generateSeparatorVariations(fieldName)
+	for _, variation := range variations {
+		if val := s.query(ctx, variation); val.Valid() {
+			return val
+		}
+	}
+
+	return ""
+}
+
+// generateSeparatorVariations generates all valid separator variations for a field name
+// Database field names are lowercase snake_case (source of truth), generate variations from there
+// Note: firstName != firstname (word casing is preserved), but first_name == firstName == first-name
+func (s *urlSearch) generateSeparatorVariations(fieldName string) []string {
+	variations := []string{fieldName}
+
+	// If fieldName is already snake_case, generate all variations
+	if strings.Contains(fieldName, "_") {
+		// Convert to camelCase (lowerCamel)
+		camelVersion := strcase.ToLowerCamel(fieldName)
+		if camelVersion != fieldName {
+			variations = append(variations, camelVersion)
+		}
+
+		// Convert to PascalCase
+		pascalVersion := strcase.ToCamel(fieldName)
+		if pascalVersion != fieldName && pascalVersion != camelVersion {
+			variations = append(variations, pascalVersion)
+		}
+
+		// Convert to kebab-case
+		kebabVersion := strings.ReplaceAll(fieldName, "_", "-")
+		if kebabVersion != fieldName {
+			variations = append(variations, kebabVersion)
+		}
+	} else if !strings.Contains(fieldName, "_") && !strings.Contains(fieldName, "-") {
+		// If fieldName is camelCase or PascalCase, convert to snake_case first, then generate variations
+
+		// Convert to snake_case first
+		snakeVersion := strcase.ToSnake(fieldName)
+		if snakeVersion != fieldName {
+			variations = append(variations, snakeVersion)
+			// Generate variations from the snake_case version
+			camelVersion := strcase.ToLowerCamel(snakeVersion)
+			if camelVersion != fieldName && camelVersion != snakeVersion {
+				variations = append(variations, camelVersion)
 			}
-			return v
+			pascalVersion := strcase.ToCamel(snakeVersion)
+			if pascalVersion != fieldName && pascalVersion != camelVersion && pascalVersion != snakeVersion {
+				variations = append(variations, pascalVersion)
+			}
+			kebabVersion := strings.ReplaceAll(snakeVersion, "_", "-")
+			if kebabVersion != fieldName && kebabVersion != snakeVersion {
+				variations = append(variations, kebabVersion)
+			}
+		}
+	} else if strings.Contains(fieldName, "-") {
+		// If fieldName is kebab-case, convert to snake_case first, then generate variations
+		snakeVersion := strings.ReplaceAll(fieldName, "-", "_")
+		if snakeVersion != fieldName {
+			variations = append(variations, snakeVersion)
+			// Generate variations from the snake_case version
+			camelVersion := strcase.ToLowerCamel(snakeVersion)
+			if camelVersion != fieldName && camelVersion != snakeVersion {
+				variations = append(variations, camelVersion)
+			}
+			pascalVersion := strcase.ToCamel(snakeVersion)
+			if pascalVersion != fieldName && pascalVersion != camelVersion && pascalVersion != snakeVersion {
+				variations = append(variations, pascalVersion)
+			}
+		}
+	}
+
+	return variations
+}
+
+func (s *urlSearch) loadLegacySort(ctx context.Context, apiPath, dbName string) {
+
+	// Try the legacy format: sort_field=desc
+	val := s.findFieldValue(ctx, "sort_"+apiPath)
+	if val.Valid() && sortTypeValid(val.String()) {
+		s.sorts = append(s.sorts, ParsedSort{
+			DBName: dbName,
+			Type:   SortType(val.String()),
 		})
 	}
-	return r
+
 }
 
-func (r *urlSearch) replaceField(name string, modifier func(any) any) {
-	if v, ok := r.fields[name]; ok {
-		r.fields[name] = modifier(v)
+func (s *urlSearch) loadSort(ctx context.Context) {
+	// New format: sort=-field,+field (comma-separated list)
+	sortParam := s.query(ctx, "sort")
+	if !sortParam.Valid() {
+		return
 	}
-	if m, ok := r.comparisons[name]; ok {
-		for c, v := range m {
-			r.comparisons[name][c] = modifier(v)
+	sortFields := strings.SplitSeq(sortParam.String(), ",")
+	for sortField := range sortFields {
+		sortField = strings.TrimSpace(sortField)
+		if strings.TrimLeft(sortField, "+-") == "" {
+			continue
+		}
+
+		// Extract field name and direction
+		var order = ParsedSort{}
+
+		if strings.HasPrefix(sortField, "-") && len(sortField) > 1 {
+			order.DBName, order.Type = sortField[1:], SortDesc
+		} else if strings.HasPrefix(sortField, "+") && len(sortField) > 1 {
+			order.DBName, order.Type = sortField[1:], SortAsc
+		} else {
+			order.DBName, order.Type = sortField, SortAsc
+		}
+		order.DBName = strcase.ToSnake(order.DBName)
+		if def, ok := s.defs[order.DBName]; ok && def.Sort {
+			s.sorts = append(s.sorts, order)
 		}
 	}
 }
 
-func (r *urlSearch) WithField(field string, val any) URLSearchParam {
-	if r.fields == nil {
-		r.fields = make(map[string]any)
+func (s *urlSearch) loadComparison(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition, op CompareOperator) {
+	paramName := fmt.Sprintf("%s_%s", apiPath, string(op))
+	if op == CompareEqual { // Allow for shorthand `field=value` for equality
+		paramName = apiPath
 	}
-	r.fields[field] = val
-	return r
-}
 
-func (r *urlSearch) WithComparison(field string, operator CompareOperator, val any) URLSearchParam {
-	if r.comparisons == nil {
-		r.comparisons = make(map[string]map[CompareOperator]any)
+	val := s.findFieldValue(ctx, paramName)
+	if !val.Valid() {
+		return
 	}
-	if r.comparisons[field] == nil {
-		r.comparisons[field] = make(map[CompareOperator]any)
-	}
-	r.comparisons[field][operator] = val
-	return r
-}
 
-func WithField(param URLSearchParam, field string, val any) URLSearchParam {
-	if search, ok := param.(*urlSearch); ok {
-		return search.WithField(field, val)
+	// Check for pipe-separated values (OR operation)
+	rawValue := val.String()
+	if strings.Contains(rawValue, "|") {
+		s.loadOrComparison(ctx, apiPath, dbPath, def, op, rawValue)
+		return
+	} else if strings.Contains(rawValue, ",") {
+		s.loadInComparison(ctx, apiPath, dbPath, def, rawValue)
+		return
 	}
-	return param
-}
 
-func WithSort(param URLSearchParam, field string, sort SortType) URLSearchParam {
-	search, ok := param.(*urlSearch)
+	parsedVal, ok := s.parseValue(rawValue, def)
 	if !ok {
-		return param
-	} else if search.sort == nil {
-		search.sort = make(map[string]SortType)
+		return // Skip if parsing fails
 	}
-	search.sort[field] = sort
-	return search
+
+	s.conditions = append(s.conditions, ParsedCondition{
+		DBPath:   dbPath,
+		Operator: op,
+		Value:    parsedVal,
+	})
 }
 
-func WithComparison(param URLSearchParam, field string, operator CompareOperator, val any) URLSearchParam {
-	search, ok := param.(*urlSearch)
-	if !ok {
-		return param
+func (s *urlSearch) loadOrComparison(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition, op CompareOperator, rawValue string) {
+	values := collections.List[string](strings.Split(rawValue, "|")).Filter(func(val string) bool { return strings.TrimSpace(val) != "" })
+	switch len(values) {
+	case 0:
+		return
+	case 1:
+		s.conditions = append(s.conditions, ParsedCondition{
+			DBPath:   dbPath,
+			Operator: CompareEqual,
+			Value:    values[0],
+		})
+	default:
+		var args []any = collections.MapList(values, func(val string) any {
+			parsedVal, ok := s.parseValue(val, def)
+			if !ok {
+				return nil
+			}
+			return parsedVal
+		}).Filter(func(val any) bool { return val != nil })
+		s.conditions = append(s.conditions, ParsedCondition{
+			DBPath:   dbPath,
+			Operator: CompareIn,
+			Value:    args,
+		})
 	}
-	if search.comparisons == nil {
-		search.comparisons = make(map[string]map[CompareOperator]any)
+}
+
+func (s *urlSearch) loadBetweenComparison(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition) {
+	paramName := fmt.Sprintf("%s_%s", apiPath, string(CompareBetween))
+	val := s.findFieldValue(ctx, paramName)
+	if !val.Valid() {
+		return
 	}
-	if search.comparisons[field] == nil {
-		search.comparisons[field] = make(map[CompareOperator]any)
+
+	parts := strings.Split(val.String(), ":")
+	if len(parts) != 2 {
+		return // Invalid format for between
 	}
-	search.comparisons[field][operator] = val
-	return search
+
+	from, ok1 := s.parseValue(parts[0], def)
+	to, ok2 := s.parseValue(parts[1], def)
+
+	if !ok1 || !ok2 {
+		return // Failed to parse one of the values
+	}
+
+	s.conditions = append(s.conditions, ParsedCondition{
+		DBPath:   dbPath,
+		Operator: CompareBetween,
+		Value:    []any{from, to},
+	})
+}
+
+func (s *urlSearch) loadInComparison(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition, rawValue string) {
+	var args []any = collections.MapList(
+		collections.List[string](strings.Split(rawValue, ",")).
+			Filter(func(val string) bool { return strings.TrimSpace(val) != "" }),
+		func(val string) any {
+			parsedVal, ok := s.parseValue(val, def)
+			if !ok {
+				return nil
+			}
+			return parsedVal
+		}).Filter(func(val any) bool { return val != nil })
+
+	if len(args) == 0 {
+		return // Failed to parse one of the values
+	}
+
+	s.conditions = append(s.conditions, ParsedCondition{
+		DBPath:   dbPath,
+		Operator: CompareIn,
+		Value:    args,
+	})
+}
+
+func (s *urlSearch) loadTildeWildcard(ctx context.Context, apiPath string, dbPath []string, def FieldDefinition) {
+	// Check for tilde wildcard patterns: ~field~, ~field, field~
+	// ~field~=value -> field ILIKE '%value%'
+	// ~field=value -> field ILIKE '%value'
+	// field~=value -> field ILIKE 'value%'
+
+	// Pattern 1: ~field~=value (contains)
+	paramName1 := "~" + apiPath + "~"
+	if val1 := s.findFieldValue(ctx, paramName1); val1.Valid() {
+		if parsedVal, ok := s.parseValue(val1.String(), def); ok {
+			s.conditions = append(s.conditions, ParsedCondition{
+				DBPath:   dbPath,
+				Operator: CompareLike,
+				Value:    "%" + fmt.Sprintf("%v", parsedVal) + "%",
+			})
+		}
+
+	}
+
+	// Pattern 2: ~field=value (starts with)
+	paramName2 := "~" + apiPath
+	if val2 := s.findFieldValue(ctx, paramName2); val2.Valid() {
+		if parsedVal, ok := s.parseValue(val2.String(), def); ok {
+			s.conditions = append(s.conditions, ParsedCondition{
+				DBPath:   dbPath,
+				Operator: CompareLike,
+				Value:    "%" + fmt.Sprintf("%v", parsedVal),
+			})
+		}
+
+	}
+
+	// Pattern 3: field~=value (ends with)
+	paramName3 := apiPath + "~"
+	if val3 := s.findFieldValue(ctx, paramName3); val3.Valid() {
+		if parsedVal, ok := s.parseValue(val3.String(), def); ok {
+			s.conditions = append(s.conditions, ParsedCondition{
+				DBPath:   dbPath,
+				Operator: CompareLike,
+				Value:    fmt.Sprintf("%v", parsedVal) + "%",
+			})
+		}
+	}
+}
+
+func (s *urlSearch) parseValue(val string, def FieldDefinition) (any, bool) {
+	switch def.Type {
+	case TypeText, TypeUUID:
+		return val, true
+	case TypeBool:
+		b, err := strconv.ParseBool(val)
+		return b, err == nil
+	case TypeInt:
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+			return i, true
+		}
+	case TypeFloat:
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f, true
+		}
+	case TypeDate, TypeTime:
+		format := def.TimeFormat
+		if format == "" {
+			format = time.RFC3339
+		}
+		if t, err := time.Parse(format, val); err == nil {
+			return t, true
+		}
+	}
+	return nil, false
+}
+
+// GetConditions returns the parsed and validated query conditions.
+func (s *urlSearch) GetConditions() []ParsedCondition {
+	return s.conditions
+}
+
+// GetSorts returns the parsed and validated sort instructions.
+func (s *urlSearch) GetSorts() []ParsedSort {
+	return s.sorts
+}
+
+// GetLimit returns the pagination limit.
+func (s *urlSearch) GetLimit() int64 {
+	return s.limit
+}
+
+// GetOffset returns the pagination offset.
+func (s *urlSearch) GetOffset() int64 {
+	return s.offset
+}
+
+// AddCondition adds a new condition to the search parameters.
+func (s *urlSearch) AddCondition(field string, operator CompareOperator, value any) URLSearchParam {
+	s.conditions = append(s.conditions, ParsedCondition{
+		DBPath:   []string{field},
+		Operator: operator,
+		Value:    value,
+	})
+	return s
+}
+
+// AddField adds a new field equality condition.
+func (s *urlSearch) AddField(field string, value any) URLSearchParam {
+	return s.AddCondition(field, CompareEqual, value)
+}
+
+// AddSort adds a new sort instruction.
+func (s *urlSearch) AddSort(field string, sortType SortType) URLSearchParam {
+	s.sorts = append(s.sorts, ParsedSort{
+		DBName: field,
+		Type:   sortType,
+	})
+	return s
+}
+
+// SetLimit sets the pagination limit.
+func (s *urlSearch) SetLimit(limit int64) URLSearchParam {
+	s.limit = limit
+	return s
+}
+
+// SetOffset sets the pagination offset.
+func (s *urlSearch) SetOffset(offset int64) URLSearchParam {
+	s.offset = offset
+	return s
+}
+
+// loadOrFields handles star-prefixed parameters for across-field OR operations
+func (s *urlSearch) loadOrFields(ctx context.Context) {
+	// Check regular fields
+	for name, def := range s.defs {
+		orParamName := "*" + name
+		val := s.findFieldValue(ctx, orParamName)
+		if !val.Valid() {
+			continue
+		}
+
+		parsedVal, ok := s.parseValue(val.String(), def)
+		if !ok {
+			continue
+		}
+
+		s.conditions = append(s.conditions, ParsedCondition{
+			DBPath:   []string{def.DBName},
+			Operator: CompareOr,
+			Value:    parsedVal,
+		})
+	}
+
+	// Check JSON fields
+	for name, def := range s.defs {
+		if def.Type != TypeJSON || def.Schema == nil {
+			continue
+		}
+		for jsonFieldName, jsonDef := range def.Schema {
+			jsonStarParamName := "*" + name + "." + jsonFieldName
+			val := s.findFieldValue(ctx, jsonStarParamName)
+			if !val.Valid() {
+				continue
+			}
+
+			parsedVal, ok := s.parseValue(val.String(), jsonDef)
+			if !ok {
+				continue
+			}
+
+			s.conditions = append(s.conditions, ParsedCondition{
+				DBPath:   []string{def.DBName, jsonDef.DBName},
+				Operator: CompareOr,
+				Value:    parsedVal,
+			})
+		}
+	}
 }

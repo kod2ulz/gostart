@@ -2,17 +2,17 @@ package utils
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/kod2ulz/gostart/errors"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
-func LogError(log *logrus.Entry, err error, message string, args ...interface{}) {
+func LogError(log *logr.Logger, err error, message string, args ...interface{}) {
 	if err == nil {
 		return
 	}
-	log.WithError(err).Errorf(message, args...)
+	log.Error(message, "error", err, "args", args)
 }
 
 type App interface {
@@ -21,23 +21,23 @@ type App interface {
 }
 
 func StopFunc(a App, fn func() error, message string, args ...interface{}) {
-	a.Log().Infof("stopping %T", fn)
+	a.Log().Info(fmt.Sprintf("stopping %T", fn))
 	if err := fn(); err != nil {
-		LogError(a.Log().Entry, err, message, args...)
+		LogError(a.Log(), err, message, args...)
 	} else {
-		a.Log().Infof("%T stopped", fn)
+		a.Log().Info(fmt.Sprintf("%T stopped", fn))
 	}
 }
 
 func StopFuncN(a App, fn func(), message string, args ...interface{}) {
-	a.Log().Infof("stopping %T", fn)
+	a.Log().Info(fmt.Sprintf("stopping %T", fn))
 	defer func() {
 		if r := recover(); r != nil {
-			LogError(a.Log().Entry, errors.Errorf("recover: %v", r), message, args...)
+			LogError(a.Log(), errors.Errorf("recover: %v", r), message, args...)
 		}
 	}()
 	fn()
-	a.Log().Infof("%T stopped", fn)
+	a.Log().Info(fmt.Sprintf("%T stopped", fn))
 }
 
 func StopFuncWithCtx(a App, fn func(context.Context) error, message string, args ...interface{}) {

@@ -2,9 +2,10 @@ package storage
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/kod2ulz/gostart/utils"
+	"github.com/kod2ulz/gostart/config"
 )
 
 type Conf struct {
@@ -38,22 +39,32 @@ var defaults = map[string]map[string]string{
 }
 
 func Config(prefix ...string) (conf *Conf) {
-	env := utils.Env.Helper(prefix...)
-	heartbeat := env.Get("HEARTBEAT_MILLISECONDS", DefaultHeartbeat).Int()
-	heartbeatTimeout := env.Get("HEARTBEAT_TIMEOUT_MILLISECONDS", DefaultHeartbeatTimeout).Int()
+	// Helper to construct keys with the given prefix, e.g., buildKey("HOST") -> "POSTGRES_DB_HOST"
+	buildKey := func(key string) string {
+		return strings.ToUpper(strings.Join(append(prefix, key), "_"))
+	}
+
+	// Use the main config.Get, which respects the full hierarchy.
+	heartbeat := config.Get(buildKey("HEARTBEAT_MILLISECONDS"), DefaultHeartbeat).Int()
+	heartbeatTimeout := config.Get(buildKey("HEARTBEAT_TIMEOUT_MILLISECONDS"), DefaultHeartbeatTimeout).Int()
+
+	driver := config.Get(buildKey("DRIVER")).String()
+	if driver == "" {
+		panic(fmt.Sprintf("missing required config key: %s", buildKey("DRIVER")))
+	}
 
 	conf = &Conf{
 		Heartbeat:        time.Duration(heartbeat) * time.Millisecond,
 		HeartbeatTimeout: time.Duration(heartbeatTimeout) * time.Millisecond,
-		Driver:           env.MustGet("DRIVER").String(),
+		Driver:           driver,
 	}
 
-	conf.Host = env.GetString("HOST", conf._default("HOST"))
-	conf.Port = env.GetString("PORT", conf._default("PORT"))
-	conf.Username = env.GetString("USERNAME", conf._default("USERNAME"))
-	conf.Password = env.GetString("PASSWORD", conf._default("PASSWORD"))
-	conf.Database = env.GetString("DATABASE", conf._default("DATABASE"))
-	conf.SSLMode = env.GetString("SSL_MODE", conf._default("disable"))
+	conf.Host = config.Get(buildKey("HOST"), conf._default("HOST")).String()
+	conf.Port = config.Get(buildKey("PORT"), conf._default("PORT")).String()
+	conf.Username = config.Get(buildKey("USERNAME"), conf._default("USERNAME")).String()
+	conf.Password = config.Get(buildKey("PASSWORD"), conf._default("PASSWORD")).String()
+	conf.Database = config.Get(buildKey("DATABASE"), conf._default("DATABASE")).String()
+	conf.SSLMode = config.Get(buildKey("SSL_MODE"), "disable").String()
 	return
 }
 
@@ -62,7 +73,7 @@ func (c *Conf) ConnectionString() string {
 	case "postgres":
 		return c.postgresConnectionString()
 	case "redis":
-		return c.postgresConnectionString()
+		return c.redisConnectionString()
 	}
 	return fmt.Sprintf(
 		"%s://%s:%s@%s:%s",
@@ -99,4 +110,8 @@ func (c *Conf) postgresConnectionString() string {
 		c.Database,
 		c.SSLMode,
 	)
+}
+
+func (c *Conf) redisConnectionString() string {
+	return fmt.Sprintf("%s:%s", c.Host, c.Port)
 }

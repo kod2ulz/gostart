@@ -3,36 +3,31 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/kod2ulz/gostart/api"
+	"github.com/kod2ulz/gostart/config"
+	"github.com/kod2ulz/gostart/contracts"
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/kod2ulz/gostart/utils"
-	"github.com/pkg/errors"
-
-	"github.com/gin-gonic/gin"
-	consulapi "github.com/hashicorp/consul/api"
-	"github.com/joho/godotenv"
 )
 
 var (
 	// global single instance of the _instance
 	_instance *ap
-	strictEnv bool
+	_logHandlers []slog.Handler
 )
 
 type ap struct {
-	router *gin.Engine
-	log    *logr.Logger
-	start  time.Time
-	conf   *conf
-	consul *consulapi.Client
+	router      api.Router
+	log         *logr.Logger
+	start       time.Time
+	conf        *conf
 
 	serviceId string
 
@@ -41,17 +36,9 @@ type ap struct {
 	cancel context.CancelFunc
 
 	heartbeatHandlers bool
-	handlers map[string]gin.HandlerFunc
 }
 
 type AppIniter func(*ap) error
-
-func WithStrictEnv() AppIniter {
-	return func(a *ap) error {
-		strictEnv = true
-		return nil
-	}
-}
 
 func Init(opts ...AppIniter) *ap {
 	if _instance != nil {
@@ -60,16 +47,13 @@ func Init(opts ...AppIniter) *ap {
 	for i := range opts {
 		opts[i](nil)
 	}
-	if err := godotenv.Load(); err != nil {
-		if strictEnv {
-			log.Fatalf("error loading env files. %v", err)
-		}
-		log.Printf("error loading env files. %v", err)
+	config.Load() // Load .env file
+
+	if err := logr.Config(_logHandlers...); err != nil {
+		slog.Error("Application log initialisation failed", "error", err)
+		panic(err)
 	}
-	if err := logr.Config(); err != nil {
-		logr.Log().WithError(err).Fatal("Application log initialisation failed")
-	}
-	logr.Log().Println("starting app initialisation")
+	logr.Log().Info("starting app initialisation")
 	_instance = &ap{
 		log:   logr.Log(),
 		start: time.Now(),
@@ -97,11 +81,11 @@ func (a *ap) Ctx() context.Context {
 	return a.ctx
 }
 
-func (a *ap) Router() *gin.Engine {
+func (a *ap) Router() api.Router {
 	return a.router
 }
 
-func (a *ap) R() *gin.Engine {
+func (a *ap) R() api.Router {
 	return a.router
 }
 
@@ -109,111 +93,53 @@ func (a *ap) Config() *conf {
 	return a.conf
 }
 
-func Consul() (client *consulapi.Client) {
-	a := instance()
-	if client = a.consul; client == nil {
-		a.Log().Panic("consul client not initialsed")
-	}
-	return
-}
-
 func Log() *logr.Logger {
 	return instance().log
 }
 
-func Service(name string) (out *consulapi.AgentService, err error) {
-	var ok bool
-	if services, err := Consul().Agent().Services(); err != nil {
-		return out, errors.Wrap(err, "error fetching registered consul services")
-	} else if out, ok = services[name]; !ok {
-		return out, errors.Errorf("service %s unknown to consul agent", name)
-	}
-	return
-}
-
-func ServiceUrl(name string) (out string) {
-	service, err := Service(name)
-	if err == nil {
-		return fmt.Sprintf("http://%s:%v", service.Address, service.Port)
-	}
-	Log().WithError(err).WithField("consul.service", name).Error("failed to get service url")
-	return
-}
-
-func (a *ap) Register(name ...string) (err error) {
-	var serviceName string
-	var env = utils.Env.Helper("CONSUL")
-	var serviceHost = env.Get("SERVICE_HOST", a.conf.Host).String()
-	// var consulUrlEnv = "CONSUL_HTTP_ADDR"
-	if a.consul != nil {
-		return utils.Error.LogOK(a.log.Infof, "service already registered with consul")
-	} else if consulAddress := env.Get("HTTP_ADDR", ""); !consulAddress.Valid() {
-		return utils.Error.LogOK(a.log.Warnf, "env var %s_HTTP_ADDR not set. skipping consul initialization", env.Prefix())
-	}
-	config := consulapi.DefaultConfig()
-	if len(name) > 0 && name[0] != "" {
-		serviceName = name[0]
-	} else {
-		serviceName = env.Get("SERVICE_NAME", a.conf.Name).String()
-	}
-	if id := env.Get("SERVICE_ID"); id.Valid() {
-		a.serviceId = id.String()
-	} else if autoId := env.Get("SERVICE_ID_AUTO"); autoId.Bool() {
-		a.serviceId = fmt.Sprintf("%s-%s-%s", serviceName, serviceHost, a.conf.Version)
-	} else {
-		a.serviceId = serviceName
-	}
-	if a.consul, err = consulapi.NewClient(config); err != nil {
-		return utils.Error.Log(a.log.Entry, err, "consul client initialisation failed")
-	} else if err = a.consul.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
-		ID:      a.serviceId,
-		Name:    serviceName,
-		Port:    a.conf.HttpPort,
-		Address: serviceHost,
-		Tags:    []string{a.conf.Version, serviceName, serviceHost, a.start.In(a.conf.Location).Format(time.RFC1123Z)},
-		Check: &consulapi.AgentServiceCheck{
-			HTTP:     fmt.Sprintf("http://%s:%v/ok", a.conf.Host, a.conf.HttpPort),
-			Interval: a.conf.Uptime.Interval.String(),
-			Timeout:  a.conf.Uptime.Timeout.String(),
-		},
-	}); err != nil {
-		return utils.Error.Log(a.log.Entry, err, "service registration failed")
-	}
-	return utils.Error.LogOK(a.log.Infof, "service successfully registered with consul")
-}
-
-func (a *ap) Run() {
+func (a *ap) Run(name ...string) {
 	fmt.Println()
-	utils.Error.Fail(a.log.Entry, a.Register(), "failed to register service with consul")
+	a.tryRegisterConsul(name...)
 	signal.Notify(a.osc, os.Interrupt, syscall.SIGTERM)
 	startupMsg := "started"
 	if a.router != nil {
 		startupMsg += " with http router " + a.conf.Address()
 		go a.router.Run(a.conf.Address())
 	}
-	a.log.Printf(startupMsg)
+	a.log.Info(startupMsg)
 	<-a.osc
 	a.cancel()
 	fmt.Println()
 	a.shutdown()
-	if a.consul != nil && a.serviceId != "" {
-		a.consul.Agent().ServiceDeregister(a.serviceId)
+	if err := config.Consul.Deregister(a.serviceId); err != nil {
+		a.log.Warn("failed to deregister service from consul", "error", err)
+	} else if a.serviceId != "" {
+		a.log.Info("service successfully deregistered from consul")
 	}
-	a.log.Printf("shutdown complete")
+	a.log.Info("shutdown complete")
+}
+
+func (a *ap) tryRegisterConsul(name ...string) {
+	id, err := config.Consul.RegisterFromEnv(name...)
+	if err != nil {
+		// Check if the error is because the endpoint is not configured.
+		// In that case, it's a warning, not a fatal error.
+		if strings.Contains(err.Error(), "consul address not configured") {
+			a.log.Warn("skipping consul registration", "reason", "consul address not configured")
+		} else {
+			a.log.Error("service registration failed", "error", err)
+		}
+		return
+	}
+	a.serviceId = id
+	a.log.Info("service successfully registered with consul", "id", a.serviceId)
 }
 
 func (a *ap) shutdown() {
-	a.log.Printf("shutting down")
+	a.log.Info("shutting down")
 }
 
-func WithHandlerOverride(key string, handler gin.HandlerFunc) AppIniter {
-	return func(a *ap) error {
-		a.handlers[key] = handler
-		return nil
-	}
-}
-
-func WithStaticFileHandler(webPath, filePath string, ) AppIniter {
+func WithStaticFileHandler(webPath, filePath string) AppIniter {
 	return func(a *ap) error {
 		if a == nil {
 			return nil
@@ -233,40 +159,54 @@ func WithHeartbeatHandlers() AppIniter {
 	}
 }
 
+func WithLogHandlers(loggers ...slog.Handler) AppIniter {
+	if len(loggers) > 0 {
+		if len(_logHandlers) == 0 {
+			_logHandlers = make([]slog.Handler, 0)
+		}
+		_logHandlers = append(_logHandlers, loggers...)
+	}
+	return func(a *ap) error {
+		return nil
+	}
+}
+
 func (a *ap) initAPI(opts ...AppIniter) {
-	a.handlers = map[string]gin.HandlerFunc{
-		"ok": func(c *gin.Context) {
-			c.JSON(http.StatusOK, "OK")
-		},
-		"stats": func(c *gin.Context) {
-			c.JSON(http.StatusOK, map[string]interface{}{
-				"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
-				"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),
-			})
-		},
+	// Create router using unified configuration from environment
+	routerConfig := api.DefaultRouterConfig()
+	var err error
+	a.router, err = api.CreateRouter(routerConfig)
+	if err != nil {
+		panic(err)
 	}
 
-	a.router = gin.New()
-	a.router.Use(api.JSONLogMiddleware(a.log), gin.Recovery(), cors.New(cors.Config{
-		AllowOrigins:     a.conf.Http.AllowOrigins,
-		AllowMethods:     a.conf.Http.AllowMethods,
-		AllowHeaders:     a.conf.Http.AllowHeaders,
-		ExposeHeaders:    a.conf.Http.ExposeHeaders,
-		AllowCredentials: a.conf.Http.AllowCredentials,
-		// AllowOriginFunc: func(origin string) bool {
-		// 	return true
-		// },
-		MaxAge: a.conf.Http.MaxAge,
-	}))
+	// Legacy handlers are no longer used in the new architecture
 
 	for i := range opts {
 		opts[i](a)
 	}
 
 	if a.heartbeatHandlers {
-		a.router.GET("/", a.handlers["ok"])
-		a.router.GET("/ok", a.handlers["ok"])
-		a.router.GET("/stats", a.handlers["stats"])
+		// Use new router interface with wrapped handlers
+		a.router.GET("/", func(ctx contracts.RequestContext) {
+			// For contracts.RequestContext, we need to use the api.RequestContext wrapper
+			if appCtx, ok := ctx.(api.RequestContext); ok {
+				appCtx.JSON(http.StatusOK, "OK")
+			}
+		})
+		a.router.GET("/ok", func(ctx contracts.RequestContext) {
+			if appCtx, ok := ctx.(api.RequestContext); ok {
+				appCtx.JSON(http.StatusOK, "OK")
+			}
+		})
+		a.router.GET("/stats", func(ctx contracts.RequestContext) {
+			if appCtx, ok := ctx.(api.RequestContext); ok {
+				appCtx.JSON(http.StatusOK, map[string]any{
+					"host": a.conf.Host, "started": a.start, "app": a.conf.Name,
+					"uptime": time.Since(a.start).Round(100 * time.Millisecond).String(),
+				})
+			}
+		})
 	}
 }
 

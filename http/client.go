@@ -2,18 +2,17 @@ package http
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 	"time"
 
 	json "github.com/json-iterator/go"
-	"github.com/kod2ulz/gostart/api"
 	"github.com/kod2ulz/gostart/collections"
-	"github.com/pkg/errors"
+	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/errors"
+	"github.com/kod2ulz/gostart/ierrors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,7 +21,7 @@ func Client[T any](log *logrus.Entry) (out *client[T]) {
 		log:     log,
 		timeout: time.Minute,
 		params:  map[string][]string{},
-		headers: map[string]collections.Set[string]{},
+		headers: make(Headers),
 	}
 	out.headers.Add("Content-Type", "application/json")
 	return
@@ -72,7 +71,7 @@ func (c *client[T]) Header(key, value string) *client[T] {
 }
 
 func (c *client[T]) Headers(headers map[string]string) *client[T] {
-	c.headers.Merge(headers)
+	c.headers.MergeStringMap(headers)
 	return c
 }
 
@@ -99,24 +98,24 @@ func (c *client[T]) Params(params map[string][]string) *client[T] {
 	return c
 }
 
-func (c *client[T]) Get(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Get(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodGet, path)
 }
 
-func (c *client[T]) Post(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Post(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodPost, path)
 }
 
-func (c *client[T]) Put(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Put(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodPut, path)
 }
 
-func (c *client[T]) Delete(ctx context.Context, path string) api.Response[T] {
+func (c *client[T]) Delete(ctx context.Context, path string) contracts.Response[T] {
 	return c.Request(ctx, http.MethodDelete, path)
 }
 
-func (c *client[T]) Request(ctx context.Context, method, path string) (out api.Response[T]) {
-	var err api.Error
+func (c *client[T]) Request(ctx context.Context, method, path string) (out contracts.Response[T]) {
+	var err ierrors.Error
 	var requestErr, responseErr error
 	var request *http.Request
 	var response *http.Response
@@ -124,15 +123,15 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 	_url, parseErr := url.Parse(c.url(path))
 	defer c.logOutcome(request, response, err)
 	if parseErr != nil {
-		err = api.RequestLoadError[T](parseErr).WithMessage("failed to parse url")
-		return api.ErrorResponse[T](err)
+		err = errors.RequestLoadFailed[T](parseErr).WithMessage("failed to parse url")
+		return contracts.ErrorResponse[T](err)
 	}
 	c.setOverrides(ctx)
 	setUrlQueryParams(_url, c.params)
 	request, requestErr = newHttpRequest(_url, method, c.body)
 	if requestErr != nil {
-		err = api.RequestLoadError[T](parseErr).WithMessage("failed to create http request")
-		return api.ErrorResponse[T](err)
+		err = errors.RequestLoadFailed[T](parseErr).WithMessage("failed to create http request")
+		return contracts.ErrorResponse[T](err)
 	}
 	c.headers.Set(request)
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
@@ -140,8 +139,8 @@ func (c *client[T]) Request(ctx context.Context, method, path string) (out api.R
 	var httpClient http.Client = *http.DefaultClient
 	response, responseErr = httpClient.Do(request.WithContext(reqCtx))
 	if responseErr != nil {
-		err = api.ServerError(errors.Wrap(responseErr, "request failed"))
-		return api.ErrorResponse[T](err)
+		err = errors.ServiceFailure(errors.Wrapf(responseErr, "request failed"))
+		return contracts.ErrorResponse[T](err)
 	}
 	defer response.Body.Close()
 	var outExpected bool = c.out != nil
@@ -173,7 +172,7 @@ func (c *client[T]) setOverrides(ctx context.Context) {
 	c.MergeHeaders(h)
 }
 
-func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Error) {
+func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err ierrors.Error) {
 	fields := logrus.Fields{
 		"success": false,
 		"latency": time.Since(c.start).Milliseconds(),
@@ -184,8 +183,8 @@ func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Er
 		fields["url"] = req.URL.String()
 	}
 
-	if !c.headers.Empty() && c.headers.HasKey(api.RequestID) {
-		fields["request_id"] = c.headers[api.RequestID]
+	if !c.headers.Empty() && c.headers.HasKey("X-Request-ID") {
+		fields["request_id"] = c.headers["X-Request-ID"]
 	}
 	if !c.params.Empty() {
 		fields["params"] = c.params
@@ -194,58 +193,59 @@ func (c *client[T]) logOutcome(req *http.Request, res *http.Response, err api.Er
 	if res != nil {
 		fields["success"] = res.StatusCode < 400
 		fields["response"] = logrus.Fields{
-			"id":   res.Header.Get(api.RequestID),
+			"id":   res.Header.Get("X-Request-ID"),
 			"code": res.StatusCode,
 			"size": res.ContentLength,
 		}
 	}
 	if err == nil {
 		c.log.WithFields(fields).Info()
-	} else if er, ok := err.(*api.ErrorModel[T]); ok {
-		fields["httpCode"] = er.Http
-		c.log.WithFields(fields).WithError(err).Error(er.Code)
+	} else if err != nil {
+		fields["httpCode"] = err.HttpCode()
+		c.log.WithFields(fields).WithError(err).Error(err.Error())
 	}
 }
 
-func (c *client[T]) getResponse(res *http.Response) (out api.Response[T]) {
+func (c *client[T]) getResponse(res *http.Response) (out contracts.Response[T]) {
 	if res.ContentLength == 0 {
+		out = out.WithCode(res.StatusCode)
 		return
 	}
 	data, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
-		return api.ErrorResponse[T](api.GeneralError[T](errors.Wrap(readErr, "failed to read json body into []byte")).
-			WithErrorCode(api.ErrorCodeResponseProcessingError))
-	}
-	out = api.Response[T]{}
-	var t *T = new(T)
-	var errBody collections.Map[string, interface{}]
-	resErr := api.GeneralError[T](errors.New(res.Status + ". request failed")).
-		WithHttpStatusCode(res.StatusCode).WithErrorCode(api.ErrorCodeServiceError).
-		WithError(errors.Errorf("call to %s returned %d: %s", res.Request.RequestURI, res.StatusCode, res.Status))
-	if unmarshallErr := json.Unmarshal(data, &out); unmarshallErr == nil && !reflect.DeepEqual(out, api.Response[T]{}) {
-		if out.HasError() {
-			out.Error = resErr.WithCause(out.Error)
-		} else {
-			out.Success = res.StatusCode < 400
-		}
-		out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
-		out.Timestamp = time.Now().Unix()
+		err := errors.GeneralFailure[T](errors.Wrapf(readErr, "failed to read json body into []byte")).WithErrorCode(errors.ErrorCodeResponseProcessingError)
+		out = contracts.ErrorResponse[T](err)
+		out = out.WithCode(res.StatusCode)
 		return
-	} else if unmarshallErr := json.Unmarshal(data, &t); unmarshallErr == nil && t != nil {
-		out = api.DataResponse[T](*t).
-			WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
-		// anything else
-	} else if unmarshallErr = json.Unmarshal(data, &errBody); unmarshallErr != nil {
-		if res.StatusCode < 400 {
-			t = new(T)
-			return api.DataResponse[T](*t).WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
-		} else if errorMessage := errBody.AnyOfKey("err", "error", "errors", "msg", "message"); errorMessage != nil && errorMessage != "" {
-			return api.ErrorResponse[T](resErr.WithCause(api.GeneralError[any](errors.New(fmt.Sprint(errorMessage)))))
-		}
-	} else if errBody.Empty() {
-		t = new(T)
-		return api.DataResponse[T](*t).WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 	}
-	out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
+
+	// A temporary struct to help unmarshal the error field into a concrete type
+	type tempResponse struct {
+		Success bool                  `json:"success"`
+		Error   *errors.ErrorModel[T] `json:"error"`
+		Data    interface{}           `json:"data"`
+		Meta    *contracts.Metadata   `json:"meta"`
+	}
+
+	var temp tempResponse
+	if err := json.Unmarshal(data, &temp); err != nil {
+		// If unmarshalling into the temp struct fails, it might be a raw data response
+		var t T
+		if unmarshalErr2 := json.Unmarshal(data, &t); unmarshalErr2 == nil {
+			out = contracts.DataResponse(t)
+		} else {
+			err := errors.GeneralFailure[T](errors.Errorf("failed to parse response body"))
+			out = contracts.ErrorResponse[T](err)
+		}
+	} else {
+		out.Success = temp.Success
+		out.Data = temp.Data
+		out.Meta = temp.Meta
+		if temp.Error != nil {
+			out.Error = temp.Error
+		}
+	}
+
+	out = out.WithCode(res.StatusCode).WithHeaders(res.Header).WithCookies(res.Cookies())
 	return
 }

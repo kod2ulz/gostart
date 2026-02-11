@@ -5,12 +5,11 @@ import (
 	"io"
 
 	json "github.com/json-iterator/go"
-	"github.com/pkg/errors"
 )
 
 var Net netutils
 
-type netutils struct {}
+type netutils struct{}
 
 func (netutils) ReadJson(reader io.ReadCloser, out interface{}) (err error) {
 	if reader == nil {
@@ -19,16 +18,15 @@ func (netutils) ReadJson(reader io.ReadCloser, out interface{}) (err error) {
 	var data []byte
 	data, err = io.ReadAll(reader)
 	if err != nil {
-		return errors.Wrap(err, "error ready response body from API")
+		return fmt.Errorf("error ready response body from API: %w", err)
 	}
 	defer reader.Close()
 
 	if err = json.Unmarshal(data, out); err != nil {
-		return errors.Wrapf(err, "failed to unmarshall response to %T", out)
+		return fmt.Errorf("failed to unmarshall response to %T: %w", out, err)
 	}
 	return
 }
-
 
 func (u netutils) Http(host string, port int) string {
 	return u.url("http", host, port)

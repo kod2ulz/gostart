@@ -22,52 +22,52 @@ func arg(name string, num int, op ...string) string {
 
 var criteria_test_cases = []struct {
 	conditions []query.Condition
-	args       []interface{}
+	args       []any
 	expected   string
 }{
 	{
 		conditions: []query.Condition{query.Equal("name", "someone")},
-		expected:   arg("name", 1), args: []interface{}{"someone"},
+		expected:   arg("name", 1), args: []any{"someone"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.Equal("fname", "john"), query.Equal("lname", "doe"))},
 		expected:   fmt.Sprintf("(%s) %s (%s)", arg("fname", 1), query.WhereOr, arg("lname", 2)),
-		args:       []interface{}{"john", "doe"},
+		args:       []any{"john", "doe"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.Equal("fname", "john"), query.In("name", "jane", "ruth"))},
-		expected:   fmt.Sprintf("(%s) %s (%s %s ($%d,$%d))", arg("fname", 1), query.WhereOr, "name", query.CompareIn, 2, 3),
-		args:       []interface{}{"john", "jane", "ruth"},
+		expected:   fmt.Sprintf("(%s) %s (%s %s ($%d, $%d))", arg("fname", 1), query.WhereOr, "name", query.CompareIn, 2, 3),
+		args:       []any{"john", "jane", "ruth"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.GreaterThan("age", 23), query.Like("lname", "doe"))},
 		expected:   fmt.Sprintf("(%s) %s (%s)", arg("age", 1, ">"), query.WhereOr, arg("lname", 2, query.SELECT_LIKE)),
-		args:       []interface{}{23, "doe"},
+		args:       []any{23, "doe"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.GreaterThanOrEqual("age", 23), query.Like("lname", "doe"))},
 		expected:   fmt.Sprintf("(%s) %s (%s)", arg("age", 1, ">="), query.WhereOr, arg("lname", 2, query.SELECT_LIKE)),
-		args:       []interface{}{23, "doe"},
+		args:       []any{23, "doe"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.LessThan("age", 23), query.Like("lname", "doe"))},
 		expected:   fmt.Sprintf("(%s) %s (%s)", arg("age", 1, "<"), query.WhereOr, arg("lname", 2, query.SELECT_LIKE)),
-		args:       []interface{}{23, "doe"},
+		args:       []any{23, "doe"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.LessThanOrEqual("age", 23), query.Like("lname", "doe"))},
 		expected:   fmt.Sprintf("(%s) %s (%s)", arg("age", 1, "<="), query.WhereOr, arg("lname", 2, query.SELECT_LIKE)),
-		args:       []interface{}{23, "doe"},
+		args:       []any{23, "doe"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.Null("age", "dob", "country")), query.Like("lname", "doe")},
 		expected:   fmt.Sprintf("((%s is null) or (%s is null) or (%s is null)) %s (%s)", "age", "dob", "country", query.WhereAnd, arg("lname", 1, query.SELECT_LIKE)),
-		args:       []interface{}{"doe"},
+		args:       []any{"doe"},
 	},
 	{
 		conditions: []query.Condition{query.Or(query.NotNull("age", "dob", "country")), query.Like("lname", "doe")},
 		expected:   fmt.Sprintf("((%s is not null) or (%s is not null) or (%s is not null)) %s (%s)", "age", "dob", "country", query.WhereAnd, arg("lname", 1, query.SELECT_LIKE)),
-		args:       []interface{}{"doe"},
+		args:       []any{"doe"},
 	},
 }
 

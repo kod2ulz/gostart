@@ -8,5 +8,5 @@ func SetOf[T comparable](items ...T) (out Set[T]) {
 	for i := range items {
 		out.Add(items[i])
 	}
-	return 
+	return
 }

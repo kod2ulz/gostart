@@ -9,7 +9,7 @@ import (
 )
 
 type errorUtils struct{}
-type logger func (string, ...any)
+type logger func(string, ...any)
 
 var Error errorUtils
 
@@ -37,5 +37,5 @@ func (errorUtils) Fail(log *logrus.Entry, err error, message string, args ...int
 }
 
 func (errorUtils) SqlNoRows(err error) bool {
-	return err != nil &&  errors.Is(err, sql.ErrNoRows) || strings.HasSuffix(err.Error(), "no rows in result set")
+	return err != nil && errors.Is(err, sql.ErrNoRows) || strings.HasSuffix(err.Error(), "no rows in result set")
 }

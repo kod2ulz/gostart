@@ -1,7 +1,6 @@
 package collections
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/goccy/go-json"
@@ -14,6 +13,13 @@ const (
 type TreeDataInterface[ID comparable] interface {
 	Identifier() ID
 	ParentIdentifier() *ID
+}
+
+// TreeDataMapper is an optional interface that TreeDataInterface implementations
+// can implement to provide a custom, reflection-free way to convert their data to a map.
+// This can improve performance for JSON marshaling.
+type TreeDataMapper interface {
+	ToMap() map[string]any
 }
 
 func TreeOf[ID comparable, T TreeDataInterface[ID]](data ...T) (out *TreeNode[ID, T]) {
@@ -77,6 +83,8 @@ type TreeNode[ID comparable, T TreeDataInterface[ID]] struct {
 	// root data
 	index map[ID]*TreeNode[ID, T]
 	// ghostParents map[ID]*TreeNode[ID, T]
+
+	childLabel string // New field for configurable child label
 }
 
 func (t TreeNode[ID, T]) MarshalJSON() ([]byte, error) {
@@ -165,7 +173,7 @@ func (t *TreeNode[ID, T]) RemoveChild(id ID) (affectedNodes int64) {
 	} else if c, ok := t.children[id]; ok {
 		return c.Remove()
 	}
-	return 
+	return
 }
 
 func (t *TreeNode[ID, T]) addToParent(parentId *ID) (affectedNodes int64) {
@@ -225,36 +233,36 @@ func (t *TreeNode[ID, T]) Add(d T) (affectedNodes int64) {
 		affectedNodes += node.addToParent(d.ParentIdentifier())
 	} else {
 		t.children[d.Identifier()], node.parent = node, t
-		affected ++
+		affected++
 	}
 	return affectedNodes + affected
 }
 
-func (t TreeNode[ID, T]) Json() (out []byte) {
-	var err error
-	if out, err = json.Marshal(t); err != nil {
-		return []byte(fmt.Sprintf(`{"error":%s}`, err))
-	}
-	return
+func (t TreeNode[ID, T]) Json() ([]byte, error) {
+	return json.Marshal(t.toData())
 }
 
-func (t TreeNode[ID, T]) toData() (out map[string]any) {
+func (tn TreeNode[ID, T]) toData() (out map[string]any) {
 	out = make(map[string]interface{})
-	var childLabel = "data"
-	if t.level != rootLevel {
-		out = t.asMap()
-		childLabel = "children"
-		if t.parent == nil || t.data.ParentIdentifier() == nil {
+	childLabel := tn.childLabel
+	if tn.level != rootLevel {
+		if mapper, ok := any(tn.data).(TreeDataMapper); ok {
+			out = mapper.ToMap()
+		} else {
+			out = tn.asMap()
+		}
+		childLabel = "children" // Default for non-root nodes
+		if tn.parent == nil || tn.data.ParentIdentifier() == nil {
 			ListOf("parentId", "parentID", "ParentID", "parent_id").
 				ForEach(func(i int, field string) string { delete(out, field); return "" })
 		}
 	}
 
-	if len(t.children) == 0 {
+	if len(tn.children) == 0 {
 		return
 	}
 	children := make([]map[string]any, 0)
-	for _, c := range t.children {
+	for _, c := range tn.children {
 		children = append(children, c.toData())
 	}
 	if len(children) > 0 {
@@ -296,4 +304,50 @@ func (t TreeNode[ID, T]) Clear() (affectedNodes int) {
 		delete(t.Root().index, t.data.Identifier())
 	}
 	return
+}
+
+// Children returns the children of the current node.
+func (t TreeNode[ID, T]) Children() map[ID]*TreeNode[ID, T] {
+	return t.children
+}
+
+// ChildLabel returns the label used for children in JSON serialization.
+func (t TreeNode[ID, T]) ChildLabel() string {
+	return t.childLabel
+}
+
+// Flatten returns a flat list of all nodes in the tree.
+func (t TreeNode[ID, T]) Flatten() List[T] {
+	var flatList List[T]
+	t.Walk(func(node *TreeNode[ID, T]) {
+		flatList = append(flatList, node.data)
+	})
+	return flatList
+}
+
+// Walk traverses the tree and applies a function to each node.
+// It performs a breadth-first traversal.
+func (t TreeNode[ID, T]) Walk(fn func(node *TreeNode[ID, T])) {
+	queue := List[*TreeNode[ID, T]]{}
+
+	if t.isRoot() && reflect.ValueOf(t.data).IsZero() {
+		// dummy root
+		for _, child := range t.children {
+			queue = append(queue, child)
+		}
+	} else {
+		queue = append(queue, &t)
+	}
+
+	for queue.Size() > 0 {
+		node := queue.First()
+		queue = queue[1:] // Dequeue
+
+		if !node.ghost {
+			fn(node)
+			for _, child := range node.children {
+				queue = append(queue, child)
+			}
+		}
+	}
 }

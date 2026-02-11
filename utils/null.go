@@ -20,7 +20,7 @@ func (nullUtils) OptionalString(str optional.String) (out sql.NullString) {
 	if val, err := str.Get(); err == nil {
 		return sql.NullString{Valid: true, String: val}
 	}
-	return 
+	return
 }
 
 func (nullUtils) UUID(val uuid.UUID) uuid.NullUUID {
@@ -35,7 +35,7 @@ func (nullUtils) OptionalInt32(str optional.Int32) (out sql.NullInt32) {
 	if val, err := str.Get(); err == nil {
 		return sql.NullInt32{Valid: true, Int32: val}
 	}
-	return 
+	return
 }
 
 func (nullUtils) Int64(val int64) sql.NullInt64 {
@@ -46,7 +46,7 @@ func (nullUtils) OptionalInt64(str optional.Int64) (out sql.NullInt64) {
 	if val, err := str.Get(); err == nil {
 		return sql.NullInt64{Valid: true, Int64: val}
 	}
-	return 
+	return
 }
 
 func (nullUtils) Float64(val float64) sql.NullFloat64 {
@@ -57,7 +57,7 @@ func (nullUtils) OptionalFloat64(str optional.Float64) (out sql.NullFloat64) {
 	if val, err := str.Get(); err == nil {
 		return sql.NullFloat64{Valid: true, Float64: val}
 	}
-	return 
+	return
 }
 
 func (nullUtils) Time(val time.Time) sql.NullTime {
@@ -72,5 +72,5 @@ func (nullUtils) OptionalBool(str optional.Bool) (out sql.NullBool) {
 	if val, err := str.Get(); err == nil {
 		return sql.NullBool{Valid: true, Bool: val}
 	}
-	return 
+	return
 }

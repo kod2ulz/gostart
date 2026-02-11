@@ -101,7 +101,7 @@ func (m Map[K, T]) Filter(fn func(k K, v T) bool) (out Map[K, T]) {
 	for k, v := range m {
 		if fn(k, v) {
 			out[k] = v
-		} 
+		}
 	}
 	return
 }

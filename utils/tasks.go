@@ -2,12 +2,12 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/kod2ulz/gostart/logr"
-	"github.com/sirupsen/logrus"
 )
 
 type taskUtils struct{}
@@ -23,7 +23,7 @@ func (u taskUtils) WithRetry(log *logr.Logger, tries int, wait time.Duration, fn
 			return
 		}
 		tries--
-		log.WithError(e).Errorf("attempt %d failed. retrying in %v", tr-tries, wait)
+		log.Error(fmt.Sprintf("attempt %d failed. retrying in %v", tr-tries, wait), "error", e)
 		time.Sleep(wait)
 	}
 }
@@ -42,7 +42,7 @@ func (u taskUtils) WithTimeout(timeout time.Duration, fn func() error) (success 
 	}
 }
 
-func SafeChannelWrite[T any](ctx context.Context, log *logrus.Entry, data T, out chan<- T, closeMessage ...string) (err error) {
+func SafeChannelWrite[T any](ctx context.Context, log *logr.Logger, data T, out chan<- T, closeMessage ...string) (err error) {
 	go func(in T) {
 		for {
 			select {
@@ -77,11 +77,11 @@ func PointerValue[T any](t *T) (out T) {
 
 type BatchProcessorFunc[T any, E error] func(context.Context, T) E
 
-func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor BatchProcessorFunc[T, E], args...T) (err E) {
+func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor BatchProcessorFunc[T, E], args ...T) (err E) {
 
 	if len(args) == 0 {
-    return
-  }
+		return
+	}
 
 	ctxwc, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -93,7 +93,7 @@ func ProcessBatch[T any, E error](ctx context.Context, batchSize int, processor 
 	// Divide Data into batches
 	for i := 0; i < len(args); i += batchSize {
 		wg.Add(1)
-		limit := i+batchSize
+		limit := i + batchSize
 		if limit > len(args) {
 			limit = len(args)
 		}
