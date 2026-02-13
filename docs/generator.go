@@ -7,90 +7,91 @@ import (
 	"strings"
 
 	"github.com/kod2ulz/gostart/contracts"
+	"gopkg.in/yaml.v3"
 )
 
 // OpenAPI represents the OpenAPI 3.0 specification structure
 type OpenAPI struct {
-	OpenAPI    string                 `json:"openapi"`
-	Info       Info                   `json:"info"`
-	Servers    []Server               `json:"servers"`
-	Paths      map[string]interface{} `json:"paths"`
-	Components Components             `json:"components"`
+	OpenAPI    string                 `json:"openapi" yaml:"openapi"`
+	Info       Info                   `json:"info" yaml:"info"`
+	Servers    []Server               `json:"servers" yaml:"servers"`
+	Paths      map[string]interface{} `json:"paths" yaml:"paths"`
+	Components Components             `json:"components" yaml:"components"`
 }
 
 // Info contains API metadata
 type Info struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Version     string `json:"version"`
+	Title       string `json:"title" yaml:"title"`
+	Description string `json:"description" yaml:"description"`
+	Version     string `json:"version" yaml:"version"`
 }
 
 // Server represents an API server
 type Server struct {
-	URL         string `json:"url"`
-	Description string `json:"description"`
+	URL         string `json:"url" yaml:"url"`
+	Description string `json:"description" yaml:"description"`
 }
 
 // Components contains reusable components
 type Components struct {
-	Schemas map[string]interface{} `json:"schemas"`
+	Schemas map[string]interface{} `json:"schemas" yaml:"schemas"`
 }
 
 // PathItem represents an OpenAPI path item
 type PathItem struct {
-	Get     *Operation `json:"get,omitempty"`
-	Post    *Operation `json:"post,omitempty"`
-	Put     *Operation `json:"put,omitempty"`
-	Delete  *Operation `json:"delete,omitempty"`
-	Patch   *Operation `json:"patch,omitempty"`
-	Options *Operation `json:"options,omitempty"`
-	Head    *Operation `json:"head,omitempty"`
+	Get     *Operation `json:"get,omitempty" yaml:"get,omitempty"`
+	Post    *Operation `json:"post,omitempty" yaml:"post,omitempty"`
+	Put     *Operation `json:"put,omitempty" yaml:"put,omitempty"`
+	Delete  *Operation `json:"delete,omitempty" yaml:"delete,omitempty"`
+	Patch   *Operation `json:"patch,omitempty" yaml:"patch,omitempty"`
+	Options *Operation `json:"options,omitempty" yaml:"options,omitempty"`
+	Head    *Operation `json:"head,omitempty" yaml:"head,omitempty"`
 }
 
 // Operation represents an API operation
 type Operation struct {
-	Summary     string                 `json:"summary,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	OperationID string                 `json:"operationId,omitempty"`
-	Tags        []string               `json:"tags,omitempty"`
-	Parameters  []Parameter            `json:"parameters,omitempty"`
-	RequestBody *RequestBody           `json:"requestBody,omitempty"`
-	Responses   map[string]interface{} `json:"responses"`
+	Summary     string                 `json:"summary,omitempty" yaml:"summary,omitempty"`
+	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	OperationID string                 `json:"operationId,omitempty" yaml:"operationId,omitempty"`
+	Tags        []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Parameters  []Parameter            `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+	RequestBody *RequestBody           `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
+	Responses   map[string]interface{} `json:"responses" yaml:"responses"`
 }
 
 // Parameter represents an operation parameter
 type Parameter struct {
-	Name        string `json:"name"`
-	In          string `json:"in"` // "query", "header", "path", "cookie"
-	Description string `json:"description,omitempty"`
-	Required    bool   `json:"required"`
-	Schema      Schema `json:"schema"`
+	Name        string `json:"name" yaml:"name"`
+	In          string `json:"in" yaml:"in"` // "query", "header", "path", "cookie"
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	Required    bool   `json:"required" yaml:"required"`
+	Schema      Schema `json:"schema" yaml:"schema"`
 }
 
 // RequestBody represents a request body
 type RequestBody struct {
-	Description string                 `json:"description,omitempty"`
-	Required    bool                   `json:"required"`
-	Content     map[string]interface{} `json:"content"`
+	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	Required    bool                   `json:"required" yaml:"required"`
+	Content     map[string]interface{} `json:"content" yaml:"content"`
 }
 
 // Response represents an operation response
 type Response struct {
-	Description string                 `json:"description,omitempty"`
-	Content     map[string]interface{} `json:"content,omitempty"`
+	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	Content     map[string]interface{} `json:"content,omitempty" yaml:"content,omitempty"`
 }
 
 // Schema represents a JSON schema
 type Schema struct {
-	Type                 string                 `json:"type,omitempty"`
-	Description          string                 `json:"description,omitempty"`
-	Format               string                 `json:"format,omitempty"`
-	Enum                 []interface{}          `json:"enum,omitempty"`
-	Items                *Schema                `json:"items,omitempty"`
-	Properties           map[string]interface{} `json:"properties,omitempty"`
-	Required             []string               `json:"required,omitempty"`
-	AdditionalProperties bool                   `json:"additionalProperties,omitempty"`
-	Ref                  string                 `json:"$ref,omitempty"`
+	Type                 string                 `json:"type,omitempty" yaml:"type,omitempty"`
+	Description          string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	Format               string                 `json:"format,omitempty" yaml:"format,omitempty"`
+	Enum                 []interface{}          `json:"enum,omitempty" yaml:"enum,omitempty"`
+	Items                *Schema                `json:"items,omitempty" yaml:"items,omitempty"`
+	Properties           map[string]interface{} `json:"properties,omitempty" yaml:"properties,omitempty"`
+	Required             []string               `json:"required,omitempty" yaml:"required,omitempty"`
+	AdditionalProperties bool                   `json:"additionalProperties,omitempty" yaml:"additionalProperties,omitempty"`
+	Ref                  string                 `json:"$ref,omitempty" yaml:"$ref,omitempty"`
 }
 
 // Generator generates OpenAPI documentation from request/response types
@@ -202,6 +203,35 @@ func (g *Generator) ToJSON() ([]byte, error) {
 		return nil, err
 	}
 	return json.MarshalIndent(spec, "", "  ")
+}
+
+// ToYAML converts the OpenAPI specification to YAML
+func (g *Generator) ToYAML() ([]byte, error) {
+	spec, err := g.Generate()
+	if err != nil {
+		return nil, err
+	}
+	return yaml.Marshal(spec)
+}
+
+// OutputFormat specifies the documentation output format
+type OutputFormat string
+
+const (
+	FormatJSON OutputFormat = "json"
+	FormatYAML OutputFormat = "yaml"
+)
+
+// Export exports the OpenAPI specification in the specified format
+func (g *Generator) Export(format OutputFormat) ([]byte, error) {
+	switch format {
+	case FormatYAML:
+		return g.ToYAML()
+	case FormatJSON:
+		return g.ToJSON()
+	default:
+		return g.ToJSON()
+	}
 }
 
 // generateOperation generates an OpenAPI operation from handler and types
