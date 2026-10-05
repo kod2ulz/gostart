@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"github.com/goccy/go-json"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,16 @@ func NullableTextValue(val pgtype.Text, fallback ...string) *string {
 
 // TimestampValue converts pgtype.Timestamp to time.Time
 func TimestampValue(val pgtype.Timestamp, fallback ...time.Time) time.Time {
+	if val.Valid {
+		return val.Time
+	} else if len(fallback) > 0 {
+		return fallback[0]
+	}
+	return time.Time{}
+}
+
+// TimestampTzValue converts pgtype.Timestamp to time.Time
+func TimestampTzValue(val pgtype.Timestamptz, fallback ...time.Time) time.Time {
 	if val.Valid {
 		return val.Time
 	} else if len(fallback) > 0 {
@@ -171,13 +182,23 @@ func UUIDValue(val pgtype.UUID, fallback ...uuid.UUID) uuid.UUID {
 // NullableUUIDValue converts pgtype.UUID to *uuid.UUID
 func NullableUUIDValue(val pgtype.UUID, fallback ...uuid.UUID) *uuid.UUID {
 	if val.Valid {
-	 uid := uuid.UUID(val.Bytes)
+		uid := uuid.UUID(val.Bytes)
 		return &uid
 	} else if len(fallback) > 0 && fallback[0] != uuid.Nil {
-	 uid := fallback[0]
+		uid := fallback[0]
 		return &uid
 	}
 	return nil
+}
+
+func JsonbValue[T any](data []byte) T {
+	var t = new(T)
+	if len(data) == 0 {
+		return *t
+	} else if err := json.Unmarshal(data, t); err != nil {
+		return *t
+	}
+	return *t
 }
 
 // TextParam converts string to pgtype.Text
@@ -404,6 +425,18 @@ func OptionalUUIDParam(val optional.String, fallback ...uuid.UUID) pgtype.UUID {
 	}
 
 	return pgtype.UUID{}
+}
+
+func JsonbParam(data any) []byte {
+	if data == nil {
+		// return []byte("{}")
+		return nil
+	}
+	res, err := json.Marshal(data)
+	if err != nil {
+		return []byte("{}")
+	}
+	return res
 }
 
 // ConvertID converts Value to the specified ID type

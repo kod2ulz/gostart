@@ -85,6 +85,29 @@ func (e *ErrorModel[T]) WithCause(err ierrors.Error) (out ierrors.Error) {
 	return e
 }
 
+// WithFields attaches field-level validation errors to the error model
+// This is useful for custom validation methods to return structured field errors
+// Example:
+//   return errors.ValidatorError[Request](err).
+//       WithFields(map[string]string{"email": "email is required", "name": "name is too short"})
+//
+// The error message will be preserved if already set, otherwise it will be auto-generated
+func (e *ErrorModel[T]) WithFields(fields map[string]string) (out ierrors.Error) {
+	e.Fields = fields
+	// Only auto-generate message if it hasn't been customized
+	if e.Message == "" || strings.Contains(e.Message, "Server error") {
+		if len(fields) == 1 {
+			for _, msg := range fields {
+				e.Message = msg
+				break
+			}
+		} else if len(fields) > 1 {
+			e.Message = fmt.Sprintf("Validation failed for %d fields", len(fields))
+		}
+	}
+	return e
+}
+
 func (e *ErrorModel[T]) Response() (out interface{}) {
 	// Return error details as a map for easy access
 	response := map[string]any{
@@ -199,21 +222,89 @@ func ValidatorError[T any](err error) (out ierrors.Error) {
 		return parseValidationErrors[T](validationErrors)
 	}
 
-	// Use enhanced validation error parsing (for backward compatibility with existing error format)
-	if validatorInfo := parseLegacyValidationError(err.Error()); validatorInfo != nil {
-		errorModel := _initError[T](http.StatusBadRequest, ErrorCodeValidatorError, err)
-		errorModel.Message = validatorInfo.Message
-		if len(validatorInfo.Fields) > 0 {
-			errorModel.Fields = validatorInfo.Fields
+	// Check the error chain (Cause) for validation errors
+	// This handles cases where validation errors are wrapped with errors.Wrapf
+	checkedErrors := map[error]bool{err: true}
+	current := err
+
+	for current != nil && !checkedErrors[current] {
+		// Check the current error in the chain
+		if validationErrors, ok := current.(validator.ValidationErrors); ok {
+			return parseValidationErrors[T](validationErrors)
 		}
-		if len(validatorInfo.Details) > 0 {
-			errorModel.Param = validatorInfo.Details
+
+		// Check for legacy format
+		if validatorInfo := parseLegacyValidationError(current.Error()); validatorInfo != nil {
+			errorModel := _initError[T](http.StatusBadRequest, ErrorCodeValidatorError, err)
+			errorModel.Message = validatorInfo.Message
+			if len(validatorInfo.Fields) > 0 {
+				errorModel.Fields = validatorInfo.Fields
+			}
+			if len(validatorInfo.Details) > 0 {
+				errorModel.Param = validatorInfo.Details
+			}
+			return &errorModel
 		}
-		return &errorModel
+
+		// Check if the error has GetFields()
+		if errorModel, ok := current.(interface{ GetFields() map[string]string }); ok {
+			if fields := errorModel.GetFields(); len(fields) > 0 {
+				errModel := _initError[T](http.StatusBadRequest, ErrorCodeValidatorError, err)
+				errModel.Fields = fields
+				if current.Error() != "" && !strings.Contains(current.Error(), "Server error") {
+					errModel.Message = current.Error()
+				}
+				return &errModel
+			}
+		}
+
+		// Mark this error as checked and move to the next in the chain
+		checkedErrors[current] = true
+
+		// Try to get the Cause if available
+		if ierr, ok := current.(interface{ Cause() error }); ok {
+			current = ierr.Cause()
+		} else {
+			current = errors.Unwrap(current)
+		}
+	}
+
+	// Check if error is already an ErrorModel with fields (from custom validation)
+	if errorModel, ok := err.(interface{ GetFields() map[string]string }); ok {
+		if fields := errorModel.GetFields(); len(fields) > 0 {
+			// Create a new error model with the correct error code and status code
+			errModel := _initError[T](http.StatusBadRequest, ErrorCodeValidatorError, err)
+			errModel.Fields = fields
+			// Preserve the original error message if it's more descriptive than default
+			if err.Error() != "" && !strings.Contains(err.Error(), "Server error") {
+				errModel.Message = err.Error()
+			}
+			return &errModel
+		}
 	}
 
 	// Fallback to basic validation error
 	return GeneralFailure[T](err).WithErrorCodeAndHttpStatusCode(ErrorCodeValidatorError, http.StatusBadRequest)
+}
+
+func FieldValidationFailed(field string, err error, msg...string) (out ierrors.Error) {
+	_msg := fmt.Sprintf("validation failed for %s", field)
+	if len(msg) > 0 && len(msg[0]) > 0 {
+		switch len(msg) {
+		case 1: 
+			_msg = msg[0]
+		default:
+			var args []any = make([]any, len(msg[1:]))
+			for i := range msg[1:] {
+				args[i] = msg[i+1] 
+			}
+			_msg = fmt.Sprintf(msg[0], args...)
+		}
+	}
+	if err == nil {
+		err = Errorf(_msg)
+	}
+	return Errorf("%s - Key: %s Error: %v", _msg, field, err)
 }
 
 // ValidationFailed[T any] provides enhanced validation error parsing for go-playground/validator errors
@@ -243,6 +334,36 @@ func ValidationFailed[T any](err error) (out ierrors.Error) {
 // wrapAsIError wraps a standard error as ierrors.Error for parsing
 func wrapAsIError(err error) ierrors.Error {
 	return GeneralFailure[any](err)
+}
+
+// ExtractFieldErrors extracts field-level errors from a validation error
+// This is useful for custom Validate methods to extract field errors from struct tag validation
+// and attach them to custom error responses
+func ExtractFieldErrors(err error) map[string]string {
+	if err == nil {
+		return nil
+	}
+
+	// If it's already an ErrorModel with fields, return them
+	if errorModel, ok := err.(interface{ GetFields() map[string]string }); ok {
+		return errorModel.GetFields()
+	}
+
+	// Try to parse as go-playground/validator errors
+	if validationErrors, ok := err.(validator.ValidationErrors); ok {
+		if info := parseValidationErrors[any](validationErrors); info != nil {
+			if model, ok := info.(interface{ GetFields() map[string]string }); ok {
+				return model.GetFields()
+			}
+		}
+	}
+
+	// Try to parse legacy format "Key: fieldname Error: errormessage"
+	if info := parseLegacyValidationError(err.Error()); info != nil {
+		return info.Fields
+	}
+
+	return nil
 }
 
 func DatabaseFailure[T any](err error) (out ierrors.Error) {

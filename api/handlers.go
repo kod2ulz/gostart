@@ -272,10 +272,23 @@ func TypedHandler[P contracts.RequestParam, R any](handler TypedRequestHandlerFu
 		}
 
 		// Validate the request parameters before calling the handler
-		var modal RequestModal[P]
-		if validateErr := modal.Validate(ctx); validateErr != nil {
-			HandleError(ctx, errors.ValidatorError[P](validateErr))
-			return
+		// Check if the parameter type has its own Validate method (custom validation)
+		type CustomValidator interface {
+			Validate(contracts.RequestContext) error
+		}
+		if validator, hasCustomValidate := interface{}(param).(CustomValidator); hasCustomValidate {
+			// Use the custom Validate method
+			if validateErr := validator.Validate(ctx); validateErr != nil {
+				HandleError(ctx, errors.ValidatorError[P](validateErr))
+				return
+			}
+		} else {
+			// Fall back to default RequestModal validation (struct tag validation)
+			var modal RequestModal[P]
+			if validateErr := modal.Validate(ctx); validateErr != nil {
+				HandleError(ctx, errors.ValidatorError[P](validateErr))
+				return
+			}
 		}
 
 		// Call the handler with the properly typed request
@@ -345,6 +358,26 @@ func TypedListHandler[P contracts.RequestParam, R any](handler TypedListRequestH
 		if !ok {
 			HandleError(ctx, errors.RequestLoadFailed[P](fmt.Errorf("failed to cast loaded params to %T", param)))
 			return
+		}
+
+		// Validate the request parameters before calling the handler
+		// Check if the parameter type has its own Validate method (custom validation)
+		type CustomValidator interface {
+			Validate(contracts.RequestContext) error
+		}
+		if validator, hasCustomValidate := interface{}(param).(CustomValidator); hasCustomValidate {
+			// Use the custom Validate method
+			if validateErr := validator.Validate(ctx); validateErr != nil {
+				HandleError(ctx, errors.ValidatorError[P](validateErr))
+				return
+			}
+		} else {
+			// Fall back to default RequestModal validation (struct tag validation)
+			var modal RequestModal[P]
+			if validateErr := modal.Validate(ctx); validateErr != nil {
+				HandleError(ctx, errors.ValidatorError[P](validateErr))
+				return
+			}
 		}
 
 		// Call the handler with the properly typed request
