@@ -345,9 +345,10 @@ func TypedListHandler[P contracts.RequestParam, R any](handler TypedListRequestH
 		// Create a zero-value instance of the request type
 		var param P
 
-		// Load request parameters using RequestModal
-		var modal RequestModal[P]
-		loaded, err := modal.RequestLoad(ctx)
+		// Load request parameters using the concrete type's RequestLoad
+		// (mirrors TypedHandler; RequestModal alone never fills pagination,
+		// which broke validation on every list endpoint)
+		loaded, err := param.RequestLoad(ctx)
 		if err != nil {
 			HandleError(ctx, errors.RequestLoadFailed[P](err))
 			return

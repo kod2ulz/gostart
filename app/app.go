@@ -44,9 +44,6 @@ func Init(opts ...AppIniter) *ap {
 	if _instance != nil {
 		return _instance
 	}
-	for i := range opts {
-		opts[i](nil)
-	}
 	config.Load() // Load .env file
 
 	if err := logr.Config(_logHandlers...); err != nil {
@@ -61,7 +58,7 @@ func Init(opts ...AppIniter) *ap {
 		osc:   make(chan os.Signal, 1),
 	}
 	_instance.ctx, _instance.cancel = context.WithCancel(context.Background())
-	_instance.initAPI()
+	_instance.initAPI(opts...)
 	return _instance
 }
 

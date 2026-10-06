@@ -14,6 +14,7 @@ import (
 	"github.com/kod2ulz/gostart/api/openapi"
 	"github.com/kod2ulz/gostart/config"
 	"github.com/kod2ulz/gostart/contracts"
+	"github.com/kod2ulz/gostart/ierrors"
 	"github.com/kod2ulz/gostart/logr"
 )
 
@@ -250,8 +251,17 @@ func (r *GinRouter) Use(middleware ...api.MiddlewareFunc) api.Router {
 			ctx := &RequestContext{GinRequestContext: NewRequestContext(c).(*GinRequestContext)}
 			if cont, err := mw(ctx); !cont || err != nil {
 				if err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]interface{}{
-						"error": err.Error(),
+					// Respect the error's declared HTTP status (e.g. 401 for
+					// expired/invalid tokens) instead of a blanket 500.
+					status := http.StatusInternalServerError
+					if iErr, ok := err.(ierrors.Error); ok && iErr.HttpCode() > 0 {
+						status = iErr.HttpCode()
+					}
+					c.AbortWithStatusJSON(status, map[string]interface{}{
+						"success": false,
+						"error": map[string]interface{}{
+							"message": err.Error(),
+						},
 					})
 				}
 				c.Abort()
