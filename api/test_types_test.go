@@ -308,18 +308,25 @@ func TestErrorHandling(t *testing.T) {
 		}
 
 		if errorInfo, ok := response["error"].(map[string]interface{}); ok {
-			if code, ok := errorInfo["code"].(string); ok && code == "ValidationError" {
-				// This is what we expect, but currently it returns INTERNAL_ERROR due to error wrapping
-				// TODO: Fix error handling system to preserve validation error codes
-			} else if code != "ValidationError" && code != "INTERNAL_ERROR" {
-				t.Errorf("Expected error code ValidationError or INTERNAL_ERROR, got %v", code)
+			code, _ := errorInfo["code"].(string)
+			if code != "VALIDATION_ERROR" {
+				t.Errorf("Expected error code VALIDATION_ERROR, got %v", code)
 			}
-			// For now, just verify it's a validation error by checking the message
 			if msg, ok := errorInfo["message"].(string); ok {
 				if !strings.Contains(msg, "required") && !strings.Contains(msg, "validation") {
 					t.Errorf("Expected validation error message, got: %s", msg)
 				}
 			}
+			// Field-level errors must be extracted for the offending field
+			if fields, ok := errorInfo["fields"].(map[string]interface{}); ok {
+				if _, found := fields["name"]; !found {
+					t.Errorf("Expected field error for 'name', got fields: %v", fields)
+				}
+			} else {
+				t.Error("Expected field-level error details in response")
+			}
+		} else {
+			t.Error("Expected error details in response envelope")
 		}
 	})
 

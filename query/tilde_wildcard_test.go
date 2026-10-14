@@ -106,18 +106,19 @@ var _ = Describe("Tilde Wildcard Syntax for LIKE Operations", func() {
 			Expect(likeConditions).NotTo(BeEmpty())
 			Expect(likeConditions).To(HaveLen(2))
 
-			// Check contains pattern
-			Expect(likeConditions[0].Operator).To(Equal(query.CompareLike))
-			Expect(likeConditions[0].Value).To(Equal("%john%"))
-
-			// Check starts with pattern
-			Expect(likeConditions[1].Operator).To(Equal(query.CompareLike))
-			Expect(likeConditions[1].Value).To(Equal("%example.com"))
+			// Check contains and starts-with patterns; condition order follows map
+			// iteration order, so assert on values regardless of position
+			likeValues := make([]any, 0, likeConditions.Size())
+			for _, c := range likeConditions.Internal() {
+				likeValues = append(likeValues, c.Value)
+			}
+			Expect(likeValues).To(ConsistOf("%john%", "%example.com"))
 
 			// Check regular comparison
-			// compareConditions := conditions.Filter(findCondition(query.CompareLike))
-			Expect(conditions[2].Operator).To(Equal(query.CompareGreaterThan))
-			Expect(conditions[2].Value).To(Equal(int64(25)))
+			gtConditions := conditions.Filter(findCondition(query.CompareGreaterThan))
+			Expect(gtConditions).To(HaveLen(1))
+			Expect(gtConditions[0].Operator).To(Equal(query.CompareGreaterThan))
+			Expect(gtConditions[0].Value).To(Equal(int64(25)))
 		})
 
 		It("should ignore tilde patterns for fields that don't support LIKE", func() {
@@ -391,9 +392,9 @@ var _ = Describe("Tilde Wildcard Syntax for LIKE Operations", func() {
 			Expect(sqlQuery.String()).To(ContainSubstring("email ilike"))
 			preview, _ := qb.SelectQueryPreview("users")
 			Expect(preview).To(ContainSubstring("order by first_name desc"))
-			Expect(len(args)).To(Equal(2))
-			Expect(args[0]).To(Equal("%john%"))
-			Expect(args[1]).To(Equal("%example.com"))
+			// Condition order follows map iteration order, so assert on values regardless of position
+			Expect(args).To(HaveLen(2))
+			Expect(args).To(ConsistOf("%john%", "%example.com"))
 		})
 	})
 

@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"os"
+	"strings"
 
 	"github.com/kod2ulz/gostart/config"
 	. "github.com/onsi/ginkgo/v2"
@@ -11,9 +12,22 @@ import (
 var _ = Describe("Env Util", func() {
 
 	var helper config.EnvUtil
+	var savedEnv []string
 
 	BeforeEach(func() {
+		// Clearenv wipes the whole process environment; snapshot it so the
+		// container-based specs elsewhere in this suite still see HOME, PATH, etc.
+		savedEnv = os.Environ()
 		os.Clearenv()
+	})
+
+	AfterEach(func() {
+		os.Clearenv()
+		for _, kv := range savedEnv {
+			if k, v, found := strings.Cut(kv, "="); found {
+				os.Setenv(k, v)
+			}
+		}
 	})
 
 	Context("when using the global helper", func() {
